@@ -36,7 +36,12 @@
             <div class="row text-center mb-3">
               <div class="col-4">
                 <small class="text-muted d-block">Asignado a</small>
-                <strong>{{ task.assigned_to.first_name if task.assigned_to else 'N/A' }}</strong>
+                {% if task.assigned_client %}
+                  <strong>{{ task.assigned_client.first_name or task.assigned_client.email.split('@')[0] }}</strong>
+                  <div><small class="text-muted">(Cliente)</small></div>
+                {% else %}
+                  <strong>{{ task.assigned_to.first_name if task.assigned_to else 'N/A' }}</strong>
+                {% endif %}
               </div>
               <div class="col-4">
                 <small class="text-muted d-block">Horas Est.</small>

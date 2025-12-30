@@ -4,6 +4,7 @@ from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
 from flask_login import LoginManager
+from sqlalchemy import func
 
 db = SQLAlchemy()
 migrate = Migrate()
@@ -171,31 +172,43 @@ def create_app(config_object="config.DevConfig"):
         }
         
         if current_user.is_authenticated:
-            # Notificaciones no leídas
-            context['unread_notifications_count'] = SystemNotification.query.filter_by(
-                user_id=current_user.id, 
-                is_read=False
-            ).count()
-            
-            # Para usuarios internos, mostrar clientes disponibles
-            if current_user.is_internal:
-                client_role = Role.query.filter_by(name='Cliente').first()
-                if client_role:
-                    context['available_clients'] = User.query.filter_by(role_id=client_role.id).order_by(User.first_name).all()
-            else:
-                # Para clientes, contar aprobaciones pendientes
-                client_projects = Project.query.filter(Project.clients.contains(current_user)).all()
-                if client_projects:
-                    project_ids = [p.id for p in client_projects]
-                    context['pending_approvals_count'] = Task.query.filter(
-                        Task.project_id.in_(project_ids),
-                        Task.status == 'COMPLETED',
-                        Task.is_external_visible == True,
-                        Task.approval_status == 'PENDING'
-                    ).count()
-        
-        return context
+            try:
+                # Notificaciones no leídas
+                context['unread_notifications_count'] = SystemNotification.query.filter_by(
+                    user_id=current_user.id, 
+                    is_read=False
+                ).count()
 
+                # Para usuarios internos, mostrar clientes disponibles
+                if current_user.is_internal:
+                    client_role = Role.query.filter_by(name='Cliente').first()
+                    if client_role:
+                        context['available_clients'] = User.query.filter_by(role_id=client_role.id).order_by(User.first_name).all()
+                else:
+                    # Para clientes, contar aprobaciones pendientes: tareas en sus proyectos O tareas asignadas directamente al cliente
+                    client_projects = Project.query.filter(Project.clients.contains(current_user)).all()
+                    project_ids = [p.id for p in client_projects]
+                    # If client has no projects, avoid empty IN() by using a sentinel that doesn't match
+                    if not project_ids:
+                        project_ids = [-1]
+                    # Count tasks that are completed, pending approval, AND either belong to a client project (and are externally visible) OR are assigned to this client
+                    context['pending_approvals_count'] = Task.query.filter(
+                        Task.status == 'COMPLETED',
+                        Task.requires_approval == True,
+                        ((Task.approval_status.is_(None) & (Task.requires_approval == True)) | (func.lower(Task.approval_status) == 'pending')),
+                        (
+                            (Task.project_id.in_(project_ids) & (Task.is_external_visible == True))
+                            | (Task.assigned_client_id == current_user.id)
+                        )
+                    ).count()
+            except Exception as e:
+                # Log and fall back to safe defaults to avoid breaking template rendering
+                app.logger.exception('Error in inject_global_vars: %s', e)
+                context['unread_notifications_count'] = 0
+                context['available_clients'] = []
+                context['pending_approvals_count'] = 0
+            # Ensure we return the context dict for Flask to update the template context
+        return context
     # Additional blueprints will be registered here
 
     return app
