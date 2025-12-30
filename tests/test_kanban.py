@@ -48,6 +48,6 @@ def test_move_task_block_completion_if_descendants_incomplete(client, db, create
     rv = client.post(f"/task/{parent_obj.id}/move", json={'status':'COMPLETED'})
     assert rv.status_code == 400
     j = rv.get_json()
-    assert 'incomplete_descendants' in j
-    assert isinstance(j['incomplete_descendants'], list)
-    assert j['incomplete_descendants'][0]['id'] == child_obj.id
+    assert 'incomplete_children' in j
+    assert isinstance(j['incomplete_children'], list)
+    assert j['incomplete_children'][0]['id'] == child_obj.id

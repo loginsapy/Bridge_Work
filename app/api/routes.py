@@ -291,12 +291,12 @@ def update_task(task_id):
                 'error': 'Cannot complete task while predecessors are incomplete',
                 'incomplete_predecessors': [{'id': p.id, 'title': p.title} for p in incomplete]
             }), 400
-        # Also prevent completing if any descendant (successor chain) is incomplete
-        incomplete_desc = [d for d in t.descendants() if d.status not in ('DONE', 'COMPLETED')]
-        if incomplete_desc:
+        # Also prevent completing if any hierarchical child is incomplete
+        incomplete_children = [c for c in t.children if c.status not in ('DONE', 'COMPLETED')]
+        if incomplete_children:
             return jsonify({
-                'error': 'Cannot complete task while descendants are incomplete',
-                'incomplete_descendants': [{'id': d.id, 'title': d.title} for d in incomplete_desc]
+                'error': 'Cannot complete task while child tasks are incomplete',
+                'incomplete_children': [{'id': c.id, 'title': c.title} for c in incomplete_children]
             }), 400
 
     for field in ["project_id", "parent_task_id", "title", "description", "assigned_to_id", "assigned_client_id", "status", "priority", "due_date", "is_external_visible", "estimated_hours"]:

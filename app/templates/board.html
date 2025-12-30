@@ -928,10 +928,10 @@ function updateTask(taskId, field, value) {
         showPredecessorModal(taskId, json.incomplete_predecessors);
         return Promise.reject('predecessors_incomplete');
       }
-      if (json && json.incomplete_descendants) {
-        // Show modal listing incomplete descendant tasks
-        showDescendantModal(taskId, json.incomplete_descendants);
-        return Promise.reject('descendants_incomplete');
+      if (json && json.incomplete_children) {
+        // Show modal listing incomplete child tasks
+        showDescendantModal(taskId, json.incomplete_children);
+        return Promise.reject('children_incomplete');
       }
       throw new Error('Update failed');
     }

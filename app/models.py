@@ -94,7 +94,8 @@ class Task(db.Model):
     __tablename__ = 'tasks'
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     project_id = db.Column(db.Integer, db.ForeignKey('projects.id'), nullable=False)
-    parent_task_id = db.Column(db.Integer, db.ForeignKey('tasks.id'), nullable=True)
+    # Hierarchical parent pointer (WBS)
+    parent_task_id = db.Column(db.Integer, db.ForeignKey('tasks.id', ondelete='SET NULL'), nullable=True)
     title = db.Column(db.String(255), nullable=False)
     description = db.Column(db.Text, nullable=True)
     assigned_to_id = db.Column(db.BigInteger, db.ForeignKey('users.id'), nullable=True)
@@ -121,6 +122,9 @@ class Task(db.Model):
     project = db.relationship('Project', backref='tasks')
     assigned_to = db.relationship('User', foreign_keys=[assigned_to_id], backref='tasks')
     approved_by = db.relationship('User', foreign_keys=[approved_by_id], backref='approved_tasks')
+
+    # Hierarchical parent/children relationship (WBS)
+    parent = db.relationship('Task', remote_side=[id], backref=db.backref('children', lazy='select'))
 
     # Self-referential many-to-many for task predecessors/successors
     predecessors = db.relationship(
@@ -154,39 +158,33 @@ class Task(db.Model):
         return False
 
     def descendants(self):
-        """Return list of all descendant tasks reachable via successors (predecessor edges) OR via hierarchical parent-child (parent_task_id). Excludes self."""
+        """Return list of all descendant tasks reachable via hierarchy (children) and dependency (successors)."""
         result = []
         visited = set()
+
         def dfs(node):
-            # successors via predecessors table
-            try:
-                succs = node.successors
-            except Exception:
-                succs = []
-            for s in succs:
-                if s.id in visited or s.id == self.id:
-                    continue
-                visited.add(s.id)
-                result.append(s)
-                dfs(s)
-            # hierarchical children (parent_task_id)
-            try:
-                children = Task.query.filter_by(parent_task_id=node.id).all()
-            except Exception:
-                children = []
-            for c in children:
+            # traverse hierarchical children first
+            for c in getattr(node, 'children', []) or []:
                 if c.id in visited or c.id == self.id:
                     continue
                 visited.add(c.id)
                 result.append(c)
                 dfs(c)
+            # then traverse successor dependency edges
+            for s in getattr(node, 'successors', []) or []:
+                if s.id in visited or s.id == self.id:
+                    continue
+                visited.add(s.id)
+                result.append(s)
+                dfs(s)
+
         dfs(self)
         return result
 
     def validate_predecessor_ids(self, predecessor_ids):
         """Validate a list of predecessor IDs before assignment.
 
-        Raises ValueError with a descriptive message if invalid (self-contained or would create cycle).
+        Raises ValueError with a descriptive message if invalid (self-contained, project mismatch, or would create cycles across dependency/hierarchy).
         """
         # cannot be own predecessor
         if self.id in predecessor_ids:
@@ -201,10 +199,17 @@ class Task(db.Model):
             # Must be in same project
             if hasattr(self, 'project_id') and pred.project_id != self.project_id:
                 raise ValueError(f'Predecessor {pred.id} belongs to a different project')
-            # Adding pred as a predecessor for self implies an edge pred -> self
-            # If self can reach pred already, adding this edge would create a cycle
+
+            # Dependency-cycle: if self already reaches pred via successors, adding pred -> self would create a cycle
             if self.reachable_to(pred.id):
                 raise ValueError(f'Adding predecessor {pred.id} would create a cycle')
+
+            # Prevent predecessor being a hierarchical ancestor/descendant (keep hierarchy separate)
+            if any(n.id == self.id for n in pred.descendants()):
+                raise ValueError(f'Predecessor {pred.id} is an ancestor of this task in the hierarchy')
+            if any(n.id == pred.id for n in self.descendants()):
+                raise ValueError(f'Predecessor {pred.id} is a descendant of this task in the hierarchy')
+
         return True
 
 

@@ -1873,12 +1873,12 @@ def update_task_status(task_id):
                     'error': 'No se puede completar la tarea mientras existan predecesoras incompletas',
                     'incomplete_predecessors': [{'id': p.id, 'title': p.title} for p in incomplete]
                 }), 400
-            # Also prevent completing if any descendant (successor chain) is incomplete
-            incomplete_desc = [d for d in task.descendants() if d.status not in ('DONE', 'COMPLETED')]
-            if incomplete_desc:
+            # Also prevent completing if any hierarchical child is incomplete
+            incomplete_children = [c for c in task.children if c.status not in ('DONE', 'COMPLETED')]
+            if incomplete_children:
                 return jsonify({
-                    'error': 'No se puede completar la tarea mientras existan subtareas (succesoras) incompletas',
-                    'incomplete_descendants': [{'id': d.id, 'title': d.title} for d in incomplete_desc]
+                    'error': 'No se puede completar la tarea mientras existan subtareas incompletas',
+                    'incomplete_children': [{'id': c.id, 'title': c.title} for c in incomplete_children]
                 }), 400
 
         task.status = new_status
@@ -1951,11 +1951,12 @@ def move_task(task_id):
                 'error': 'Cannot complete task while predecessors are incomplete',
                 'incomplete_predecessors': [{'id': p.id, 'title': p.title} for p in incomplete_preds]
             }), 400
-        incomplete_desc = [d for d in task.descendants() if d.status not in ('DONE', 'COMPLETED')]
-        if incomplete_desc:
+        # Hierarchical children blockers
+        incomplete_children = [c for c in task.children if c.status not in ('DONE', 'COMPLETED')]
+        if incomplete_children:
             return jsonify({
-                'error': 'Cannot complete task while descendants are incomplete',
-                'incomplete_descendants': [{'id': d.id, 'title': d.title} for d in incomplete_desc]
+                'error': 'Cannot complete task while child tasks are incomplete',
+                'incomplete_children': [{'id': c.id, 'title': c.title} for c in incomplete_children]
             }), 400
 
     try:
@@ -2057,8 +2058,9 @@ def edit_task(task_id):
                 incomplete_preds = [p for p in task.predecessors if p.status not in ('DONE', 'COMPLETED')]
                 if incomplete_preds:
                     raise ValueError('No se puede completar la tarea mientras existan predecesoras incompletas')
-                incomplete_desc = [d for d in task.descendants() if d.status not in ('DONE', 'COMPLETED')]
-                if incomplete_desc:
+                # Check hierarchical children (WBS) separately
+                incomplete_children = [c for c in task.children if c.status not in ('DONE', 'COMPLETED')]
+                if incomplete_children:
                     raise ValueError('No se puede completar la tarea mientras existan subtareas incompletas')
             task.status = new_status_from_form
             task.priority = request.form.get('priority') or task.priority
@@ -2184,8 +2186,8 @@ def client_accept_task(task_id):
     if incomplete_preds:
         flash('No se puede completar la tarea mientras existan predecesoras incompletas', 'danger')
         return redirect(url_for('main.task_detail', task_id=task.id))
-    incomplete_desc = [d for d in task.descendants() if d.status not in ('DONE', 'COMPLETED')]
-    if incomplete_desc:
+    incomplete_children = [c for c in task.children if c.status not in ('DONE', 'COMPLETED')]
+    if incomplete_children:
         flash('No se puede completar la tarea mientras existan subtareas incompletas', 'danger')
         return redirect(url_for('main.task_detail', task_id=task.id))
 

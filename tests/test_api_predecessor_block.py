@@ -42,9 +42,9 @@ def test_api_prevent_complete_when_has_incomplete_descendants(client, db, create
     rv = client.patch(f"/api/tasks/{t1_obj.id}", json={'status': 'DONE'})
     assert rv.status_code == 400
     j = rv.get_json()
-    assert 'incomplete_descendants' in j
-    assert isinstance(j['incomplete_descendants'], list)
-    assert j['incomplete_descendants'][0]['id'] == t2_obj.id
+    assert 'incomplete_children' in j
+    assert isinstance(j['incomplete_children'], list)
+    assert j['incomplete_children'][0]['id'] == t2_obj.id
 
 
 def test_api_prevent_complete_when_child_has_parent_link(client, db, create_project, create_task, create_user, login):
@@ -63,9 +63,9 @@ def test_api_prevent_complete_when_child_has_parent_link(client, db, create_proj
     rv = client.patch(f"/api/tasks/{parent_obj.id}", json={'status': 'DONE'})
     assert rv.status_code == 400
     j = rv.get_json()
-    assert 'incomplete_descendants' in j
-    assert isinstance(j['incomplete_descendants'], list)
-    assert j['incomplete_descendants'][0]['id'] == child_obj.id
+    assert 'incomplete_children' in j
+    assert isinstance(j['incomplete_children'], list)
+    assert j['incomplete_children'][0]['id'] == child_obj.id
 
 
 def test_api_prevent_complete_when_has_hierarchical_children(client, db, create_project, create_task, create_user, login):
@@ -84,7 +84,7 @@ def test_api_prevent_complete_when_has_hierarchical_children(client, db, create_
     rv = client.patch(f"/api/tasks/{parent_obj.id}", json={'status': 'DONE'})
     assert rv.status_code == 400
     j = rv.get_json()
-    assert 'incomplete_descendants' in j
-    assert isinstance(j['incomplete_descendants'], list)
-    assert j['incomplete_descendants'][0]['id'] == child_obj.id
+    assert 'incomplete_children' in j
+    assert isinstance(j['incomplete_children'], list)
+    assert j['incomplete_children'][0]['id'] == child_obj.id
 

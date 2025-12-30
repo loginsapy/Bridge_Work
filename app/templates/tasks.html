@@ -601,9 +601,9 @@ function toggleComplete(taskId, currentStatus) {
         showPredecessorModal(taskId, json.incomplete_predecessors);
         return Promise.reject('predecessors_incomplete');
       }
-      if (json && json.incomplete_descendants) {
-        showDescendantModal(taskId, json.incomplete_descendants);
-        return Promise.reject('descendants_incomplete');
+      if (json && json.incomplete_children) {
+        showDescendantModal(taskId, json.incomplete_children);
+        return Promise.reject('children_incomplete');
       }
       throw new Error('Update failed');
     }
