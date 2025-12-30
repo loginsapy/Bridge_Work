@@ -73,7 +73,7 @@
     </div>
   </div>
 
-  {% if not (current_user.role and current_user.role.name == 'Participante') %}
+  {% if not (current_user.role and (current_user.role.name|default('')|lower in ['participante', 'cliente'])) %}
   <div class="col-12 col-sm-6 col-xl-3">
     <div class="card stat-card fade-in hover-lift" style="animation-delay: 0.2s;">
       <div class="card-body pt-4">
@@ -113,7 +113,7 @@
 
 <!-- Monday-Style Kanban Board -->
 <div class="row g-4 mb-4">
-  <div class="col-12 col-lg-8">
+  <div class="col-12">
     <div class="card">
       <div class="card-header d-flex justify-content-between align-items-center">
         <div class="d-flex align-items-center gap-2">
@@ -183,40 +183,9 @@
       </div>
     </div>
   </div>
-
-  <div class="col-12 col-lg-4">
-    <div class="card">
-      <div class="card-header">
-        <h5 class="mb-0 text-primary"><i class="fa-solid fa-chart-pie me-2"></i> {{ _('project_status') }}</h5>
-      </div>
-      <div class="card-body py-2">
-        <div class="chart-container" style="height: 150px;">
-          <canvas id="projectStatusChart" data-status='{{ project_status_data|tojson|safe }}'></canvas>
-        </div>
-        <div id="project-status-legend" class="mt-2">
-          {% set status_colors = {
-            'ACTIVE': 'success',
-            'PLANNING': 'warning',
-            'COMPLETED': 'info',
-            'ARCHIVED': 'secondary'
-          } %}
-          {% for status, count in project_status_data.items() %}
-            <div class="d-flex justify-content-between align-items-center mb-2">
-              <span class="d-flex align-items-center text-secondary">
-                <span class="badge rounded-circle p-2 me-2 bg-{{ status_colors.get(status, 'secondary') }}"></span> {{ status|title }}
-              </span>
-              <span class="fw-semibold text-primary">{{ count }}</span>
-            </div>
-          {% endfor %}
-          {% if not project_status_data %}
-            <div class="text-center text-secondary">{{ _('no_project_status_data') }}</div>
-          {% endif %}
-        </div>
-      </div>
-    </div>
-  </div>
 </div>
 
+{% if current_user.role and (current_user.role.name|default('')|lower in ['pmp', 'admin']) %}
 <!-- Velocity Chart -->
 <div class="row g-4 mb-5">
   <div class="col-12">
@@ -232,6 +201,7 @@
     </div>
   </div>
 </div>
+{% endif %}
 
 <!-- Projects and Activity Row -->
 <div class="row g-4 mb-5">
@@ -329,6 +299,7 @@
   </div>
 </div>
 
+{% if current_user.role and (current_user.role.name|default('')|lower in ['pmp', 'admin']) %}
 <!-- Team Overview -->
 <div class="row g-4 mb-5">
   <div class="col-12">
@@ -366,5 +337,6 @@
     </div>
   </div>
 </div>
+{% endif %}
 {% endif %}
 {% endblock %}
