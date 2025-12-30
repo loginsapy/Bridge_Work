@@ -1,0 +1,170 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ _('maintenance') }} — {{ _('administration') }} — {{ sys_app_name }}{% endblock %}
+
+{% block content %}
+<div class="mb-4">
+  <nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+      <li class="breadcrumb-item"><a href="{{ url_for('main.admin_dashboard') }}">{{ _('administration') }}</a></li>
+      <li class="breadcrumb-item active">{{ _('maintenance') }}</li>
+    </ol>
+  </nav>
+  <h2 class="fw-bold text-primary">
+    <i class="fa-solid fa-database me-2"></i>{{ _('maintenance_title') }}
+  </h2>
+  <p class="text-muted">{{ _('maintenance_subtitle') }}</p>
+</div>
+
+<div class="row">
+  <div class="col-lg-8">
+    <!-- Estadísticas de Base de Datos -->
+    <div class="card border-0 shadow-sm mb-4">
+      <div class="card-header bg-light">
+        <h5 class="mb-0 fw-bold"><i class="fa-solid fa-chart-pie me-2 text-primary"></i>{{ _('db_statistics') }}</h5>
+      </div>
+      <div class="card-body">
+        <div class="row g-3">
+          <div class="col-md-4">
+            <div class="border rounded p-3 text-center">
+              <i class="fa-solid fa-users fa-2x text-primary mb-2"></i>
+              <h4 class="mb-0 fw-bold">{{ stats.db_users }}</h4>
+              <small class="text-muted">{{ _('users') }}</small>
+            </div>
+          </div>
+          <div class="col-md-4">
+            <div class="border rounded p-3 text-center">
+              <i class="fa-solid fa-folder fa-2x text-info mb-2"></i>
+              <h4 class="mb-0 fw-bold">{{ stats.db_projects }}</h4>
+              <small class="text-muted">{{ _('projects') }}</small>
+            </div>
+          </div>
+          <div class="col-md-4">
+            <div class="border rounded p-3 text-center">
+              <i class="fa-solid fa-tasks fa-2x text-success mb-2"></i>
+              <h4 class="mb-0 fw-bold">{{ stats.db_tasks }}</h4>
+              <small class="text-muted">{{ _('tasks') }}</small>
+            </div>
+          </div>
+          <div class="col-md-4">
+            <div class="border rounded p-3 text-center">
+              <i class="fa-solid fa-clock fa-2x text-warning mb-2"></i>
+              <h4 class="mb-0 fw-bold">{{ stats.db_time_entries }}</h4>
+              <small class="text-muted">{{ _('time_records') }}</small>
+            </div>
+          </div>
+          <div class="col-md-4">
+            <div class="border rounded p-3 text-center">
+              <i class="fa-solid fa-bell fa-2x text-danger mb-2"></i>
+              <h4 class="mb-0 fw-bold">{{ stats.db_notifications }}</h4>
+              <small class="text-muted">{{ _('notifications') }}</small>
+            </div>
+          </div>
+          <div class="col-md-4">
+            <div class="border rounded p-3 text-center">
+              <i class="fa-solid fa-clipboard-list fa-2x text-secondary mb-2"></i>
+              <h4 class="mb-0 fw-bold">{{ stats.db_audit_logs }}</h4>
+              <small class="text-muted">{{ _('audit_logs_count') }}</small>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Herramientas de Limpieza -->
+    <div class="card border-0 shadow-sm mb-4">
+      <div class="card-header bg-light">
+        <h5 class="mb-0 fw-bold"><i class="fa-solid fa-broom me-2 text-primary"></i>{{ _('cleanup_tools') }}</h5>
+      </div>
+      <div class="card-body">
+        <div class="alert alert-warning small mb-4">
+          <i class="fa-solid fa-exclamation-triangle me-2"></i>
+          <strong>{{ _('cleanup_warning') }}</strong>
+        </div>
+        
+        <div class="row g-3">
+          <div class="col-md-6">
+            <div class="border rounded p-3">
+              <h6 class="fw-bold mb-2">
+                <i class="fa-solid fa-bell-slash me-2 text-muted"></i>{{ _('clean_old_notifications') }}
+              </h6>
+              <p class="small text-muted mb-3">
+                {{ _('clean_notifications_desc') }}
+              </p>
+              <form action="{{ url_for('main.admin_maintenance') }}" method="POST" 
+                    onsubmit="return confirm('{{ _('clean_notifications_confirm') }}')">
+                <input type="hidden" name="action" value="clear_old_notifications">
+                <button type="submit" class="btn btn-outline-danger btn-sm">
+                  <i class="fa-solid fa-trash me-1"></i> {{ _('clean_notifications_btn') }}
+                </button>
+              </form>
+            </div>
+          </div>
+          
+          <div class="col-md-6">
+            <div class="border rounded p-3">
+              <h6 class="fw-bold mb-2">
+                <i class="fa-solid fa-clipboard me-2 text-muted"></i>{{ _('clean_audit_logs') }}
+              </h6>
+              <p class="small text-muted mb-3">
+                {{ _('clean_audit_desc') }}
+              </p>
+              <form action="{{ url_for('main.admin_maintenance') }}" method="POST" 
+                    onsubmit="return confirm('{{ _('clean_audit_confirm') }}')">
+                <input type="hidden" name="action" value="clear_old_audit">
+                <button type="submit" class="btn btn-outline-danger btn-sm">
+                  <i class="fa-solid fa-trash me-1"></i> {{ _('clean_audit_btn') }}
+                </button>
+              </form>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  <div class="col-lg-4">
+    <!-- Sistema Info -->
+    <div class="card border-0 shadow-sm mb-3">
+      <div class="card-header bg-light">
+        <h6 class="mb-0 fw-bold"><i class="fa-solid fa-server me-2"></i>{{ _('system_info') }}</h6>
+      </div>
+      <div class="card-body">
+        <ul class="list-unstyled mb-0 small">
+          <li class="d-flex justify-content-between py-2 border-bottom">
+            <span class="text-muted">{{ _('version') }}</span>
+            <span class="fw-semibold">1.0.0</span>
+          </li>
+          <li class="d-flex justify-content-between py-2 border-bottom">
+            <span class="text-muted">{{ _('framework') }}</span>
+            <span class="fw-semibold">Flask 3.1</span>
+          </li>
+          <li class="d-flex justify-content-between py-2 border-bottom">
+            <span class="text-muted">{{ _('database') }}</span>
+            <span class="fw-semibold">PostgreSQL</span>
+          </li>
+          <li class="d-flex justify-content-between py-2">
+            <span class="text-muted">Python</span>
+            <span class="fw-semibold">3.x</span>
+          </li>
+        </ul>
+      </div>
+    </div>
+    
+    <!-- Acciones Rápidas -->
+    <div class="card border-0 shadow-sm bg-light">
+      <div class="card-body">
+        <h6 class="fw-bold mb-3"><i class="fa-solid fa-bolt me-2 text-warning"></i>{{ _('quick_actions') }}</h6>
+        <div class="d-grid gap-2">
+          <a href="{{ url_for('main.admin_audit') }}" class="btn btn-outline-secondary btn-sm">
+            <i class="fa-solid fa-history me-2"></i>{{ _('view_audit') }}
+          </a>
+          <button type="button" class="btn btn-outline-secondary btn-sm" onclick="alert('{{ _('coming_soon') }}')">
+            <i class="fa-solid fa-download me-2"></i>{{ _('export_data') }}
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

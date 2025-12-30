@@ -1,0 +1,62 @@
+def test_predecessor_cycle_detection(db, create_project, create_task):
+    # Create a project and two tasks
+    project = create_project(name='P-Cycle')
+    t1 = create_task(project_id=project['id'], title='T1')
+    t2 = create_task(project_id=project['id'], title='T2')
+
+    from app.models import Task, db as _db
+
+    # Reload tasks as model instances
+    t1_obj = Task.query.get(t1['id'])
+    t2_obj = Task.query.get(t2['id'])
+
+    # Set t1 as predecessor of t2 (t1 -> t2)
+    t2_obj.predecessors = [t1_obj]
+    _db.session.commit()
+
+    # Now attempting to set t2 as predecessor of t1 should raise ValueError (creates a cycle)
+    try:
+        t1_obj.validate_predecessor_ids([t2_obj.id])
+        assert False, "Expected ValueError when creating cycle, but validation passed"
+    except ValueError as e:
+        assert 'cycle' in str(e).lower()
+
+
+def test_predecessor_project_validation(db, create_project, create_task):
+    p1 = create_project(name='P1')
+    p2 = create_project(name='P2')
+    t1 = create_task(project_id=p1['id'], title='P1-T1')
+    t2 = create_task(project_id=p2['id'], title='P2-T1')
+
+    from app.models import Task
+    t1_obj = Task.query.get(t1['id'])
+
+    try:
+        t1_obj.validate_predecessor_ids([t2['id']])
+        assert False, "Expected ValueError for cross-project predecessor"
+    except ValueError as e:
+        assert 'different project' in str(e).lower()
+
+
+def test_mark_complete_blocks_if_predecessors_incomplete(client, db, create_user, create_project, create_task, login):
+    # Create internal user and login
+    u = create_user(email='u1@example.com', is_internal=True)
+    login(u)
+
+    p = create_project(name='P-block')
+    t1 = create_task(project_id=p['id'], title='T1')
+    t2 = create_task(project_id=p['id'], title='T2')
+
+    from app.models import Task, db as _db
+    t1_obj = Task.query.get(t1['id'])
+    t2_obj = Task.query.get(t2['id'])
+
+    # Set t1 as predecessor of t2
+    t2_obj.predecessors = [t1_obj]
+    _db.session.commit()
+
+    # Attempt to mark t2 as done via route
+    rv = client.post(f"/task/{t2_obj.id}/status", data={'status': 'DONE'})
+    assert rv.status_code == 400
+    assert b'predecesoras' in rv.data or b'incomplete_predecessors' in rv.data
+

@@ -1,0 +1,355 @@
+{% extends 'base.html' %}
+
+{% block title %}Editar Tarea: {{ task.title }} — {{ sys_app_name }}{% endblock %}
+
+{% block head %}
+<style>
+/* Usamos las variables CSS definidas en base.html */
+.attachments-section {
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+  overflow: hidden;
+  margin-top: 20px;
+}
+
+.attachments-header {
+  padding: 12px 16px;
+  background: var(--monday-light-grey);
+  font-weight: 600;
+  border-bottom: 1px solid var(--monday-border);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.attachment-item {
+  display: flex;
+  align-items: center;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--monday-border);
+  gap: 12px;
+}
+
+.attachment-item:last-child { border-bottom: none; }
+.attachment-item:hover { background: var(--monday-light-grey); }
+
+.attachment-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+}
+
+.attachment-icon.pdf { background: #ffebee; color: #d32f2f; }
+.attachment-icon.image { background: #e3f2fd; color: #1976d2; }
+.attachment-icon.doc { background: #e8f5e9; color: #388e3c; }
+.attachment-icon.default { background: var(--monday-light-grey); color: #666; }
+
+.attachment-info { flex: 1; min-width: 0; }
+.attachment-name { font-weight: 500; font-size: 14px; }
+.attachment-meta { font-size: 12px; color: #888; }
+
+.attachment-actions { display: flex; gap: 6px; }
+
+.att-btn {
+  padding: 4px 8px;
+  border-radius: 4px;
+  border: none;
+  cursor: pointer;
+  font-size: 12px;
+  text-decoration: none;
+}
+
+.att-btn.download { background: var(--monday-light-grey); color: var(--monday-dark); }
+.att-btn.download:hover { background: var(--monday-blue); color: white; }
+.att-btn.delete { background: #ffebee; color: var(--monday-red); }
+.att-btn.delete:hover { background: var(--monday-red); color: white; }
+
+.upload-area {
+  border: 2px dashed #ddd;
+  border-radius: 8px;
+  padding: 20px;
+  text-align: center;
+  cursor: pointer;
+  margin: 16px;
+  transition: all 0.2s;
+}
+
+.upload-area:hover { border-color: var(--monday-blue); background: rgba(0,115,234,0.05); }
+.upload-area.dragover { border-color: var(--monday-blue); background: rgba(0,115,234,0.1); }
+.upload-area i { font-size: 24px; color: #ccc; margin-bottom: 8px; }
+.upload-area:hover i { color: var(--monday-blue); }
+
+.pending-files {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pending-file {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  background: #e8f5e9;
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.pending-file i { color: #388e3c; }
+
+.pending-file .file-name { flex: 1; }
+
+.pending-file .file-size { color: #666; font-size: 12px; }
+
+.pending-file .remove-file {
+  background: none;
+  border: none;
+  color: #d32f2f;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.pending-file .remove-file:hover { background: #ffebee; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="mb-4">
+  <nav aria-label="breadcrumb">
+    <ol class="breadcrumb mb-1">
+      <li class="breadcrumb-item"><a href="{{ url_for('main.projects') }}">Proyectos</a></li>
+      <li class="breadcrumb-item"><a href="{{ url_for('main.project_detail', project_id=project.id) }}">{{ project.name }}</a></li>
+      <li class="breadcrumb-item active" aria-current="page">{{ task.title }}</li>
+    </ol>
+  </nav>
+  <h2 class="fw-bold text-primary mb-0">Editar Tarea</h2>
+</div>
+
+<div class="row">
+  <div class="col-lg-8">
+    <div class="card shadow-sm">
+      <div class="card-body p-4">
+        <form method="POST" enctype="multipart/form-data" novalidate>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Título</label>
+            <input type="text" class="form-control" name="title" value="{{ task.title }}" required>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Descripción</label>
+            <textarea class="form-control" name="description" rows="4">{{ task.description or '' }}</textarea>
+          </div>
+
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label class="form-label fw-semibold">Estado</label>
+              <select class="form-select" name="status">
+                <option value="BACKLOG" {% if task.status == 'BACKLOG' %}selected{% endif %}>Backlog</option>
+                <option value="TODO" {% if task.status == 'TODO' %}selected{% endif %}>Por Hacer</option>
+                <option value="IN_PROGRESS" {% if task.status == 'IN_PROGRESS' %}selected{% endif %}>En Progreso</option>
+                <option value="REVIEW" {% if task.status == 'REVIEW' %}selected{% endif %}>Revisión</option>
+                <option value="QA" {% if task.status == 'QA' %}selected{% endif %}>QA</option>
+                <option value="DONE" {% if task.status == 'DONE' %}selected{% endif %}>Completada</option>
+              </select>
+            </div>
+            <div class="col-md-6 mb-3">
+              <label class="form-label fw-semibold">Prioridad</label>
+              <select class="form-select" name="priority">
+                <option value="LOW" {% if task.priority == 'LOW' %}selected{% endif %}>Baja</option>
+                <option value="MEDIUM" {% if task.priority == 'MEDIUM' %}selected{% endif %}>Media</option>
+                <option value="HIGH" {% if task.priority == 'HIGH' %}selected{% endif %}>Alta</option>
+                <option value="CRITICAL" {% if task.priority == 'CRITICAL' %}selected{% endif %}>Crítica</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label class="form-label fw-semibold">Asignado a</label>
+              <select class="form-select" name="assigned_to_id">
+                <option value="">-- Sin asignar --</option>
+                {% for u in users %}
+                  <option value="{{ u.id }}" {% if task.assigned_to and task.assigned_to.id == u.id %}selected{% endif %}>{{ u.first_name or u.email }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-md-6 mb-3">
+              <label class="form-label fw-semibold">Asignado a (Cliente)</label>
+              <select class="form-select" name="assigned_client_id">
+                <option value="">-- Sin asignar --</option>
+                {% for c in project.clients %}
+                  <option value="{{ c.id }}" {% if task.assigned_client_id and task.assigned_client_id == c.id %}selected{% endif %}>{{ c.first_name or c.email }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-md-6 mb-3">
+              <label class="form-label fw-semibold">Fecha Vencimiento</label>
+              <input type="datetime-local" class="form-control" name="due_date" value="{% if task.due_date %}{{ task.due_date.strftime('%Y-%m-%dT%H:%M') }}{% endif %}">
+            </div>
+            <div class="col-md-6 mb-3">
+              <label class="form-label fw-semibold">Horas Estimadas</label>
+              <input type="number" class="form-control" name="estimated_hours" step="0.5" value="{{ task.estimated_hours or '' }}">
+            </div>
+
+            <div class="col-md-6 mb-3">
+              <label class="form-label fw-semibold">Predecesoras</label>
+              <select class="form-select" name="predecessor_ids" multiple size="6">
+                {% for t in candidate_predecessors %}
+                  <option value="{{ t.id }}" {% if t in task.predecessors %}selected{% endif %}>{{ t.title }} (ID {{ t.id }})</option>
+                {% endfor %}
+              </select>
+              <small class="text-muted d-block">Seleccione tareas que deben completarse antes que esta. No se permiten ciclos.</small>
+            </div>
+          </div>
+
+          <div class="mb-3 form-check">
+            <input type="checkbox" class="form-check-input" name="is_external_visible" id="is_external_visible" {% if task.is_external_visible %}checked{% endif %}>
+            <label class="form-check-label" for="is_external_visible">
+              Visible para el cliente externo
+            </label>
+            <small class="d-block text-muted mt-1">Si está marcada, la tarea aparecerá en el portal del cliente.</small>
+          </div>
+
+          <!-- New Attachments Section -->
+          <div class="mb-3">
+            <label class="form-label fw-semibold"><i class="fa-solid fa-plus me-1"></i>Agregar archivos</label>
+            <div class="upload-area" id="uploadZone" onclick="document.getElementById('fileInput').click();">
+              <i class="fa-solid fa-cloud-upload-alt d-block"></i>
+              <div><strong>Arrastra archivos aquí</strong> o haz clic para seleccionar</div>
+              <small class="text-muted">Máx 16MB • PDF, imágenes, documentos</small>
+              <input type="file" name="attachments" id="fileInput" style="display:none;" multiple onchange="showSelectedFiles(this)">
+            </div>
+            <div id="pendingFiles" class="pending-files mt-2"></div>
+          </div>
+
+          <div class="d-flex gap-2 pt-3">
+            <button type="submit" class="btn btn-primary">
+              <i class="fa-solid fa-save me-2"></i> Guardar Cambios
+            </button>
+            <a href="{{ url_for('main.project_detail', project_id=project.id) }}" class="btn btn-secondary">
+              <i class="fa-solid fa-times me-2"></i> Cancelar
+            </a>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Existing Attachments Section -->
+    {% if task.attachments %}
+    <div class="attachments-section">
+      <div class="attachments-header">
+        <span><i class="fa-solid fa-paperclip me-2"></i>Archivos Existentes</span>
+        <span class="badge bg-secondary">{{ task.attachments|length }}</span>
+      </div>
+      
+      <div class="attachments-list">
+        {% for att in task.attachments %}
+        <div class="attachment-item">
+          {% set ext = att.filename.rsplit('.', 1)[-1].lower() if '.' in att.filename else '' %}
+          <div class="attachment-icon 
+            {% if ext == 'pdf' %}pdf
+            {% elif ext in ['jpg', 'jpeg', 'png', 'gif'] %}image
+            {% elif ext in ['doc', 'docx'] %}doc
+            {% else %}default{% endif %}">
+            {% if ext == 'pdf' %}<i class="fa-solid fa-file-pdf"></i>
+            {% elif ext in ['jpg', 'jpeg', 'png', 'gif'] %}<i class="fa-solid fa-file-image"></i>
+            {% elif ext in ['doc', 'docx'] %}<i class="fa-solid fa-file-word"></i>
+            {% else %}<i class="fa-solid fa-file"></i>{% endif %}
+          </div>
+          <div class="attachment-info">
+            <div class="attachment-name">{{ att.filename }}</div>
+            <div class="attachment-meta">{{ "%.1f"|format(att.file_size / 1024) }} KB • {{ att.uploaded_at.strftime('%d/%m/%Y') }}</div>
+          </div>
+          <div class="attachment-actions">
+            <a href="{{ url_for('main.download_attachment', attachment_id=att.id) }}" class="att-btn download" title="Descargar">
+              <i class="fa-solid fa-download"></i>
+            </a>
+            {% if current_user.is_internal or att.uploaded_by_id == current_user.id %}
+            <form action="{{ url_for('main.delete_attachment', attachment_id=att.id) }}" method="POST" style="display:inline;"
+                  onsubmit="return confirm('¿Eliminar este archivo?');">
+              <button type="submit" class="att-btn delete" title="Eliminar">
+                <i class="fa-solid fa-trash"></i>
+              </button>
+            </form>
+            {% endif %}
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+  </div>
+
+  <div class="col-lg-4">
+    <div class="card border-danger shadow-sm">
+      <div class="card-header bg-danger text-white">
+        <h6 class="mb-0">Zona de Riesgo</h6>
+      </div>
+      <div class="card-body">
+        <p class="small text-muted mb-3">Eliminar esta tarea es irreversible. Los registros de tiempo se perderán.</p>
+        <form method="POST" action="{{ url_for('main.delete_task', task_id=task.id) }}" onsubmit="return confirm('¿Eliminar tarea? Esta acción no se puede deshacer.');">
+          <button type="submit" class="btn btn-outline-danger w-100">
+            <i class="fa-solid fa-trash me-2"></i> Eliminar Tarea
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+// Show selected files without auto-submit
+function showSelectedFiles(input) {
+  const container = document.getElementById('pendingFiles');
+  container.innerHTML = '';
+  
+  if (input.files && input.files.length > 0) {
+    Array.from(input.files).forEach((file, index) => {
+      const size = (file.size / 1024).toFixed(1);
+      const div = document.createElement('div');
+      div.className = 'pending-file';
+      div.innerHTML = `
+        <i class="fa-solid fa-file"></i>
+        <span class="file-name">${file.name}</span>
+        <span class="file-size">${size} KB</span>
+        <span class="badge bg-warning text-dark">Pendiente</span>
+      `;
+      container.appendChild(div);
+    });
+  }
+}
+
+// Drag and drop
+const uploadZone = document.getElementById('uploadZone');
+const fileInput = document.getElementById('fileInput');
+
+['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+  uploadZone.addEventListener(eventName, (e) => { e.preventDefault(); e.stopPropagation(); });
+});
+
+['dragenter', 'dragover'].forEach(eventName => {
+  uploadZone.addEventListener(eventName, () => { uploadZone.classList.add('dragover'); });
+});
+
+['dragleave', 'drop'].forEach(eventName => {
+  uploadZone.addEventListener(eventName, () => { uploadZone.classList.remove('dragover'); });
+});
+
+uploadZone.addEventListener('drop', (e) => {
+  const files = e.dataTransfer.files;
+  if (files.length > 0) {
+    fileInput.files = files;
+    showSelectedFiles(fileInput);
+  }
+});
+</script>
+{% endblock %}

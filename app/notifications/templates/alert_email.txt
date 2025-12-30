@@ -1,0 +1,7 @@
+You have {{count}} pending tasks due soon.
+
+Tasks:
+{% for t in tasks %}- {{t}}
+{% endfor %}
+
+Go to the project dashboard to see details.

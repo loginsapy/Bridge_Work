@@ -1,0 +1,133 @@
+/* ============================================
+   Mockup-Specific Enhancements
+   Refining the design based on app.css
+   ============================================ */
+
+/* Hero Section */
+.mockup-hero {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.mockup-hero h1 {
+  font-weight: 700;
+  color: var(--text-primary);
+  font-size: 2rem;
+}
+
+.mockup-hero .text-muted {
+  color: var(--text-secondary);
+  font-size: 1rem;
+}
+
+/* Stat Cards */
+.soft-card {
+  border: 1px solid transparent;
+  transition: all var(--transition-base);
+  background: var(--bg-secondary);
+  border-radius: var(--border-radius-lg);
+  box-shadow: var(--shadow-md);
+}
+
+.soft-card:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-lg);
+  border-color: var(--brand-accent);
+}
+
+.soft-card .card-body {
+  padding: 1.5rem;
+}
+
+.soft-card small {
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  font-size: 0.75rem;
+  letter-spacing: 0.5px;
+}
+
+.soft-card .display-6 {
+  font-size: 2.25rem;
+  font-weight: 700;
+  color: var(--brand-primary);
+}
+
+.soft-card .text-danger {
+  color: var(--danger) !important;
+}
+
+/* Main Cards */
+.card {
+  border-radius: var(--border-radius-lg);
+  box-shadow: var(--shadow-md);
+}
+
+.card .card-title {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+}
+
+/* Activity List */
+.mock-activity {
+  padding-left: 0;
+  list-style: none;
+  margin: 0;
+}
+.mock-activity li {
+  padding: 0.75rem 0.25rem;
+  border-bottom: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+}
+
+.mock-activity li:last-child {
+  border-bottom: none;
+}
+
+.mock-activity li strong {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+/* Color Palette Swatches */
+.mock-swatches .swatch {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--border-radius-md);
+  border: 2px solid rgba(0,0,0,0.08);
+}
+.s-brand { background: var(--brand-primary); }
+.s-brand-dark { background: var(--brand-secondary); }
+.s-accent { background: var(--brand-accent); }
+.s-contrast { background: var(--brand-light); }
+.s-bg { background: var(--bg-primary); }
+
+
+/* Project Mockup Specifics */
+.mock-progress {
+  height: 24px !important;
+  border-radius: var(--border-radius-sm);
+  background-color: var(--gray-200);
+}
+
+.mock-progress .progress-bar {
+  background: linear-gradient(90deg, var(--brand-accent), var(--brand-primary));
+  color: var(--text-inverse);
+  font-weight: 600;
+  font-size: 0.8rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.list-group-item {
+  transition: background-color var(--transition-fast);
+}
+
+.list-group-item:hover {
+  background-color: var(--gray-50);
+}

@@ -1,0 +1,110 @@
+{% extends 'base.html' %}
+
+{% block title %}Mockup — Dashboard{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/mockups.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="mockup-hero py-5">
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+      <h1 class="h2">Dashboard</h1>
+      <p class="text-muted">Vista de diseño pulido con datos de ejemplo.</p>
+    </div>
+    <div class="d-flex gap-2">
+      <a class="btn btn-secondary" href="/mock/project">
+        <i class="fas fa-cube"></i> Ver Proyecto
+      </a>
+      <a class="btn btn-primary" href="#">
+        <i class="fas fa-download"></i> Exportar
+      </a>
+    </div>
+  </div>
+
+  <div class="row g-4 mb-4">
+    <div class="col-md-3">
+      <div class="card soft-card">
+        <div class="card-body">
+          <small>Proyectos activos</small>
+          <div class="display-6 mt-2">12</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card soft-card">
+        <div class="card-body">
+          <small>Horas esta semana</small>
+          <div class="display-6 mt-2">184.5</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card soft-card">
+        <div class="card-body">
+          <small>Presupuesto usado</small>
+          <div class="display-6 mt-2">62%</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card soft-card">
+        <div class="card-body">
+          <small>Alertas</small>
+          <div class="display-6 mt-2 text-danger">3</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-4">
+    <div class="col-lg-8">
+      <div class="card">
+        <div class="card-header">
+          <h6 class="card-title mb-0">Velocidad Semanal (Horas)</h6>
+        </div>
+        <div class="card-body">
+          <div class="chart-container">
+            <canvas id="speedChartMock"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-lg-4">
+      <div class="card">
+        <div class="card-header">
+          <h6 class="card-title mb-0">Actividad Reciente</h6>
+        </div>
+        <div class="card-body">
+          <ul class="mock-activity">
+            <li><strong>María</strong> añadió 3h a <em>Portal</em></li>
+            <li><strong>Carlos</strong> cerró una tarea en <em>Integración API</em></li>
+            <li><strong>Sandra</strong> actualizó presupuesto de <em>Diseño</em></li>
+            <li><strong>Equipo</strong> inició el sprint <em>Q1</em></li>
+          </ul>
+        </div>
+      </div>
+      <div class="card mt-4">
+        <div class="card-header">
+          <h6 class="card-title mb-0">Paleta de Colores</h6>
+        </div>
+        <div class="card-body">
+          <div class="d-flex gap-3 align-items-center mock-swatches">
+            <div class="swatch s-brand" title="Brand Primary"></div>
+            <div class="swatch s-brand-dark" title="Brand Secondary"></div>
+            <div class="swatch s-accent" title="Accent"></div>
+            <div class="swatch s-contrast" title="Light"></div>
+            <div class="swatch s-bg" title="Background"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/mockups.js') }}"></script>
+{% endblock %}

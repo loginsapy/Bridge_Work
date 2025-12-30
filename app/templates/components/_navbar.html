@@ -1,0 +1,840 @@
+<nav class="navbar navbar-expand-lg navbar-light">
+  <div class="container-fluid">
+    <!-- Mobile Menu Toggle -->
+    <button class="btn btn-link d-lg-none me-3" id="sidebarToggle" type="button">
+      <i class="fa-solid fa-bars fa-lg"></i>
+    </button>
+
+    <!-- Page Title -->
+    <h5 class="mb-0 fw-semibold d-none d-md-block">{{ sys_app_name }}</h5>
+
+    <!-- Right Side Actions -->
+    <div class="ms-auto d-flex align-items-center gap-3">
+      <!-- Global Search -->
+      <div class="position-relative" id="globalSearchContainer">
+        <div class="search-input-wrapper">
+          <i class="fa-solid fa-search search-icon"></i>
+          <input type="search" 
+                 id="globalSearchInput" 
+                 class="form-control global-search-input" 
+                 placeholder="Buscar proyectos, tareas, usuarios..." 
+                 autocomplete="off"
+                 aria-label="Buscar">
+          <kbd class="search-shortcut d-none d-lg-inline">Ctrl+K</kbd>
+          <div class="search-spinner d-none">
+            <i class="fa-solid fa-spinner fa-spin"></i>
+          </div>
+        </div>
+        
+        <!-- Search Results Dropdown -->
+        <div id="searchResults" class="search-results-dropdown shadow-lg">
+          <div class="search-results-content">
+            <!-- Results will be injected here -->
+          </div>
+        </div>
+      </div>
+
+      <!-- Quick Actions -->
+      <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#createProjectModal">
+        <i class="fa-solid fa-plus me-1"></i>
+        <span class="d-none d-lg-inline">Nuevo Proyecto</span>
+      </button>
+
+      <!-- Notifications -->
+      <div class="position-relative dropdown" id="notificationDropdown">
+        <button class="btn btn-link text-secondary p-2" data-bs-toggle="dropdown" aria-expanded="false" id="notificationBtn">
+          <i class="fa-solid fa-bell fa-lg"></i>
+          {% if unread_notifications_count > 0 %}
+          <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger notification-badge" style="font-size: 0.65rem;">
+            {{ unread_notifications_count if unread_notifications_count < 100 else '99+' }}
+          </span>
+          {% endif %}
+        </button>
+        <div class="dropdown-menu dropdown-menu-end shadow-lg notification-dropdown" style="width: 380px; max-height: 480px; overflow-y: auto;">
+          <div class="px-3 py-2 border-bottom d-flex justify-content-between align-items-center sticky-top bg-white">
+            <h6 class="mb-0">Notificaciones</h6>
+            {% if unread_notifications_count > 0 %}
+            <button class="btn btn-link btn-sm text-primary p-0" onclick="markAllAsRead()" style="font-size: 0.75rem;">
+              Marcar todo como leído
+            </button>
+            {% endif %}
+          </div>
+          <div id="notificationList">
+            <!-- Las notificaciones se cargan dinámicamente -->
+            <div class="text-center py-4 text-muted">
+              <i class="fa-solid fa-spinner fa-spin me-2"></i>Cargando...
+            </div>
+          </div>
+          <div class="border-top sticky-bottom bg-white">
+            <a class="dropdown-item text-center py-2 text-primary" href="{{ url_for('main.notifications') }}">
+              <i class="fa-solid fa-bell me-1"></i>Ver todas las notificaciones
+            </a>
+          </div>
+        </div>
+      </div>
+
+      {% if current_user.is_authenticated and current_user.is_internal and current_user.role and current_user.role.name == 'PMP' %}
+        <div class="dropdown">
+          <button class="btn btn-link text-secondary p-2" data-bs-toggle="dropdown">Admin</button>
+          <ul class="dropdown-menu dropdown-menu-end shadow">
+            <li><a class="dropdown-item" href="{{ url_for('main.admin_users') }}">Gestionar Usuarios</a></li>
+            <li><a class="dropdown-item" href="{{ url_for('main.admin_roles') }}">Gestionar Roles</a></li>
+          </ul>
+        </div>
+      {% endif %}
+
+      <!-- User Menu -->
+      {% if current_user.is_authenticated %}
+        <div class="dropdown">
+          <button class="btn btn-link text-decoration-none p-0 d-flex align-items-center gap-2" data-bs-toggle="dropdown">
+            <div class="d-none d-md-block text-end">
+              <div class="fw-semibold" style="font-size: 0.875rem; line-height: 1.2;">{{ current_user.first_name or current_user.email }}</div>
+              <small class="text-muted">Conectado</small>
+            </div>
+            <div class="rounded-circle bg-primary text-white d-flex align-items-center justify-content-center" style="width: 40px; height: 40px;">
+              <i class="fa-solid fa-user"></i>
+            </div>
+          </button>
+          <ul class="dropdown-menu dropdown-menu-end shadow">
+            <li><a class="dropdown-item" href="{{ url_for('main.profile') }}"><i class="fa-solid fa-user me-2"></i> Mi Perfil</a></li>
+            <li><a class="dropdown-item" href="{{ url_for('main.settings') }}"><i class="fa-solid fa-gear me-2"></i> Configuración</a></li>
+            <li><hr class="dropdown-divider"></li>
+            <li><a class="dropdown-item text-danger" href="{{ url_for('auth.logout') }}"><i class="fa-solid fa-right-from-bracket me-2"></i> Cerrar Sesión</a></li>
+          </ul>
+        </div>
+      {% else %}
+        <a class="btn btn-outline-primary btn-sm" href="{{ url_for('auth.login') }}">
+          <i class="fa-solid fa-right-to-bracket me-1"></i> Iniciar Sesión
+        </a>
+      {% endif %}
+    </div>
+  </div>
+</nav>
+
+<!-- Modal Nuevo Proyecto (Global) -->
+<div class="modal fade" id="createProjectModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title fw-bold">Nuevo Proyecto</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <form action="{{ url_for('main.create_project') }}" method="POST">
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label">Nombre del Proyecto</label>
+            <input type="text" class="form-control" name="name" required placeholder="Ej. Migración a la Nube">
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Descripción</label>
+            <textarea class="form-control" name="description" rows="3" placeholder="Breve descripción del alcance..."></textarea>
+          </div>
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Presupuesto (Horas)</label>
+              <input type="number" class="form-control" name="budget_hours" step="0.1" placeholder="0.0">
+            </div>
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Fecha de Inicio</label>
+              <input type="date" class="form-control" name="start_date">
+            </div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Fecha de Fin</label>
+            <input type="date" class="form-control" name="end_date">
+          </div>
+          {% if available_clients %}
+          <div class="mb-3">
+            <label class="form-label">Clientes Asociados <small class="text-muted">(opcional)</small></label>
+            <div class="border rounded p-2" style="max-height: 150px; overflow-y: auto;">
+              {% for client in available_clients %}
+                <div class="form-check">
+                  <input class="form-check-input" type="checkbox" name="client_ids" 
+                    value="{{ client.id }}" id="new_client_{{ client.id }}">
+                  <label class="form-check-label" for="new_client_{{ client.id }}">
+                    {{ client.first_name }} {{ client.last_name }}
+                    <small class="text-muted">({{ client.email }})</small>
+                  </label>
+                </div>
+              {% endfor %}
+            </div>
+          </div>
+          {% endif %}
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn btn-primary">Crear Proyecto</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Notification Scripts -->
+<script>
+// Notification type icons and colors
+const notificationIcons = {
+  'task_assigned': { icon: 'fa-user-plus', color: 'text-primary' },
+  'task_completed': { icon: 'fa-circle-check', color: 'text-success' },
+  'task_status_changed': { icon: 'fa-arrows-rotate', color: 'text-info' },
+  'task_approval_requested': { icon: 'fa-clock', color: 'text-warning' },
+  'task_approved': { icon: 'fa-thumbs-up', color: 'text-success' },
+  'task_rejected': { icon: 'fa-thumbs-down', color: 'text-danger' },
+  'task_due_soon': { icon: 'fa-exclamation-triangle', color: 'text-warning' },
+  'project_created': { icon: 'fa-folder-plus', color: 'text-primary' },
+  'general': { icon: 'fa-bell', color: 'text-secondary' }
+};
+
+// Format relative time
+function timeAgo(dateStr) {
+  if (!dateStr) return '';
+  const date = new Date(dateStr);
+  const now = new Date();
+  const diff = Math.floor((now - date) / 1000);
+  
+  if (diff < 60) return 'Hace un momento';
+  if (diff < 3600) return `Hace ${Math.floor(diff/60)} min`;
+  if (diff < 86400) return `Hace ${Math.floor(diff/3600)} hora${Math.floor(diff/3600) > 1 ? 's' : ''}`;
+  if (diff < 604800) return `Hace ${Math.floor(diff/86400)} día${Math.floor(diff/86400) > 1 ? 's' : ''}`;
+  return date.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
+}
+
+// Load notifications
+function loadNotifications() {
+  fetch('{{ url_for("main.recent_notifications") }}')
+    .then(r => r.json())
+    .then(data => {
+      const list = document.getElementById('notificationList');
+      const badge = document.querySelector('.notification-badge');
+      
+      if (data.unread_count > 0) {
+        if (badge) {
+          badge.textContent = data.unread_count < 100 ? data.unread_count : '99+';
+          badge.style.display = 'inline-block';
+        } else {
+          const btn = document.getElementById('notificationBtn');
+          const newBadge = document.createElement('span');
+          newBadge.className = 'position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger notification-badge';
+          newBadge.style.fontSize = '0.65rem';
+          newBadge.textContent = data.unread_count < 100 ? data.unread_count : '99+';
+          btn.appendChild(newBadge);
+        }
+      } else {
+        if (badge) badge.style.display = 'none';
+      }
+      
+      if (data.notifications.length === 0) {
+        list.innerHTML = `
+          <div class="text-center py-4">
+            <i class="fa-regular fa-bell-slash fa-2x text-muted mb-2"></i>
+            <p class="text-muted mb-0">No tienes notificaciones</p>
+          </div>
+        `;
+        return;
+      }
+      
+      list.innerHTML = data.notifications.map(n => {
+        const iconData = notificationIcons[n.type] || notificationIcons['general'];
+        const unreadClass = n.is_read ? '' : 'bg-light';
+        const href = n.related_entity_type === 'task' && n.related_entity_id 
+          ? `/task/${n.related_entity_id}` 
+          : '{{ url_for("main.notifications") }}';
+        
+        return `
+          <a class="dropdown-item py-3 ${unreadClass}" href="${href}" 
+             onclick="markNotificationRead(${n.id})" style="white-space: normal;">
+            <div class="d-flex">
+              <div class="flex-shrink-0">
+                <i class="fa-solid ${iconData.icon} ${iconData.color} me-3 mt-1"></i>
+              </div>
+              <div class="flex-grow-1 min-width-0">
+                <div class="fw-semibold ${n.is_read ? '' : 'text-dark'}">${n.title}</div>
+                <small class="text-muted d-block text-truncate">${n.message}</small>
+                <small class="text-muted">${timeAgo(n.created_at)}</small>
+              </div>
+              ${!n.is_read ? '<span class="ms-2"><i class="fa-solid fa-circle text-primary" style="font-size: 0.5rem;"></i></span>' : ''}
+            </div>
+          </a>
+        `;
+      }).join('');
+    })
+    .catch(err => {
+      console.error('Error loading notifications:', err);
+      document.getElementById('notificationList').innerHTML = `
+        <div class="text-center py-4 text-muted">
+          <i class="fa-solid fa-exclamation-circle me-2"></i>Error al cargar
+        </div>
+      `;
+    });
+}
+
+// Mark single notification as read
+function markNotificationRead(id) {
+  fetch(`/notification/${id}/read`, { method: 'POST' })
+    .catch(err => console.error('Error marking notification read:', err));
+}
+
+// Mark all as read
+function markAllAsRead() {
+  fetch('{{ url_for("main.mark_all_notifications_read") }}', { method: 'POST' })
+    .then(r => r.json())
+    .then(() => {
+      loadNotifications();
+    })
+    .catch(err => console.error('Error marking all read:', err));
+}
+
+// Load notifications when dropdown is opened
+document.addEventListener('DOMContentLoaded', function() {
+  const dropdown = document.getElementById('notificationDropdown');
+  if (dropdown) {
+    dropdown.addEventListener('show.bs.dropdown', loadNotifications);
+  }
+});
+</script>
+
+<!-- Global Search Styles -->
+<style>
+.search-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.global-search-input {
+  width: 320px;
+  padding: 0.5rem 2.5rem 0.5rem 2.5rem;
+  border: 2px solid transparent;
+  background: var(--surface-secondary, #f5f6f8);
+  border-radius: 8px;
+  font-size: 0.875rem;
+  transition: all 0.2s ease;
+}
+
+.global-search-input:focus {
+  width: 400px;
+  background: #fff;
+  border-color: var(--primary, #0073ea);
+  box-shadow: 0 0 0 4px rgba(0, 115, 234, 0.1);
+  outline: none;
+}
+
+.global-search-input::placeholder {
+  color: var(--text-tertiary, #9699a6);
+}
+
+.search-icon {
+  position: absolute;
+  left: 0.875rem;
+  color: var(--text-tertiary, #9699a6);
+  pointer-events: none;
+  z-index: 1;
+}
+
+.search-shortcut {
+  position: absolute;
+  right: 0.75rem;
+  background: var(--surface-tertiary, #e6e9ef);
+  color: var(--text-secondary, #676879);
+  padding: 0.125rem 0.375rem;
+  border-radius: 4px;
+  font-size: 0.7rem;
+  font-family: inherit;
+  border: none;
+}
+
+.global-search-input:focus + .search-shortcut,
+.global-search-input:not(:placeholder-shown) + .search-shortcut {
+  display: none !important;
+}
+
+.search-spinner {
+  position: absolute;
+  right: 0.75rem;
+  color: var(--primary, #0073ea);
+}
+
+.search-results-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  right: 0;
+  background: #fff;
+  border-radius: 12px;
+  border: 1px solid var(--border-light, #e6e9ef);
+  max-height: 480px;
+  overflow: hidden;
+  display: none;
+  z-index: 1050;
+  min-width: 400px;
+}
+
+.search-results-dropdown.active {
+  display: block;
+  animation: searchDropdownIn 0.15s ease-out;
+}
+
+@keyframes searchDropdownIn {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.search-results-content {
+  max-height: 480px;
+  overflow-y: auto;
+}
+
+.search-section {
+  padding: 0.5rem 0;
+}
+
+.search-section:not(:last-child) {
+  border-bottom: 1px solid var(--border-light, #e6e9ef);
+}
+
+.search-section-title {
+  padding: 0.5rem 1rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-tertiary, #9699a6);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.search-result-item {
+  display: flex;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  text-decoration: none;
+  color: inherit;
+  transition: background 0.1s ease;
+  cursor: pointer;
+}
+
+.search-result-item:hover,
+.search-result-item.active {
+  background: var(--surface-secondary, #f5f6f8);
+}
+
+.search-result-item.active {
+  background: var(--primary-light, #e6f3ff);
+}
+
+.search-result-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 0.75rem;
+  flex-shrink: 0;
+}
+
+.search-result-icon.project {
+  background: linear-gradient(135deg, #a25ddc 0%, #7b3fa0 100%);
+  color: #fff;
+}
+
+.search-result-icon.task {
+  background: linear-gradient(135deg, #0073ea 0%, #0060c0 100%);
+  color: #fff;
+}
+
+.search-result-icon.user {
+  background: linear-gradient(135deg, #00c875 0%, #00a65a 100%);
+  color: #fff;
+}
+
+.search-result-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.search-result-title {
+  font-weight: 500;
+  color: var(--text-primary, #323338);
+  margin-bottom: 0.125rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.search-result-meta {
+  font-size: 0.75rem;
+  color: var(--text-tertiary, #9699a6);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.search-result-badge {
+  font-size: 0.65rem;
+  padding: 0.125rem 0.5rem;
+  border-radius: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.search-result-badge.active { background: #e6fff0; color: #00c875; }
+.search-result-badge.completed { background: #e6f3ff; color: #0073ea; }
+.search-result-badge.in_progress { background: #fff8e6; color: #fdab3d; }
+.search-result-badge.backlog { background: #f5f6f8; color: #676879; }
+.search-result-badge.in_review { background: #fff0f2; color: #e2445c; }
+
+.search-empty {
+  padding: 2rem;
+  text-align: center;
+  color: var(--text-tertiary, #9699a6);
+}
+
+.search-empty i {
+  font-size: 2rem;
+  margin-bottom: 0.5rem;
+  opacity: 0.5;
+}
+
+.search-footer {
+  padding: 0.75rem 1rem;
+  background: var(--surface-secondary, #f5f6f8);
+  border-top: 1px solid var(--border-light, #e6e9ef);
+  font-size: 0.75rem;
+  color: var(--text-tertiary, #9699a6);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.search-footer kbd {
+  background: #fff;
+  padding: 0.125rem 0.375rem;
+  border-radius: 4px;
+  font-size: 0.65rem;
+  margin: 0 0.125rem;
+  border: 1px solid var(--border-light, #e6e9ef);
+}
+
+/* Mobile responsive */
+@media (max-width: 768px) {
+  #globalSearchContainer {
+    position: static;
+  }
+  
+  .global-search-input {
+    width: 44px;
+    padding: 0.5rem;
+    background: transparent;
+    cursor: pointer;
+  }
+  
+  .global-search-input::placeholder {
+    color: transparent;
+  }
+  
+  .search-shortcut {
+    display: none !important;
+  }
+  
+  .global-search-input:focus {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    width: 100%;
+    border-radius: 0;
+    z-index: 1060;
+    background: #fff;
+    padding: 1rem 1rem 1rem 2.5rem;
+  }
+  
+  .global-search-input:focus::placeholder {
+    color: var(--text-tertiary, #9699a6);
+  }
+  
+  .search-results-dropdown {
+    position: fixed;
+    top: 56px;
+    left: 0;
+    right: 0;
+    border-radius: 0;
+    max-height: calc(100vh - 56px);
+    min-width: auto;
+  }
+}
+</style>
+
+<!-- Global Search JavaScript -->
+<script>
+(function() {
+  const searchInput = document.getElementById('globalSearchInput');
+  const searchResults = document.getElementById('searchResults');
+  const searchContainer = document.getElementById('globalSearchContainer');
+  let searchTimeout = null;
+  let currentResults = [];
+  let selectedIndex = -1;
+
+  if (!searchInput || !searchResults) return;
+
+  // Debounced search
+  function debounceSearch(query) {
+    const spinner = searchContainer.querySelector('.search-spinner');
+    
+    if (searchTimeout) clearTimeout(searchTimeout);
+    
+    if (!query || query.length < 2) {
+      hideResults();
+      return;
+    }
+    
+    spinner?.classList.remove('d-none');
+    
+    searchTimeout = setTimeout(() => {
+      performSearch(query);
+    }, 250);
+  }
+
+  // Perform search API call
+  async function performSearch(query) {
+    const spinner = searchContainer.querySelector('.search-spinner');
+    
+    try {
+      const response = await fetch(`{{ url_for("main.global_search") }}?q=${encodeURIComponent(query)}`);
+      const data = await response.json();
+      
+      spinner?.classList.add('d-none');
+      renderResults(data);
+    } catch (err) {
+      spinner?.classList.add('d-none');
+      console.error('Search error:', err);
+      renderError();
+    }
+  }
+
+  // Render search results
+  function renderResults(data) {
+    const { projects, tasks, users, query } = data;
+    currentResults = [];
+    selectedIndex = -1;
+    
+    const totalResults = projects.length + tasks.length + users.length;
+    
+    if (totalResults === 0) {
+      searchResults.querySelector('.search-results-content').innerHTML = `
+        <div class="search-empty">
+          <i class="fa-solid fa-search"></i>
+          <p class="mb-0">No se encontraron resultados para "<strong>${escapeHtml(query)}</strong>"</p>
+        </div>
+      `;
+      showResults();
+      return;
+    }
+    
+    let html = '';
+    
+    // Projects section
+    if (projects.length > 0) {
+      html += `<div class="search-section">
+        <div class="search-section-title">
+          <i class="fa-solid fa-folder"></i> Proyectos (${projects.length})
+        </div>`;
+      
+      projects.forEach((p, i) => {
+        currentResults.push({ type: 'project', url: p.url, data: p });
+        const statusClass = p.status?.toLowerCase().replace(' ', '_') || 'backlog';
+        html += `
+          <a href="${p.url}" class="search-result-item" data-index="${currentResults.length - 1}">
+            <div class="search-result-icon project">
+              <i class="fa-solid fa-folder"></i>
+            </div>
+            <div class="search-result-content">
+              <div class="search-result-title">${highlightMatch(p.name, query)}</div>
+              <div class="search-result-meta">
+                <span class="search-result-badge ${statusClass}">${p.status || 'Sin estado'}</span>
+                ${p.description ? `<span class="text-truncate">${escapeHtml(p.description)}</span>` : ''}
+              </div>
+            </div>
+          </a>`;
+      });
+      html += '</div>';
+    }
+    
+    // Tasks section
+    if (tasks.length > 0) {
+      html += `<div class="search-section">
+        <div class="search-section-title">
+          <i class="fa-solid fa-check-square"></i> Tareas (${tasks.length})
+        </div>`;
+      
+      tasks.forEach((t, i) => {
+        currentResults.push({ type: 'task', url: t.url, data: t });
+        const statusClass = t.status?.toLowerCase().replace(' ', '_') || 'backlog';
+        html += `
+          <a href="${t.url}" class="search-result-item" data-index="${currentResults.length - 1}">
+            <div class="search-result-icon task">
+              <i class="fa-solid fa-check"></i>
+            </div>
+            <div class="search-result-content">
+              <div class="search-result-title">${highlightMatch(t.title, query)}</div>
+              <div class="search-result-meta">
+                <span class="search-result-badge ${statusClass}">${t.status || 'Sin estado'}</span>
+                ${t.project_name ? `<span><i class="fa-solid fa-folder me-1"></i>${escapeHtml(t.project_name)}</span>` : ''}
+              </div>
+            </div>
+          </a>`;
+      });
+      html += '</div>';
+    }
+    
+    // Users section
+    if (users.length > 0) {
+      html += `<div class="search-section">
+        <div class="search-section-title">
+          <i class="fa-solid fa-users"></i> Usuarios (${users.length})
+        </div>`;
+      
+      users.forEach((u, i) => {
+        currentResults.push({ type: 'user', url: `{{ url_for("main.team") }}`, data: u });
+        html += `
+          <a href="{{ url_for("main.team") }}" class="search-result-item" data-index="${currentResults.length - 1}">
+            <div class="search-result-icon user">
+              <i class="fa-solid fa-user"></i>
+            </div>
+            <div class="search-result-content">
+              <div class="search-result-title">${highlightMatch(u.name, query)}</div>
+              <div class="search-result-meta">
+                <span>${escapeHtml(u.email)}</span>
+                ${u.role ? `<span class="search-result-badge">${u.role}</span>` : ''}
+                ${u.is_internal ? '<span class="text-success"><i class="fa-solid fa-building me-1"></i>Interno</span>' : '<span class="text-info"><i class="fa-solid fa-user-tie me-1"></i>Cliente</span>'}
+              </div>
+            </div>
+          </a>`;
+      });
+      html += '</div>';
+    }
+    
+    // Footer with keyboard shortcuts
+    html += `
+      <div class="search-footer">
+        <span>${totalResults} resultado${totalResults !== 1 ? 's' : ''}</span>
+        <span class="d-none d-md-inline">
+          <kbd>↑</kbd><kbd>↓</kbd> navegar
+          <kbd>Enter</kbd> abrir
+          <kbd>Esc</kbd> cerrar
+        </span>
+      </div>`;
+    
+    searchResults.querySelector('.search-results-content').innerHTML = html;
+    showResults();
+  }
+
+  function renderError() {
+    searchResults.querySelector('.search-results-content').innerHTML = `
+      <div class="search-empty">
+        <i class="fa-solid fa-exclamation-triangle text-warning"></i>
+        <p class="mb-0">Error al realizar la búsqueda</p>
+      </div>
+    `;
+    showResults();
+  }
+
+  function showResults() {
+    searchResults.classList.add('active');
+  }
+
+  function hideResults() {
+    searchResults.classList.remove('active');
+    currentResults = [];
+    selectedIndex = -1;
+  }
+
+  function highlightMatch(text, query) {
+    if (!text || !query) return escapeHtml(text || '');
+    const regex = new RegExp(`(${escapeRegex(query)})`, 'gi');
+    return escapeHtml(text).replace(regex, '<mark>$1</mark>');
+  }
+
+  function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+
+  function escapeRegex(string) {
+    return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+
+  function updateSelection(newIndex) {
+    const items = searchResults.querySelectorAll('.search-result-item');
+    items.forEach((item, i) => {
+      item.classList.toggle('active', i === newIndex);
+    });
+    
+    if (newIndex >= 0 && items[newIndex]) {
+      items[newIndex].scrollIntoView({ block: 'nearest' });
+    }
+    
+    selectedIndex = newIndex;
+  }
+
+  // Event listeners
+  searchInput.addEventListener('input', (e) => {
+    debounceSearch(e.target.value.trim());
+  });
+
+  searchInput.addEventListener('focus', () => {
+    if (searchInput.value.length >= 2) {
+      showResults();
+    }
+  });
+
+  searchInput.addEventListener('keydown', (e) => {
+    if (!searchResults.classList.contains('active')) return;
+    
+    switch (e.key) {
+      case 'ArrowDown':
+        e.preventDefault();
+        updateSelection(Math.min(selectedIndex + 1, currentResults.length - 1));
+        break;
+      case 'ArrowUp':
+        e.preventDefault();
+        updateSelection(Math.max(selectedIndex - 1, -1));
+        break;
+      case 'Enter':
+        e.preventDefault();
+        if (selectedIndex >= 0 && currentResults[selectedIndex]) {
+          window.location.href = currentResults[selectedIndex].url;
+        }
+        break;
+      case 'Escape':
+        hideResults();
+        searchInput.blur();
+        break;
+    }
+  });
+
+  // Close on click outside
+  document.addEventListener('click', (e) => {
+    if (!searchContainer.contains(e.target)) {
+      hideResults();
+    }
+  });
+
+  // Global keyboard shortcut (Ctrl+K)
+  document.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+      e.preventDefault();
+      searchInput.focus();
+      searchInput.select();
+    }
+  });
+})();
+</script>

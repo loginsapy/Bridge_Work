@@ -1,0 +1,211 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ _('rates') }} — {{ _('administration') }} — {{ sys_app_name }}{% endblock %}
+
+{% block content %}
+<div class="mb-4">
+  <nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+      <li class="breadcrumb-item"><a href="{{ url_for('main.admin_dashboard') }}">{{ _('administration') }}</a></li>
+      <li class="breadcrumb-item active">{{ _('rates') }}</li>
+    </ol>
+  </nav>
+  <h2 class="fw-bold text-primary">
+    <i class="fa-solid fa-dollar-sign me-2"></i>{{ _('hourly_rates_title') }}
+  </h2>
+  <p class="text-muted">{{ _('rates_subtitle') }}</p>
+</div>
+
+<div class="row">
+  <div class="col-lg-8">
+    <!-- Lista de Tarifas -->
+    <div class="card border-0 shadow-sm mb-4">
+      <div class="card-header bg-light d-flex justify-content-between align-items-center">
+        <h5 class="mb-0 fw-bold">{{ _('configured_rates') }}</h5>
+        <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#rateModal">
+          <i class="fa-solid fa-plus me-1"></i> {{ _('new_rate') }}
+        </button>
+      </div>
+      <div class="card-body p-0">
+        {% if rates %}
+        <div class="table-responsive">
+          <table class="table table-hover mb-0">
+            <thead class="table-light">
+              <tr>
+                <th>{{ _('name') }}</th>
+                <th class="text-end">{{ _('rate_value') }}</th>
+                <th>{{ _('currency') }}</th>
+                <th>{{ _('status') }}</th>
+                <th class="text-center">{{ _('actions') }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for rate in rates %}
+              <tr>
+                <td>
+                  <span class="fw-semibold">{{ rate.name }}</span>
+                  {% if rate.is_default %}
+                    <span class="badge bg-primary ms-1">{{ _('default_badge') }}</span>
+                  {% endif %}
+                  {% if rate.description %}
+                    <br><small class="text-muted">{{ rate.description }}</small>
+                  {% endif %}
+                </td>
+                <td class="text-end fw-bold">{{ rate.rate|currency }}</td>
+                <td>{{ currency_names.get(rate.currency, rate.currency) }}</td>
+                <td>
+                  {% if rate.is_active %}
+                    <span class="badge bg-success">{{ _('active_rate') }}</span>
+                  {% else %}
+                    <span class="badge bg-secondary">{{ _('inactive_rate') }}</span>
+                  {% endif %}
+                </td>
+                <td class="text-center">
+                  <button class="btn btn-sm btn-outline-primary" 
+                          data-bs-toggle="modal" 
+                          data-bs-target="#editRateModal{{ rate.id }}">
+                    <i class="fa-solid fa-edit"></i>
+                  </button>
+                  <form action="{{ url_for('main.admin_rates') }}" method="POST" class="d-inline" 
+                        onsubmit="return confirm('{{ _('delete_rate') }}')">
+                    <input type="hidden" name="action" value="delete">
+                    <input type="hidden" name="rate_id" value="{{ rate.id }}">
+                    <button type="submit" class="btn btn-sm btn-outline-danger">
+                      <i class="fa-solid fa-trash"></i>
+                    </button>
+                  </form>
+                </td>
+              </tr>
+              
+              <!-- Modal de Edición -->
+              <div class="modal fade" id="editRateModal{{ rate.id }}" tabindex="-1">
+                <div class="modal-dialog">
+                  <div class="modal-content">
+                    <div class="modal-header">
+                      <h5 class="modal-title">{{ _('edit_rate') }}</h5>
+                      <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <form action="{{ url_for('main.admin_rates') }}" method="POST">
+                      <input type="hidden" name="action" value="update">
+                      <input type="hidden" name="rate_id" value="{{ rate.id }}">
+                      <div class="modal-body">
+                        <div class="mb-3">
+                          <label class="form-label">{{ _('name') }}</label>
+                          <input type="text" name="name" class="form-control" value="{{ rate.name }}" required>
+                        </div>
+                        <div class="row">
+                          <div class="col-md-6 mb-3">
+                            <label class="form-label">{{ _('rate_per_hour') }}</label>
+                            <input type="number" name="rate" class="form-control" step="0.01" min="0" value="{{ rate.rate }}" required>
+                          </div>
+                          <div class="col-md-6 mb-3">
+                            <label class="form-label">{{ _('currency') }}</label>
+                            <select name="currency" class="form-select">
+                              {% for curr in currencies %}
+                                <option value="{{ curr }}" {% if rate.currency == curr %}selected{% endif %}>{{ currency_names.get(curr, curr) }}</option>
+                              {% endfor %}
+                            </select>
+                          </div>
+                        </div>
+                        <div class="mb-3">
+                          <label class="form-label">{{ _('description') }}</label>
+                          <input type="text" name="description" class="form-control" value="{{ rate.description or '' }}">
+                        </div>
+                        <div class="form-check mb-2">
+                          <input type="checkbox" name="is_active" class="form-check-input" id="isActive{{ rate.id }}" {% if rate.is_active %}checked{% endif %}>
+                          <label class="form-check-label" for="isActive{{ rate.id }}">{{ _('rate_active') }}</label>
+                        </div>
+                        <div class="form-check">
+                          <input type="checkbox" name="is_default" class="form-check-input" id="isDefault{{ rate.id }}" {% if rate.is_default %}checked{% endif %}>
+                          <label class="form-check-label" for="isDefault{{ rate.id }}">{{ _('rate_default') }}</label>
+                        </div>
+                      </div>
+                      <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ _('cancel') }}</button>
+                        <button type="submit" class="btn btn-primary">{{ _('save') }}</button>
+                      </div>
+                    </form>
+                  </div>
+                </div>
+              </div>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% else %}
+        <div class="text-center py-5 text-muted">
+          <i class="fa-solid fa-coins fa-3x mb-3 opacity-50"></i>
+          <p class="mb-0">{{ _('no_rates') }}</p>
+          <p class="small">{{ _('create_first_rate') }}</p>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  
+  <div class="col-lg-4">
+    <!-- Info Card -->
+    <div class="card border-0 shadow-sm bg-light">
+      <div class="card-body">
+        <h6 class="fw-bold mb-3"><i class="fa-solid fa-info-circle me-2 text-info"></i>{{ _('about_rates') }}</h6>
+        <p class="small text-muted mb-2">
+          {{ _('rates_info') }}
+        </p>
+        <ul class="small text-muted ps-3 mb-0">
+          <li>{{ _('rates_tip_1') }}</li>
+          <li>{{ _('rates_tip_2') }}</li>
+          <li>{{ _('rates_tip_3') }}</li>
+          <li>{{ _('rates_tip_4') }}</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Nueva Tarifa -->
+<div class="modal fade" id="rateModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">{{ _('new_rate') }}</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <form action="{{ url_for('main.admin_rates') }}" method="POST">
+        <input type="hidden" name="action" value="create">
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label">{{ _('name') }}</label>
+            <input type="text" name="name" class="form-control" placeholder="{{ _('rate_placeholder') }}" required>
+          </div>
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label class="form-label">{{ _('rate_per_hour') }}</label>
+              <input type="number" name="rate" class="form-control" step="0.01" min="0" placeholder="0.00" required>
+            </div>
+            <div class="col-md-6 mb-3">
+              <label class="form-label">{{ _('currency') }}</label>
+              <select name="currency" class="form-select">
+                {% for curr in currencies %}
+                  <option value="{{ curr }}" {% if curr == 'USD' %}selected{% endif %}>{{ currency_names.get(curr, curr) }}</option>
+                {% endfor %}
+              </select>
+            </div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">{{ _('description') }} ({{ _('optional') }})</label>
+            <input type="text" name="description" class="form-control" placeholder="{{ _('brief_description') }}">
+          </div>
+          <div class="form-check">
+            <input type="checkbox" name="is_default" class="form-check-input" id="newIsDefault">
+            <label class="form-check-label" for="newIsDefault">{{ _('set_default') }}</label>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ _('cancel') }}</button>
+          <button type="submit" class="btn btn-primary">{{ _('create_role') }}</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

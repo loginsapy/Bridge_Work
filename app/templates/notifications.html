@@ -1,0 +1,202 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ _('notifications') }} — {{ sys_app_name }}{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <div>
+    <h2 class="fw-bold text-primary mb-1">
+      <i class="fa-solid fa-bell me-2"></i>{{ _('notifications_header') }}
+    </h2>
+    <p class="text-muted mb-0">{{ _('notifications_subtitle') }}</p>
+  </div>
+  {% if notifications %}
+  <button class="btn btn-outline-primary btn-sm" onclick="markAllRead()">
+    <i class="fa-solid fa-check-double me-1"></i>{{ _('mark_all_read') }}
+  </button>
+  {% endif %}
+</div>
+
+<div class="row">
+  <div class="col-lg-8">
+    {% if notifications %}
+      <div class="card">
+        <div class="list-group list-group-flush">
+          {% for notif in notifications %}
+            <div class="list-group-item notification-item {% if not notif.is_read %}bg-light border-start border-primary border-3{% endif %}" data-id="{{ notif.id }}">
+              <div class="d-flex w-100 justify-content-between align-items-start">
+                <div class="d-flex align-items-start">
+                  <div class="me-3">
+                    {% if notif.notification_type == 'task_assigned' %}
+                      <div class="rounded-circle bg-primary bg-opacity-10 text-primary p-2" style="width: 40px; height: 40px; display: flex; align-items: center; justify-content: center;">
+                        <i class="fa-solid fa-user-plus"></i>
+                      </div>
+                    {% elif notif.notification_type == 'task_completed' %}
+                      <div class="rounded-circle bg-success bg-opacity-10 text-success p-2" style="width: 40px; height: 40px; display: flex; align-items: center; justify-content: center;">
+                        <i class="fa-solid fa-circle-check"></i>
+                      </div>
+                    {% elif notif.notification_type == 'task_approval_requested' or notif.notification_type == 'TASK_APPROVAL' %}
+                      <div class="rounded-circle bg-warning bg-opacity-10 text-warning p-2" style="width: 40px; height: 40px; display: flex; align-items: center; justify-content: center;">
+                        <i class="fa-solid fa-clock"></i>
+                      </div>
+                    {% elif notif.notification_type == 'task_approved' %}
+                      <div class="rounded-circle bg-success bg-opacity-10 text-success p-2" style="width: 40px; height: 40px; display: flex; align-items: center; justify-content: center;">
+                        <i class="fa-solid fa-thumbs-up"></i>
+                      </div>
+                    {% elif notif.notification_type == 'task_rejected' or notif.notification_type == 'TASK_REJECTION' %}
+                      <div class="rounded-circle bg-danger bg-opacity-10 text-danger p-2" style="width: 40px; height: 40px; display: flex; align-items: center; justify-content: center;">
+                        <i class="fa-solid fa-thumbs-down"></i>
+                      </div>
+                    {% elif notif.notification_type == 'task_due_soon' %}
+                      <div class="rounded-circle bg-warning bg-opacity-10 text-warning p-2" style="width: 40px; height: 40px; display: flex; align-items: center; justify-content: center;">
+                        <i class="fa-solid fa-exclamation-triangle"></i>
+                      </div>
+                    {% elif notif.notification_type == 'task_status_changed' %}
+                      <div class="rounded-circle bg-info bg-opacity-10 text-info p-2" style="width: 40px; height: 40px; display: flex; align-items: center; justify-content: center;">
+                        <i class="fa-solid fa-arrows-rotate"></i>
+                      </div>
+                    {% else %}
+                      <div class="rounded-circle bg-secondary bg-opacity-10 text-secondary p-2" style="width: 40px; height: 40px; display: flex; align-items: center; justify-content: center;">
+                        <i class="fa-solid fa-bell"></i>
+                      </div>
+                    {% endif %}
+                  </div>
+                  <div>
+                    <h6 class="mb-1 {% if not notif.is_read %}fw-bold text-dark{% else %}text-secondary{% endif %}">{{ notif.title }}</h6>
+                    <p class="mb-1 text-muted small">{{ notif.message }}</p>
+                    <small class="text-secondary">
+                      <i class="fa-regular fa-clock me-1"></i>
+                      {{ notif.created_at|fecha_es('largo') if notif.created_at else _('unknown_date') }}
+                    </small>
+                  </div>
+                </div>
+                <div class="d-flex gap-2 align-items-center flex-shrink-0 ms-3">
+                  {% if not notif.is_read %}
+                    <span class="badge bg-primary rounded-pill">{{ _('new') }}</span>
+                  {% endif %}
+                  {% if notif.related_entity_type == 'task' and notif.related_entity_id %}
+                    {% if notif.notification_type in ['task_approval_requested', 'TASK_APPROVAL'] %}
+                      <a href="#" onclick="event.preventDefault(); markNotificationAndGo({{ notif.id }}, '{{ url_for('main.pending_approvals') }}');" class="btn btn-sm btn-outline-primary">
+                        <i class="fa-solid fa-check-circle me-1"></i>{{ _('review') }}
+                      </a>
+                    {% else %}
+                      <a href="#" onclick="event.preventDefault(); markNotificationAndGo({{ notif.id }}, '{{ url_for('main.task_detail', task_id=notif.related_entity_id) }}');" class="btn btn-sm btn-outline-secondary">
+                        <i class="fa-solid fa-eye me-1"></i>{{ _('view') }}
+                      </a>
+                    {% endif %}
+                  {% endif %}
+                </div>
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+      </div>
+    {% else %}
+      <div class="card">
+        <div class="card-body text-center py-5">
+          <i class="fa-regular fa-bell-slash text-muted mb-3" style="font-size: 3rem;"></i>
+          <h5 class="text-muted">{{ _('no_notifications') }}</h5>
+          <p class="text-secondary">{{ _('notifications_appear_here') }}</p>
+        </div>
+      </div>
+    {% endif %}
+  </div>
+  
+  <div class="col-lg-4">
+    <div class="card mb-3">
+      <div class="card-header bg-primary text-white">
+        <h6 class="mb-0"><i class="fa-solid fa-bell me-2"></i>Tipos de Notificaciones</h6>
+      </div>
+      <div class="card-body p-0">
+        <ul class="list-group list-group-flush small">
+          <li class="list-group-item d-flex align-items-center">
+            <i class="fa-solid fa-user-plus text-primary me-2"></i>
+            <span>Tarea asignada</span>
+          </li>
+          <li class="list-group-item d-flex align-items-center">
+            <i class="fa-solid fa-circle-check text-success me-2"></i>
+            <span>Tarea completada</span>
+          </li>
+          <li class="list-group-item d-flex align-items-center">
+            <i class="fa-solid fa-clock text-warning me-2"></i>
+            <span>Aprobación pendiente</span>
+          </li>
+          <li class="list-group-item d-flex align-items-center">
+            <i class="fa-solid fa-thumbs-up text-success me-2"></i>
+            <span>Tarea aprobada</span>
+          </li>
+          <li class="list-group-item d-flex align-items-center">
+            <i class="fa-solid fa-thumbs-down text-danger me-2"></i>
+            <span>Tarea rechazada</span>
+          </li>
+          <li class="list-group-item d-flex align-items-center">
+            <i class="fa-solid fa-exclamation-triangle text-warning me-2"></i>
+            <span>Fecha límite próxima</span>
+          </li>
+        </ul>
+      </div>
+    </div>
+    
+    <div class="card">
+      <div class="card-header">
+        <h6 class="mb-0"><i class="fa-solid fa-info-circle me-2"></i>Información</h6>
+      </div>
+      <div class="card-body">
+        <p class="small text-muted mb-2">
+          <strong>Notificaciones por email:</strong><br>
+          Las notificaciones importantes se envían también a tu correo electrónico.
+        </p>
+        <p class="small text-muted mb-0">
+          <strong>Aprobaciones de clientes:</strong><br>
+          Cuando una tarea requiere aprobación, recibirás una notificación para dar tu conformidad.
+        </p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function markAllRead() {
+  fetch('{{ url_for("main.mark_all_notifications_read") }}', { method: 'POST' })
+    .then(r => r.json())
+    .then(() => {
+      document.querySelectorAll('.notification-item').forEach(item => {
+        item.classList.remove('bg-light', 'border-start', 'border-primary', 'border-3');
+        const badge = item.querySelector('.badge.bg-primary');
+        if (badge) badge.remove();
+        const title = item.querySelector('h6');
+        if (title) {
+          title.classList.remove('fw-bold', 'text-dark');
+          title.classList.add('text-secondary');
+        }
+      });
+    })
+    .catch(err => console.error('Error:', err));
+}
+
+function markNotificationAndGo(notificationId, targetUrl) {
+  // Mark as read, then navigate. If marking fails, still navigate.
+  fetch(`/notification/${notificationId}/read`, { method: 'POST' })
+    .then(r => {
+      // best-effort: update UI immediately
+      const el = document.querySelector(`.notification-item[data-id='${notificationId}']`);
+      if (el) {
+        el.classList.remove('bg-light', 'border-start', 'border-primary', 'border-3');
+        const badge = el.querySelector('.badge.bg-primary');
+        if (badge) badge.remove();
+        const title = el.querySelector('h6');
+        if (title) {
+          title.classList.remove('fw-bold', 'text-dark');
+          title.classList.add('text-secondary');
+        }
+      }
+      // navigate
+      window.location.href = targetUrl;
+    })
+    .catch(err => {
+      console.error('Error marking notification read:', err);
+      window.location.href = targetUrl;
+    });
+}
+</script>
+{% endblock %}

@@ -1,0 +1,112 @@
+{% extends 'base.html' %}
+
+{% block title %}Aprobaciones Pendientes — {{ sys_app_name }}{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <div>
+    <h2 class="fw-bold text-primary mb-1">
+      <i class="fa-solid fa-clipboard-check me-2"></i>Aprobaciones Pendientes
+    </h2>
+    <p class="text-muted mb-0">Revisa y aprueba las tareas completadas de tus proyectos</p>
+  </div>
+  <a href="{{ url_for('main.notifications') }}" class="btn btn-outline-secondary">
+    <i class="fa-solid fa-bell me-2"></i>Ver Notificaciones
+  </a>
+</div>
+
+{% if tasks %}
+  <div class="row g-4">
+    {% for task in tasks %}
+      <div class="col-lg-6">
+        <div class="card h-100 shadow-sm">
+          <div class="card-header bg-white d-flex justify-content-between align-items-center">
+            <div>
+              <span class="badge bg-success me-2">Completada</span>
+              <span class="badge bg-warning text-dark">Pendiente de Aprobación</span>
+            </div>
+            <small class="text-muted">{{ task.project.name }}</small>
+          </div>
+          <div class="card-body">
+            <h5 class="card-title">{{ task.title }}</h5>
+            {% if task.description %}
+              <p class="card-text text-muted">{{ task.description[:200] }}{% if task.description|length > 200 %}...{% endif %}</p>
+            {% endif %}
+            
+            <div class="row text-center mb-3">
+              <div class="col-4">
+                <small class="text-muted d-block">Asignado a</small>
+                <strong>{{ task.assigned_to.first_name if task.assigned_to else 'N/A' }}</strong>
+              </div>
+              <div class="col-4">
+                <small class="text-muted d-block">Horas Est.</small>
+                <strong>{{ task.estimated_hours or 'N/A' }}</strong>
+              </div>
+              <div class="col-4">
+                <small class="text-muted d-block">Vencimiento</small>
+                <strong>{{ task.due_date.strftime('%d %b') if task.due_date else 'N/A' }}</strong>
+              </div>
+            </div>
+            
+            {% if task.attachments %}
+              <div class="mb-3">
+                <small class="text-muted d-block mb-1"><i class="fa-solid fa-paperclip me-1"></i>Archivos adjuntos:</small>
+                <div class="d-flex flex-wrap gap-1">
+                  {% for att in task.attachments %}
+                    <a href="{{ url_for('main.download_attachment', attachment_id=att.id) }}" 
+                       class="badge bg-light text-dark border" target="_blank">
+                      <i class="fa-solid fa-file me-1"></i>{{ att.filename }}
+                    </a>
+                  {% endfor %}
+                </div>
+              </div>
+            {% endif %}
+            
+            <!-- Formulario de aprobación/rechazo -->
+            <div class="border-top pt-3 mt-3">
+              <div class="mb-2">
+                <label class="form-label small fw-bold">Comentarios (opcional para aprobar, obligatorio para rechazar)</label>
+                <textarea class="form-control" id="notes-{{ task.id }}" rows="2" placeholder="Agrega tus comentarios..."></textarea>
+              </div>
+              <div class="d-flex gap-2">
+                <form action="{{ url_for('main.approve_task', task_id=task.id) }}" method="POST" class="d-inline flex-grow-1">
+                  <input type="hidden" name="notes" id="approve-notes-{{ task.id }}">
+                  <button type="submit" class="btn btn-success w-100" onclick="document.getElementById('approve-notes-{{ task.id }}').value = document.getElementById('notes-{{ task.id }}').value;">
+                    <i class="fa-solid fa-check me-2"></i>Aprobar
+                  </button>
+                </form>
+                <form action="{{ url_for('main.reject_task', task_id=task.id) }}" method="POST" class="d-inline flex-grow-1"
+                      onsubmit="var notes = document.getElementById('notes-{{ task.id }}').value; if(!notes.trim()) { alert('Debes indicar el motivo del rechazo'); return false; } document.getElementById('reject-notes-{{ task.id }}').value = notes;">
+                  <input type="hidden" name="notes" id="reject-notes-{{ task.id }}">
+                  <button type="submit" class="btn btn-outline-danger w-100">
+                    <i class="fa-solid fa-times me-2"></i>Rechazar
+                  </button>
+                </form>
+              </div>
+            </div>
+          </div>
+          <div class="card-footer bg-light">
+            <small class="text-muted">
+              <i class="fa-solid fa-folder me-1"></i>
+              <a href="{{ url_for('main.project_detail', project_id=task.project.id) }}" class="text-decoration-none">
+                {{ task.project.name }}
+              </a>
+            </small>
+          </div>
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+{% else %}
+  <div class="card">
+    <div class="card-body text-center py-5">
+      <i class="fa-solid fa-check-circle text-success mb-3" style="font-size: 3rem;"></i>
+      <h5 class="text-muted">No hay tareas pendientes de aprobación</h5>
+      <p class="text-secondary">Cuando se completen tareas en tus proyectos, aparecerán aquí para tu revisión.</p>
+      <a href="{{ url_for('main.projects') }}" class="btn btn-outline-primary mt-2">
+        <i class="fa-solid fa-folder me-2"></i>Ver Mis Proyectos
+      </a>
+    </div>
+  </div>
+{% endif %}
+{% endblock %}

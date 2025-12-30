@@ -1,0 +1,1194 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ project.name }} — Board{% endblock %}
+
+{% block head %}
+<style>
+/* Usamos las variables CSS definidas en base.html */
+.board-container {
+  background: white;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+}
+
+.board-header {
+  background: var(--app-primary);
+  color: white;
+  padding: 12px 16px;
+  font-weight: 600;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.board-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.board-table th {
+  background: var(--monday-light-grey);
+  padding: 10px 12px;
+  text-align: left;
+  font-weight: 500;
+  color: var(--monday-dark);
+  border-bottom: 1px solid var(--monday-border);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  cursor: pointer;
+  user-select: none;
+}
+
+.board-table th:hover {
+  background: #e8eaed;
+}
+
+.board-table td {
+  padding: 0;
+  border-bottom: 1px solid var(--monday-border);
+  vertical-align: middle;
+}
+
+.board-table tr:hover {
+  background: #f0f3ff;
+}
+
+.board-table tr.dragging {
+  opacity: 0.5;
+  background: #e0e5ff;
+}
+
+.cell {
+  padding: 8px 12px;
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.cell:hover {
+  background: rgba(0,115,234,0.05);
+}
+
+.cell-title {
+  font-weight: 500;
+  color: var(--monday-dark);
+}
+
+.cell-title input {
+  border: none;
+  background: transparent;
+  font-size: 14px;
+  font-weight: 500;
+  width: 100%;
+  padding: 4px;
+}
+
+.cell-title input:focus {
+  outline: 2px solid var(--monday-blue);
+  border-radius: 4px;
+  background: white;
+}
+
+/* Status pill */
+.status-cell {
+  padding: 4px 8px;
+}
+
+.status-pill {
+  display: inline-block;
+  padding: 6px 16px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 500;
+  color: white;
+  text-align: center;
+  min-width: 100px;
+  cursor: pointer;
+  transition: transform 0.1s;
+}
+
+.status-pill:hover {
+  transform: scale(1.02);
+}
+
+.status-TODO { background: #5559df !important; color: white !important; }
+.status-BACKLOG { background: var(--monday-grey) !important; color: white !important; }
+.status-IN_PROGRESS { background: var(--monday-blue) !important; color: white !important; }
+.status-IN_REVIEW { background: var(--monday-purple) !important; color: white !important; }
+.status-QA { background: #ff7b00 !important; color: white !important; }
+.status-COMPLETED { background: var(--monday-green) !important; color: white !important; }
+
+/* Priority colors */
+.priority-LOW { background: #579bfc; }
+.priority-MEDIUM { background: var(--monday-yellow); }
+.priority-HIGH { background: #ff642e; }
+.priority-CRITICAL { background: var(--monday-red); }
+
+/* Person/Assignee */
+.person-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.person-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--monday-purple);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.person-name {
+  font-size: 13px;
+  color: var(--monday-dark);
+}
+
+/* Date cell */
+.date-cell input {
+  border: none;
+  background: transparent;
+  font-size: 13px;
+  padding: 4px;
+  color: var(--monday-dark);
+}
+
+.date-cell input:focus {
+  outline: 2px solid var(--monday-blue);
+  border-radius: 4px;
+  background: white;
+}
+
+.date-overdue {
+  color: var(--monday-red) !important;
+  font-weight: 600;
+}
+
+/* Toolbar */
+.board-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.toolbar-left, .toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.search-box {
+  display: flex;
+  align-items: center;
+  background: var(--monday-light-grey);
+  border-radius: 6px;
+  padding: 6px 12px;
+  gap: 8px;
+}
+
+.search-box i {
+  color: var(--monday-grey);
+}
+
+.search-box input {
+  border: none;
+  background: transparent;
+  outline: none;
+  font-size: 14px;
+  width: 180px;
+}
+
+.filter-buttons {
+  display: flex;
+  gap: 4px;
+}
+
+.filter-btn {
+  padding: 6px 14px;
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--monday-dark);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.filter-btn:hover {
+  background: var(--monday-light-grey);
+}
+
+.filter-btn.active {
+  background: var(--monday-blue);
+  color: white;
+}
+
+.toolbar-btn {
+  padding: 8px 12px;
+  border: 1px solid var(--monday-border);
+  background: white;
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--monday-dark);
+  transition: all 0.15s;
+}
+
+.toolbar-btn:hover {
+  background: var(--monday-light-grey);
+  border-color: var(--monday-blue);
+  color: var(--monday-blue);
+}
+
+.person-filter select {
+  padding: 6px 12px;
+  border: 1px solid var(--monday-border);
+  border-radius: 6px;
+  background: white;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+/* Add row */
+.add-row {
+  padding: 12px 16px;
+  color: var(--monday-grey);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: background 0.15s;
+}
+
+.add-row:hover {
+  background: var(--monday-light-grey);
+  color: var(--monday-blue);
+}
+
+/* Status dropdown */
+.status-dropdown {
+  position: absolute;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+  z-index: 100;
+  overflow: hidden;
+  min-width: 150px;
+}
+
+.status-dropdown .status-option {
+  padding: 10px 16px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.status-dropdown .status-option:hover {
+  background: var(--monday-light-grey);
+}
+
+.status-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+}
+
+/* Person dropdown */
+.person-dropdown {
+  position: absolute;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+  z-index: 100;
+  overflow: hidden;
+  min-width: 200px;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.person-option {
+  padding: 10px 16px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.person-option:hover {
+  background: var(--monday-light-grey);
+}
+
+/* Row checkbox */
+.row-checkbox {
+  width: 36px;
+  text-align: center;
+}
+
+.row-checkbox input {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+
+/* Grip handle for drag */
+.row-grip {
+  width: 24px;
+  color: var(--monday-grey);
+  cursor: grab;
+  text-align: center;
+}
+
+.row-grip:active {
+  cursor: grabbing;
+}
+
+/* Group header */
+.group-header {
+  background: #e6f4ea;
+  padding: 10px 16px;
+  font-weight: 600;
+  color: #1e7145;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.group-header.collapsed + .group-tasks {
+  display: none;
+}
+
+/* Quick actions - visible version */
+.task-actions-visible {
+  display: flex;
+  gap: 4px;
+  opacity: 1;
+}
+
+.action-btn-visible {
+  background: none;
+  border: none;
+  padding: 6px 10px;
+  cursor: pointer;
+  color: var(--monday-grey);
+  border-radius: 4px;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+}
+
+.action-btn-visible:hover {
+  background: var(--monday-light-grey);
+  color: var(--monday-blue);
+}
+
+.action-btn-visible.delete:hover {
+  background: #fee2e2;
+  color: var(--monday-red);
+}
+
+/* Legacy task-actions (hidden on hover) */
+.task-actions {
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+tr:hover .task-actions {
+  opacity: 1;
+}
+
+.action-btn {
+  background: none;
+  border: none;
+  padding: 4px 8px;
+  cursor: pointer;
+  color: var(--monday-grey);
+  border-radius: 4px;
+}
+
+.action-btn:hover {
+  background: var(--monday-light-grey);
+  color: var(--monday-dark);
+}
+
+/* Hours cell */
+.hours-cell {
+  font-size: 13px;
+  color: var(--monday-dark);
+}
+
+.hours-cell input {
+  width: 60px;
+  border: none;
+  background: transparent;
+  text-align: right;
+  padding: 4px;
+}
+
+.hours-cell input:focus {
+  outline: 2px solid var(--monday-blue);
+  border-radius: 4px;
+  background: white;
+}
+
+/* Progress bar in header */
+.project-progress {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.progress-bar-mini {
+  width: 120px;
+  height: 6px;
+  background: rgba(255,255,255,0.3);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.progress-bar-mini .fill {
+  height: 100%;
+  background: white;
+  transition: width 0.3s;
+}
+
+.progress-text {
+  font-size: 13px;
+  opacity: 0.9;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="mb-3">
+  <nav aria-label="breadcrumb">
+    <ol class="breadcrumb mb-1">
+      <li class="breadcrumb-item"><a href="{{ url_for('main.projects') }}">Proyectos</a></li>
+      <li class="breadcrumb-item active">{{ project.name }}</li>
+    </ol>
+  </nav>
+</div>
+
+<!-- Toolbar Monday-style -->
+<div class="board-toolbar mb-3">
+  <div class="toolbar-left">
+    <div class="search-box">
+      <i class="fa-solid fa-search"></i>
+      <input type="text" id="searchTasks" placeholder="Buscar tareas..." onkeyup="filterTasks(this.value)">
+    </div>
+    <div class="filter-buttons">
+      <button class="filter-btn active" onclick="filterByStatus(null, this)">Todas</button>
+      <button class="filter-btn" onclick="filterByStatus('BACKLOG', this)">Backlog</button>
+      <button class="filter-btn" onclick="filterByStatus('IN_PROGRESS', this)">En Progreso</button>
+      <button class="filter-btn" onclick="filterByStatus('IN_REVIEW', this)">En Revisión</button>
+      <button class="filter-btn" onclick="filterByStatus('COMPLETED', this)">Completadas</button>
+    </div>
+  </div>
+  <div class="toolbar-right">
+    <button class="toolbar-btn" onclick="toggleView('board')" title="Vista Board">
+      <i class="fa-solid fa-table-cells"></i>
+    </button>
+    <button class="toolbar-btn" onclick="toggleView('kanban')" title="Vista Kanban">
+      <i class="fa-solid fa-columns"></i>
+    </button>
+    <div class="person-filter">
+      <select id="personFilter" onchange="filterByPerson(this.value)">
+        <option value="">Todos los usuarios</option>
+        {% for u in users %}
+        <option value="{{ u.id }}">{{ u.first_name or u.email }}</option>
+        {% endfor %}
+      </select>
+    </div>
+  </div>
+</div>
+
+<!-- Project Team Section -->
+<div class="row g-3 mb-3">
+  {% if project.clients %}
+  <div class="col-md-6">
+    <div class="card border-0 shadow-sm">
+      <div class="card-body py-2 px-3">
+        <div class="d-flex align-items-center">
+          <i class="fa-solid fa-user-tie text-info me-2"></i>
+          <span class="fw-semibold text-muted small me-3">Clientes:</span>
+          <div class="d-flex flex-wrap gap-2">
+            {% for client in project.clients %}
+              <span class="badge bg-info bg-opacity-10 text-info border border-info">
+                <i class="fa-solid fa-user me-1"></i>{{ client.first_name }} {{ client.last_name }}
+              </span>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  {% if project.members %}
+  <div class="col-md-6">
+    <div class="card border-0 shadow-sm">
+      <div class="card-body py-2 px-3">
+        <div class="d-flex align-items-center">
+          <i class="fa-solid fa-users text-primary me-2"></i>
+          <span class="fw-semibold text-muted small me-3">Equipo:</span>
+          <div class="d-flex flex-wrap gap-2">
+            {% for member in project.members %}
+              <span class="badge bg-primary" style="color: white !important;">
+                <i class="fa-solid fa-user me-1"></i>{{ member.first_name }} {{ member.last_name }}
+              </span>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+</div>
+
+<div class="board-container" id="boardView">
+  <style>
+    /* Child tasks visual treatment */
+    .child-row { background: #fbfcfe; }
+    .child-row .cell-title { opacity: 0.95; }
+    .connector { display:block; }
+    .toggle-btn { width:26px; height:26px; padding:0; margin-right:6px; color:#6c757d; }
+    .toggle-placeholder { display:inline-block; width:26px; }
+    .cell.cell-title input[type="text"] { width: calc(100% - 36px); border: none; background: transparent; }
+    .cell.cell-title input[type="text"]:focus { outline: none; box-shadow: none; }
+  </style>
+  <style>
+    /* Child tasks visual treatment */
+    .child-row { background: #fbfcfe; }
+    .child-row .cell-title { opacity: 0.95; }
+    .cell.cell-title input[type="text"] { width: 100%; border: none; background: transparent; }
+    .cell.cell-title input[type="text"]:focus { outline: none; box-shadow: none; }
+  </style>
+  <div class="board-header">
+    <div class="d-flex align-items-center gap-3">
+      <h5 class="mb-0">{{ project.name }}</h5>
+      <span class="badge bg-light text-dark">{{ tasks|length }} tareas</span>
+      {% if current_user.is_internal %}
+      <button class="btn btn-light btn-sm" onclick="openNewTaskModal()">
+        <i class="fa-solid fa-plus me-1"></i>Nueva Tarea
+      </button>
+      {% endif %}
+    </div>
+    <div class="project-progress">
+      <div class="progress-bar-mini">
+        <div class="fill" style="width: {{ metrics.completion_rate if metrics else 0 }}%"></div>
+      </div>
+      <span class="progress-text">{{ "%.0f"|format(metrics.completion_rate if metrics else 0) }}% completado</span>
+    </div>
+  </div>
+
+  <div class="table-responsive">
+    <table class="board-table" id="boardTable">
+      <thead>
+        <tr>
+          <th class="row-checkbox">{% if current_user.is_internal %}<input type="checkbox" id="selectAll">{% endif %}</th>
+          <th class="row-grip"></th>
+          <th style="min-width:280px">Tarea</th>
+          <th style="min-width:130px">Estado</th>
+          <th style="min-width:130px">Prioridad</th>
+          <th style="min-width:160px">Asignado</th>
+          <th style="min-width:120px">Vencimiento</th>
+          <th style="min-width:80px">Horas Est.</th>
+          <th style="width:120px; text-align:center">Acciones</th>
+        </tr>
+      </thead>
+      <tbody id="tasksBody">
+        {% macro render_node(node, level=0, parent_id=None) %}
+          {% set task = node.task %}
+          <tr class="{% if level>0 %}child-row{% endif %}" data-task-id="{{ task.id }}" data-status="{{ task.status }}" {% if parent_id %}data-parent-id="{{ parent_id }}"{% endif %} {% if current_user.is_internal %}draggable="true"{% endif %}>
+            <td class="row-checkbox">{% if current_user.is_internal %}<input type="checkbox" class="task-check">{% endif %}</td>
+            <td class="row-grip">{% if current_user.is_internal %}<i class="fa-solid fa-grip-vertical" draggable="true" title="Arrastrar"></i>{% endif %}</td>
+            <td>
+              <div class="cell cell-title" style="padding-left: {{ (level * 18) }}px; position:relative;">
+                {% if level > 0 %}
+                <span class="connector" style="left: {{ (level * 18) - 12 }}px; top: 18px; position:absolute; width:8px; height:1px; background:#d0d7de;"></span>
+                {% endif %}
+                {% if node.children %}
+                  <button class="btn btn-sm btn-link toggle-btn" onclick="event.stopPropagation(); toggleNode({{ task.id }});">
+                    <i class="fa-solid fa-chevron-down" id="toggle-icon-{{ task.id }}"></i>
+                  </button>
+                {% else %}
+                  <span class="toggle-placeholder" style="display:inline-block;width:26px;"></span>
+                {% endif %}
+                {% if current_user.is_internal %}
+                <input type="text" value="{{ task.title }}" onblur="updateTask({{ task.id }}, 'title', this.value)" onkeypress="if(event.key==='Enter')this.blur()">
+                {% else %}
+                <span class="fw-medium">{{ task.title }}</span>
+                {% endif %}
+              </div>
+            </td>
+            <td>
+              <div class="cell status-cell" {% if current_user.is_internal %}onclick="showStatusDropdown(event, {{ task.id }})"{% endif %}>
+                <span class="status-pill status-{{ task.status }}">
+                  {{ {'BACKLOG':'Backlog','IN_PROGRESS':'En Progreso','IN_REVIEW':'En Revisión','COMPLETED':'Completado'}.get(task.status, task.status) }}
+                </span>
+              </div>
+            </td>
+            <td>
+              <div class="cell status-cell" {% if current_user.is_internal %}onclick="showPriorityDropdown(event, {{ task.id }})"{% endif %}>
+                <span class="status-pill priority-{{ task.priority }}">
+                  {{ {'LOW':'Baja','MEDIUM':'Media','HIGH':'Alta','CRITICAL':'Crítica'}.get(task.priority, task.priority) }}
+                </span>
+              </div>
+            </td>
+            <td>
+              <div class="cell person-cell" data-assignee-id="{{ task.assigned_to_id or '' }}" {% if current_user.is_internal %}onclick="showPersonDropdown(event, {{ task.id }})"{% endif %}>
+                {% if task.assigned_to %}
+                <div class="person-avatar">{{ (task.assigned_to.first_name or task.assigned_to.email)[0]|upper }}</div>
+                <span class="person-name">{{ task.assigned_to.first_name or task.assigned_to.email }}</span>
+                {% else %}
+                <span class="text-muted">{% if current_user.is_internal %}+ Asignar{% else %}—{% endif %}</span>
+                {% endif %}
+              </div>
+            </td>
+            <td>
+              <div class="cell date-cell">
+                {% if current_user.is_internal %}
+                <input type="date" value="{{ task.due_date.strftime('%Y-%m-%d') if task.due_date else '' }}" 
+                       class="{% if task.due_date and task.due_date.date() < now.date() and task.status != 'COMPLETED' %}date-overdue{% endif %}"
+                       onchange="updateTask({{ task.id }}, 'due_date', this.value)">
+                {% else %}
+                <span class="{% if task.due_date and task.due_date.date() < now.date() and task.status != 'COMPLETED' %}text-danger{% endif %}">
+                  {{ task.due_date.strftime('%d/%m/%Y') if task.due_date else '—' }}
+                </span>
+                {% endif %}
+              </div>
+            </td>
+            <td>
+              <div class="cell hours-cell">
+                {% if current_user.is_internal %}
+                <input type="number" step="0.5" value="{{ task.estimated_hours or '' }}" placeholder="—"
+                       onblur="updateTask({{ task.id }}, 'estimated_hours', this.value)" onkeypress="if(event.key==='Enter')this.blur()">
+                {% else %}
+                <span>{{ task.estimated_hours or '—' }}</span>
+                {% endif %}
+              </div>
+            </td>
+            <td>
+              <div class="cell task-actions-visible">
+                <a href="{{ url_for('main.task_detail', task_id=task.id) }}" class="action-btn-visible" title="Ver detalles"><i class="fa-solid fa-eye"></i></a>
+                {% if current_user.is_internal %}
+                <a href="{{ url_for('main.edit_task', task_id=task.id) }}" class="action-btn-visible" title="Editar"><i class="fa-solid fa-pen"></i></a>
+                <button class="action-btn-visible delete" onclick="event.stopPropagation(); deleteTask({{ task.id }})" title="Eliminar"><i class="fa-solid fa-trash"></i></button>
+                {% endif %}
+              </div>
+            </td>
+          </tr>
+          {% for child in node.children %}
+            {{ render_node(child, level+1, task.id) }}
+          {% endfor %}
+        {% endmacro %}
+
+        {% if tasks_tree %}
+          {% for node in tasks_tree %}
+            {{ render_node(node) }}
+          {% endfor %}
+        {% else %}
+          <tr><td colspan="9" class="text-muted p-4 text-center">Sin tareas</td></tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+
+  {% if current_user.is_internal %}
+  <div class="add-row" onclick="addNewTask()">
+    <i class="fa-solid fa-plus"></i>
+    <span>Añadir tarea</span>
+  </div>
+  {% endif %}
+</div>
+
+<!-- Status Dropdown -->
+<div class="status-dropdown" id="statusDropdown" style="display:none;">
+  <div class="status-option" onclick="setStatus('BACKLOG')"><div class="status-dot" style="background:var(--monday-grey)"></div>Backlog</div>
+  <div class="status-option" onclick="setStatus('IN_PROGRESS')"><div class="status-dot" style="background:var(--monday-blue)"></div>En Progreso</div>
+  <div class="status-option" onclick="setStatus('IN_REVIEW')"><div class="status-dot" style="background:var(--monday-purple)"></div>En Revisión</div>
+  <div class="status-option" onclick="setStatus('COMPLETED')"><div class="status-dot" style="background:var(--monday-green)"></div>Completado</div>
+</div>
+
+<!-- Priority Dropdown -->
+<div class="status-dropdown" id="priorityDropdown" style="display:none;">
+  <div class="status-option" onclick="setPriority('LOW')"><div class="status-dot" style="background:#579bfc"></div>Baja</div>
+  <div class="status-option" onclick="setPriority('MEDIUM')"><div class="status-dot" style="background:var(--monday-yellow)"></div>Media</div>
+  <div class="status-option" onclick="setPriority('HIGH')"><div class="status-dot" style="background:#ff642e"></div>Alta</div>
+  <div class="status-option" onclick="setPriority('CRITICAL')"><div class="status-dot" style="background:var(--monday-red)"></div>Crítica</div>
+</div>
+
+<!-- Person Dropdown -->
+<div class="person-dropdown" id="personDropdown" style="display:none;">
+  <div class="person-option" onclick="setAssignee(null)">
+    <div class="person-avatar" style="background:#ccc">—</div>
+    <span>Sin asignar</span>
+  </div>
+  {% for u in users %}
+  <div class="person-option" onclick="setAssignee({{ u.id }})">
+    <div class="person-avatar">{{ (u.first_name or u.email)[0]|upper }}</div>
+    <span>{{ u.first_name or u.email }}</span>
+  </div>
+  {% endfor %}
+</div>
+
+<!-- Modal Nueva Tarea -->
+<div class="modal fade" id="newTaskModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header" style="background: var(--monday-blue); color: white;">
+        <h5 class="modal-title"><i class="fa-solid fa-plus me-2"></i>Nueva Tarea</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <form action="{{ url_for('main.create_task') }}" method="POST" enctype="multipart/form-data">
+        <input type="hidden" name="project_id" value="{{ project.id }}">
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label">Título *</label>
+            <input type="text" name="title" class="form-control" required placeholder="Nombre de la tarea">
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Descripción</label>
+            <textarea name="description" class="form-control" rows="3" placeholder="Descripción opcional"></textarea>
+          </div>
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Estado</label>
+              <select name="status" class="form-select">
+                <option value="BACKLOG">Backlog</option>
+                <option value="IN_PROGRESS">En Progreso</option>
+                <option value="IN_REVIEW">En Revisión</option>
+                <option value="COMPLETED">Completado</option>
+              </select>
+            </div>
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Prioridad</label>
+              <select name="priority" class="form-select">
+                <option value="MEDIUM">Media</option>
+                <option value="LOW">Baja</option>
+                <option value="HIGH">Alta</option>
+                <option value="CRITICAL">Crítica</option>
+              </select>
+            </div>
+          </div>
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Asignar a (Internos)</label>
+              <select name="assigned_to_id" class="form-select">
+                <option value="">Sin asignar</option>
+                {% for u in users %}
+                <option value="{{ u.id }}">{{ u.first_name or u.email }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Asignar a (Cliente)</label>
+              <select name="assigned_client_id" class="form-select">
+                <option value="">Sin asignar</option>
+                {% for c in project.clients %}
+                <option value="{{ c.id }}">{{ c.first_name or c.email }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Fecha límite</label>
+              <input type="date" name="due_date" class="form-control">
+            </div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Horas estimadas</label>
+            <input type="number" name="estimated_hours" class="form-control" step="0.5" min="0" placeholder="0">
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label">Predecesoras</label>
+            <select name="predecessor_ids" class="form-select" multiple size="6">
+              {% for t in candidate_predecessors %}
+                <option value="{{ t.id }}">{{ t.title }} (ID {{ t.id }})</option>
+              {% endfor %}
+            </select>
+            <small class="text-muted d-block">Selecciona tareas que deben completarse antes que la nueva tarea (opcional).</small>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label">Archivos adjuntos</label>
+            <input type="file" name="attachments" class="form-control" multiple>
+            <small class="text-muted">Puedes seleccionar múltiples archivos. Máx 16MB cada uno.</small>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn btn-primary"><i class="fa-solid fa-check me-1"></i>Crear Tarea</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+const projectId = {{ project.id }};
+const project_id = {{ project_id }};
+// Abrir modal de nueva tarea
+function openNewTaskModal() {
+  const modal = new bootstrap.Modal(document.getElementById('newTaskModal'));
+  modal.show();
+}
+
+// Close dropdowns on click outside
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('.status-dropdown') && !e.target.closest('.person-dropdown') && !e.target.closest('.status-cell') && !e.target.closest('.person-cell')) {
+    document.getElementById('statusDropdown').style.display = 'none';
+    document.getElementById('priorityDropdown').style.display = 'none';
+    document.getElementById('personDropdown').style.display = 'none';
+  }
+});
+
+function showStatusDropdown(e, taskId) {
+  e.stopPropagation();
+  currentTaskId = taskId;
+  const dd = document.getElementById('statusDropdown');
+  dd.style.display = 'block';
+  dd.style.left = e.pageX + 'px';
+  dd.style.top = e.pageY + 'px';
+  document.getElementById('priorityDropdown').style.display = 'none';
+  document.getElementById('personDropdown').style.display = 'none';
+}
+
+function showPriorityDropdown(e, taskId) {
+  e.stopPropagation();
+  currentTaskId = taskId;
+  const dd = document.getElementById('priorityDropdown');
+  dd.style.display = 'block';
+  dd.style.left = e.pageX + 'px';
+  dd.style.top = e.pageY + 'px';
+  document.getElementById('statusDropdown').style.display = 'none';
+  document.getElementById('personDropdown').style.display = 'none';
+}
+
+function showPersonDropdown(e, taskId) {
+  e.stopPropagation();
+  currentTaskId = taskId;
+  const dd = document.getElementById('personDropdown');
+  dd.style.display = 'block';
+  dd.style.left = e.pageX + 'px';
+  dd.style.top = e.pageY + 'px';
+  document.getElementById('statusDropdown').style.display = 'none';
+  document.getElementById('priorityDropdown').style.display = 'none';
+}
+
+function setStatus(status) {
+  updateTask(currentTaskId, 'status', status);
+  document.getElementById('statusDropdown').style.display = 'none';
+}
+
+function setPriority(priority) {
+  updateTask(currentTaskId, 'priority', priority);
+  document.getElementById('priorityDropdown').style.display = 'none';
+}
+
+function setAssignee(userId) {
+  updateTask(currentTaskId, 'assigned_to_id', userId);
+  document.getElementById('personDropdown').style.display = 'none';
+}
+
+function updateTask(taskId, field, value) {
+  fetch(`/api/tasks/${taskId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ [field]: value })
+  })
+  .then(async r => {
+    if (!r.ok) {
+      const json = await r.json().catch(()=>null);
+      if (json && json.incomplete_predecessors) {
+        // Show modal listing incomplete predecessors
+        showPredecessorModal(taskId, json.incomplete_predecessors);
+        return Promise.reject('predecessors_incomplete');
+      }
+      if (json && json.incomplete_descendants) {
+        // Show modal listing incomplete descendant tasks
+        showDescendantModal(taskId, json.incomplete_descendants);
+        return Promise.reject('descendants_incomplete');
+      }
+      throw new Error('Update failed');
+    }
+    return r.json();
+  })
+  .then(data => {
+    // Refresh row or update UI
+    location.reload();
+  })
+  .catch(err => {
+    if (err === 'predecessors_incomplete' || err === 'descendants_incomplete') return;
+    console.error(err);
+    alert('Error al actualizar');
+  });
+}
+
+function showDescendantModal(taskId, preds) {
+  const modal = document.getElementById('predecessorModal');
+  const titleEl = document.getElementById('predecessorModalLabel');
+  const list = document.getElementById('predecessorList');
+  if (titleEl) titleEl.textContent = 'Subtareas incompletas';
+  list.innerHTML = '';
+  preds.forEach(p => {
+    const li = document.createElement('li');
+    li.className = 'list-group-item d-flex justify-content-between align-items-center';
+    li.innerHTML = `<span><a href='/task/${p.id}'>${p.title}</a></span><a class='btn btn-sm btn-outline-primary' href='/task/${p.id}'>Ver</a>`;
+    list.appendChild(li);
+  });
+  const bsModal = new bootstrap.Modal(modal);
+  bsModal.show();
+}
+
+// Modal helpers
+function showPredecessorModal(taskId, preds) {
+  const modal = document.getElementById('predecessorModal');
+  const list = document.getElementById('predecessorList');
+  list.innerHTML = '';
+  preds.forEach(p => {
+    const li = document.createElement('li');
+    li.className = 'list-group-item d-flex justify-content-between align-items-center';
+    li.innerHTML = `<span><a href='/task/${p.id}'>${p.title}</a></span><a class='btn btn-sm btn-outline-primary' href='/task/${p.id}'>Ver</a>`;
+    list.appendChild(li);
+  });
+  // show modal (Bootstrap)
+  const bsModal = new bootstrap.Modal(modal);
+  bsModal.show();
+}
+
+// Expand/collapse functions for task tree
+window.hideDescendants = function(taskId) {
+  const children = Array.from(document.querySelectorAll(`[data-parent-id='${taskId}']`));
+  children.forEach(c => {
+    const cid = c.getAttribute('data-task-id');
+    c.style.display = 'none';
+    const icon = document.getElementById('toggle-icon-'+cid);
+    if (icon) { icon.classList.remove('fa-chevron-down'); icon.classList.add('fa-chevron-right'); }
+    window.hideDescendants(cid);
+  });
+};
+
+window.toggleNode = function(taskId) {
+  console.debug('toggleNode called for', taskId);
+  const icon = document.getElementById('toggle-icon-'+taskId);
+  const children = Array.from(document.querySelectorAll(`[data-parent-id='${taskId}']`));
+  const isCollapsed = icon && icon.classList.contains('fa-chevron-right');
+  if (!isCollapsed) {
+    // collapse
+    if (icon) { icon.classList.remove('fa-chevron-down'); icon.classList.add('fa-chevron-right'); }
+    children.forEach(c => {
+      const cid = c.getAttribute('data-task-id');
+      c.style.display = 'none';
+      hideDescendants(cid);
+    });
+  } else {
+    // expand
+    if (icon) { icon.classList.remove('fa-chevron-right'); icon.classList.add('fa-chevron-down'); }
+    children.forEach(c => { c.style.display = ''; });
+  }
+};
+
+function addNewTask() {
+  openNewTaskModal();
+}
+
+function deleteTask(taskId) {
+  if (!confirm('¿Eliminar esta tarea?')) return;
+  
+  fetch(`/task/${taskId}/delete`, {
+    method: 'POST'
+  })
+  .then(r => {
+    if (r.ok || r.redirected) location.reload();
+    else throw new Error('Delete failed');
+  })
+  .catch(err => {
+    console.error(err);
+    alert('Error al eliminar');
+  });
+}
+
+// Drag and drop
+const tbody = document.getElementById('tasksBody');
+
+// Predecessor modal markup (inserted at end of file via template block)
+
+let draggedRow = null;
+let draggedGroup = [];
+
+function getDescendants(row) {
+  const tbodyEl = document.getElementById('tasksBody');
+  if (!tbodyEl) return [];
+  const id = row.getAttribute('data-task-id');
+  const children = Array.from(tbodyEl.querySelectorAll(`tr[data-parent-id='${id}']`));
+  let all = [];
+  children.forEach(c => {
+    all.push(c);
+    all = all.concat(getDescendants(c));
+  });
+  return all;
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  const tbodyEl = document.getElementById('tasksBody');
+  if (!tbodyEl) {
+    console.debug('No tasksBody present for drag/drop');
+    return;
+  }
+
+  function attachDragHandlers() {
+    const rows = Array.from(tbodyEl.querySelectorAll('tr'));
+    rows.forEach(row => row.style.cursor = row.getAttribute('draggable') ? 'grab' : 'default');
+
+    // Attach drag handlers to rows (for browsers that allow dragging of TR)
+    rows.forEach(row => {
+      row.addEventListener('dragend', () => {
+        draggedGroup.forEach(r => r.classList.remove('dragging'));
+        console.debug('dragend, persisting order');
+        persistTaskOrder();
+        draggedRow = null;
+        draggedGroup = [];
+      });
+
+      row.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        if (!draggedRow || draggedRow === row) return;
+        if (draggedGroup.includes(row)) return;
+
+        const rect = row.getBoundingClientRect();
+        const midY = rect.top + rect.height / 2;
+        const insertBefore = e.clientY < midY;
+
+        if (insertBefore) {
+          const ref = row;
+          draggedGroup.forEach(r => tbodyEl.insertBefore(r, ref));
+        } else {
+          const ref = row.nextSibling;
+          draggedGroup.forEach(r => tbodyEl.insertBefore(r, ref));
+        }
+      });
+    });
+
+    // Prefer drag handle (grip) to initiate dragging — more reliable across browsers
+    const grips = Array.from(tbodyEl.querySelectorAll('.row-grip .fa-grip-vertical[draggable]'));
+    grips.forEach(handle => {
+      handle.addEventListener('dragstart', (e) => {
+        const row = handle.closest('tr');
+        if (!row) return;
+        draggedRow = row;
+        draggedGroup = [row].concat(getDescendants(row));
+        draggedGroup.forEach(r => r.classList.add('dragging'));
+        console.debug('dragstart via handle', draggedRow.getAttribute('data-task-id'));
+      });
+
+      handle.addEventListener('dragend', (e) => {
+        // dragend from handle should be handled by row dragend as well, but ensure cleanup
+        draggedGroup.forEach(r => r.classList.remove('dragging'));
+        persistTaskOrder();
+        draggedRow = null;
+        draggedGroup = [];
+      });
+    });
+  }
+
+  attachDragHandlers();
+
+  // Select all checkbox
+  const selectAllEl = document.getElementById('selectAll');
+  if (selectAllEl) selectAllEl.addEventListener('change', function() {
+    document.querySelectorAll('.task-check').forEach(cb => cb.checked = this.checked);
+  });
+});
+
+function persistTaskOrder() {
+  const tbodyEl = document.getElementById('tasksBody');
+  if (!tbodyEl) return;
+  const rows = Array.from(tbodyEl.querySelectorAll('tr'));
+  const ids = rows.map(r => parseInt(r.getAttribute('data-task-id'))).filter(Boolean);
+  if (!ids.length) return;
+
+  console.debug('Persisting order', ids);
+
+  fetch(`/project/${projectId}/tasks/reorder`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ordered_task_ids: ids })
+  })
+  .then(r => {
+    if (!r.ok) throw new Error('Failed to persist order');
+    return r.json();
+  })
+  .then(data => console.debug('Order saved'))
+  .catch(err => { console.error(err); alert('Error al guardar el orden de tareas'); });
+}
+
+// Filter functions
+window.filterTasks = function(searchText) {
+  const rows = document.querySelectorAll('#tasksBody tr');
+  const term = searchText.toLowerCase();
+  rows.forEach(row => {
+    const title = row.querySelector('.cell-title input')?.value.toLowerCase() || '';
+    row.style.display = title.includes(term) ? '' : 'none';
+  });
+};
+
+window.filterByStatus = function(status, btn) {
+  // Update active button
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  
+  const rows = document.querySelectorAll('#tasksBody tr');
+  rows.forEach(row => {
+    if (!status) {
+      row.style.display = '';
+    } else {
+      const rowStatus = row.dataset.status;
+      row.style.display = rowStatus === status ? '' : 'none';
+    }
+  });
+};
+
+window.filterByPerson = function(userId) {
+  const rows = document.querySelectorAll('#tasksBody tr');
+  rows.forEach(row => {
+    if (!userId) {
+      row.style.display = '';
+    } else {
+      const personCell = row.querySelector('.person-cell');
+      const assigneeId = personCell?.dataset?.assigneeId;
+      row.style.display = assigneeId === userId ? '' : 'none';
+    }
+  });
+};
+
+window.toggleView = function(view) {
+  if (view === 'kanban') {
+    window.location.href = `/project/${projectId}/kanban`;
+  }
+};
+</script>
+{% endblock %}

@@ -1,0 +1,301 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ _('administration') }} — {{ sys_app_name }}{% endblock %}
+
+{% block content %}
+<div class="mb-4">
+  <h2 class="fw-bold text-primary">
+    <i class="fa-solid fa-cogs me-2"></i>{{ _('admin_panel') }}
+  </h2>
+  <p class="text-muted">{{ _('admin_subtitle') }}</p>
+</div>
+
+<!-- Stats Cards Row -->
+<div class="row g-4 mb-4">
+  <div class="col-md-3">
+    <div class="card border-0 shadow-sm h-100">
+      <div class="card-body">
+        <div class="d-flex align-items-center">
+          <div class="rounded-circle bg-primary bg-opacity-10 p-3 me-3">
+            <i class="fa-solid fa-users fa-lg text-primary"></i>
+          </div>
+          <div>
+            <h3 class="mb-0 fw-bold">{{ stats.total_users }}</h3>
+            <small class="text-muted">{{ _('total_users') }}</small>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card border-0 shadow-sm h-100">
+      <div class="card-body">
+        <div class="d-flex align-items-center">
+          <div class="rounded-circle bg-success bg-opacity-10 p-3 me-3">
+            <i class="fa-solid fa-user-check fa-lg text-success"></i>
+          </div>
+          <div>
+            <h3 class="mb-0 fw-bold">{{ stats.active_users }}</h3>
+            <small class="text-muted">{{ _('active_users') }}</small>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card border-0 shadow-sm h-100">
+      <div class="card-body">
+        <div class="d-flex align-items-center">
+          <div class="rounded-circle bg-info bg-opacity-10 p-3 me-3">
+            <i class="fa-solid fa-folder fa-lg text-info"></i>
+          </div>
+          <div>
+            <h3 class="mb-0 fw-bold">{{ stats.total_projects }}</h3>
+            <small class="text-muted">{{ _('projects') }}</small>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card border-0 shadow-sm h-100">
+      <div class="card-body">
+        <div class="d-flex align-items-center">
+          <div class="rounded-circle bg-warning bg-opacity-10 p-3 me-3">
+            <i class="fa-solid fa-clock fa-lg text-warning"></i>
+          </div>
+          <div>
+            <h3 class="mb-0 fw-bold">{{ "%.0f"|format(stats.total_hours|float) }}h</h3>
+            <small class="text-muted">{{ _('logged_hours') }}</small>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Admin Modules Grid -->
+<div class="row g-4">
+  <!-- Usuarios -->
+  <div class="col-md-6 col-lg-4">
+    <div class="card border-0 shadow-sm h-100 admin-card">
+      <div class="card-body">
+        <div class="d-flex align-items-center mb-3">
+          <div class="rounded-circle bg-primary bg-gradient p-3 me-3">
+            <i class="fa-solid fa-users fa-lg text-white"></i>
+          </div>
+          <div>
+            <h5 class="mb-0 fw-bold">{{ _('users') }}</h5>
+            <small class="text-muted">{{ _('manage_accounts') }}</small>
+          </div>
+        </div>
+        <p class="text-muted small mb-3">
+          {{ _('users_description') }}
+        </p>
+        <div class="d-flex gap-2">
+          <a href="{{ url_for('main.admin_users') }}" class="btn btn-primary btn-sm">
+            <i class="fa-solid fa-list me-1"></i> {{ _('view_users') }}
+          </a>
+          <a href="{{ url_for('main.admin_create_user') }}" class="btn btn-outline-primary btn-sm">
+            <i class="fa-solid fa-plus me-1"></i> {{ _('new') }}
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  <!-- Roles -->
+  <div class="col-md-6 col-lg-4">
+    <div class="card border-0 shadow-sm h-100 admin-card">
+      <div class="card-body">
+        <div class="d-flex align-items-center mb-3">
+          <div class="rounded-circle bg-success bg-gradient p-3 me-3">
+            <i class="fa-solid fa-shield fa-lg text-white"></i>
+          </div>
+          <div>
+            <h5 class="mb-0 fw-bold">{{ _('roles') }}</h5>
+            <small class="text-muted">{{ _('access_control') }}</small>
+          </div>
+        </div>
+        <p class="text-muted small mb-3">
+          {{ _('roles_description') }}
+        </p>
+        <a href="{{ url_for('main.admin_roles') }}" class="btn btn-success btn-sm">
+          <i class="fa-solid fa-cog me-1"></i> {{ _('manage_roles') }}
+        </a>
+      </div>
+    </div>
+  </div>
+  
+  <!-- Tarifas -->
+  <div class="col-md-6 col-lg-4">
+    <div class="card border-0 shadow-sm h-100 admin-card">
+      <div class="card-body">
+        <div class="d-flex align-items-center mb-3">
+          <div class="rounded-circle bg-warning bg-gradient p-3 me-3">
+            <i class="fa-solid fa-dollar-sign fa-lg text-white"></i>
+          </div>
+          <div>
+            <h5 class="mb-0 fw-bold">{{ _('rates') }}</h5>
+            <small class="text-muted">{{ _('hourly_costs') }}</small>
+          </div>
+        </div>
+        <p class="text-muted small mb-3">
+          {{ _('rates_description') }}
+        </p>
+        <a href="{{ url_for('main.admin_rates') }}" class="btn btn-warning btn-sm">
+          <i class="fa-solid fa-coins me-1"></i> {{ _('manage_rates') }}
+        </a>
+      </div>
+    </div>
+  </div>
+  
+  <!-- Branding -->
+  <div class="col-md-6 col-lg-4">
+    <div class="card border-0 shadow-sm h-100 admin-card">
+      <div class="card-body">
+        <div class="d-flex align-items-center mb-3">
+          <div class="rounded-circle bg-info bg-gradient p-3 me-3">
+            <i class="fa-solid fa-palette fa-lg text-white"></i>
+          </div>
+          <div>
+            <h5 class="mb-0 fw-bold">{{ _('appearance') }}</h5>
+            <small class="text-muted">{{ _('logo_colors_styles') }}</small>
+          </div>
+        </div>
+        <p class="text-muted small mb-3">
+          {{ _('appearance_description') }}
+        </p>
+        <a href="{{ url_for('main.admin_branding') }}" class="btn btn-info btn-sm">
+          <i class="fa-solid fa-brush me-1"></i> {{ _('customize') }}
+        </a>
+      </div>
+    </div>
+  </div>
+  
+  <!-- Configuración General -->
+  <div class="col-md-6 col-lg-4">
+    <div class="card border-0 shadow-sm h-100 admin-card">
+      <div class="card-body">
+        <div class="d-flex align-items-center mb-3">
+          <div class="rounded-circle bg-secondary bg-gradient p-3 me-3">
+            <i class="fa-solid fa-sliders fa-lg text-white"></i>
+          </div>
+          <div>
+            <h5 class="mb-0 fw-bold">{{ _('general') }}</h5>
+            <small class="text-muted">{{ _('system_config') }}</small>
+          </div>
+        </div>
+        <p class="text-muted small mb-3">
+          {{ _('general_description') }}
+        </p>
+        <a href="{{ url_for('main.admin_general') }}" class="btn btn-secondary btn-sm">
+          <i class="fa-solid fa-gear me-1"></i> {{ _('configure') }}
+        </a>
+      </div>
+    </div>
+  </div>
+  
+  <!-- Footer y Textos -->
+  <div class="col-md-6 col-lg-4">
+    <div class="card border-0 shadow-sm h-100 admin-card">
+      <div class="card-body">
+        <div class="d-flex align-items-center mb-3">
+          <div class="rounded-circle bg-dark bg-gradient p-3 me-3">
+            <i class="fa-solid fa-pen-fancy fa-lg text-white"></i>
+          </div>
+          <div>
+            <h5 class="mb-0 fw-bold">{{ _('texts') }}</h5>
+            <small class="text-muted">{{ _('footer_and_content') }}</small>
+          </div>
+        </div>
+        <p class="text-muted small mb-3">
+          {{ _('texts_description') }}
+        </p>
+        <a href="{{ url_for('main.admin_content') }}" class="btn btn-dark btn-sm">
+          <i class="fa-solid fa-edit me-1"></i> {{ _('edit_texts') }}
+        </a>
+      </div>
+    </div>
+  </div>
+  
+  <!-- Notificaciones -->
+  <div class="col-md-6 col-lg-4">
+    <div class="card border-0 shadow-sm h-100 admin-card">
+      <div class="card-body">
+        <div class="d-flex align-items-center mb-3">
+          <div class="rounded-circle bg-danger bg-gradient p-3 me-3">
+            <i class="fa-solid fa-bell fa-lg text-white"></i>
+          </div>
+          <div>
+            <h5 class="mb-0 fw-bold">{{ _('notifications') }}</h5>
+            <small class="text-muted">{{ _('email_and_alerts') }}</small>
+          </div>
+        </div>
+        <p class="text-muted small mb-3">
+          {{ _('notifications_description') }}
+        </p>
+        <a href="{{ url_for('main.admin_notifications') }}" class="btn btn-danger btn-sm">
+          <i class="fa-solid fa-envelope me-1"></i> {{ _('configure') }}
+        </a>
+      </div>
+    </div>
+  </div>
+  
+  <!-- Auditoría -->
+  <div class="col-md-6 col-lg-4">
+    <div class="card border-0 shadow-sm h-100 admin-card">
+      <div class="card-body">
+        <div class="d-flex align-items-center mb-3">
+          <div class="rounded-circle bg-purple p-3 me-3" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+            <i class="fa-solid fa-clipboard-list fa-lg text-white"></i>
+          </div>
+          <div>
+            <h5 class="mb-0 fw-bold">{{ _('audit') }}</h5>
+            <small class="text-muted">{{ _('activity_log') }}</small>
+          </div>
+        </div>
+        <p class="text-muted small mb-3">
+          {{ _('audit_description') }}
+        </p>
+        <a href="{{ url_for('main.admin_audit') }}" class="btn btn-sm" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;">
+          <i class="fa-solid fa-history me-1"></i> {{ _('view_logs') }}
+        </a>
+      </div>
+    </div>
+  </div>
+  
+  <!-- Backup / Mantenimiento -->
+  <div class="col-md-6 col-lg-4">
+    <div class="card border-0 shadow-sm h-100 admin-card">
+      <div class="card-body">
+        <div class="d-flex align-items-center mb-3">
+          <div class="rounded-circle p-3 me-3" style="background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);">
+            <i class="fa-solid fa-database fa-lg text-white"></i>
+          </div>
+          <div>
+            <h5 class="mb-0 fw-bold">{{ _('maintenance') }}</h5>
+            <small class="text-muted">{{ _('backup_and_data') }}</small>
+          </div>
+        </div>
+        <p class="text-muted small mb-3">
+          {{ _('maintenance_description') }}
+        </p>
+        <a href="{{ url_for('main.admin_maintenance') }}" class="btn btn-sm" style="background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); color: white;">
+          <i class="fa-solid fa-tools me-1"></i> {{ _('maintenance') }}
+        </a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+.admin-card {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.admin-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 25px rgba(0,0,0,0.15) !important;
+}
+</style>
+{% endblock %}

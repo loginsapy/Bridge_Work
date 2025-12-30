@@ -1,0 +1,1249 @@
+/* ============================================
+   BridgeWork - Monday.com Inspired Design System
+   Modern, Clean, Colorful Dashboard Styling
+   ============================================ */
+
+:root {
+  /* Monday.com Color Palette */
+  --monday-blue: #0073ea;
+  --monday-blue-hover: #0060c2;
+  --monday-green: #00c875;
+  --monday-green-light: #9cd326;
+  --monday-yellow: #fdab3d;
+  --monday-orange: #ff642e;
+  --monday-red: #e2445c;
+  --monday-purple: #a25ddc;
+  --monday-pink: #ff007f;
+  --monday-aqua: #00d2d2;
+  --monday-royal: #5559df;
+  
+  /* Neutral Colors */
+  --monday-dark: #323338;
+  --monday-dark-hover: #1f1f1f;
+  --monday-grey: #676879;
+  --monday-grey-light: #c5c7d0;
+  --monday-grey-lighter: #e6e9ef;
+  --monday-surface: #f5f6f8;
+  --monday-white: #ffffff;
+  
+  /* Status Colors */
+  --status-done: #00c875;
+  --status-working: #fdab3d;
+  --status-stuck: #e2445c;
+  --status-pending: #c4c4c4;
+  --status-review: #a25ddc;
+  
+  /* Spacing */
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 16px;
+  --space-lg: 24px;
+  --space-xl: 32px;
+  --space-2xl: 48px;
+  
+  /* Border Radius */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-full: 50%;
+  
+  /* Shadows */
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.08);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.1);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.12);
+  --shadow-hover: 0 6px 20px rgba(0, 115, 234, 0.15);
+  
+  /* Typography */
+  --font-family: 'Figtree', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-size-xs: 11px;
+  --font-size-sm: 13px;
+  --font-size-md: 14px;
+  --font-size-lg: 16px;
+  --font-size-xl: 20px;
+  --font-size-2xl: 24px;
+  --font-size-3xl: 32px;
+  
+  /* Transitions */
+  --transition-fast: 100ms ease;
+  --transition-normal: 200ms ease;
+  --transition-slow: 300ms ease;
+}
+
+/* ============================================
+   Base Styles
+   ============================================ */
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body.app-body {
+  font-family: var(--font-family);
+  font-size: var(--font-size-md);
+  color: var(--monday-dark);
+  background: var(--monday-surface);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ============================================
+   Monday-Style Sidebar
+   ============================================ */
+
+#sidebar-wrapper {
+  width: 250px;
+  min-height: 100vh;
+  background: var(--monday-dark);
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  transition: width var(--transition-normal);
+}
+
+#sidebar-wrapper.collapsed {
+  width: 60px;
+}
+
+/* Sidebar Logo Section */
+#sidebar-wrapper .sidebar-brand {
+  padding: var(--space-lg) var(--space-md);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+#sidebar-wrapper .sidebar-brand h5 {
+  color: var(--monday-white);
+  font-weight: 600;
+  font-size: var(--font-size-lg);
+  margin: 0;
+}
+
+#sidebar-wrapper .sidebar-brand small {
+  color: rgba(255, 255, 255, 0.5);
+  font-size: var(--font-size-xs);
+}
+
+/* Sidebar Navigation */
+#sidebar-wrapper .list-group {
+  padding: var(--space-md) 0;
+  flex: 1;
+}
+
+#sidebar-wrapper .list-group-item {
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.8);
+  padding: var(--space-sm) var(--space-md);
+  margin: 2px var(--space-sm);
+  font-size: var(--font-size-md);
+  font-weight: 400;
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  transition: all var(--transition-fast);
+  cursor: pointer;
+  text-decoration: none;
+}
+
+#sidebar-wrapper .list-group-item i {
+  width: 20px;
+  text-align: center;
+  font-size: var(--font-size-md);
+  opacity: 0.8;
+}
+
+#sidebar-wrapper .list-group-item:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--monday-white);
+}
+
+#sidebar-wrapper .list-group-item.active {
+  background: var(--monday-blue);
+  color: var(--monday-white);
+}
+
+#sidebar-wrapper .list-group-item.active i {
+  opacity: 1;
+}
+
+#sidebar-wrapper .list-group-item .badge {
+  margin-left: auto;
+  font-size: var(--font-size-xs);
+  padding: 2px 8px;
+}
+
+/* Sidebar Divider */
+.sidebar-divider {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.1);
+  margin: var(--space-sm) var(--space-md);
+}
+
+/* ============================================
+   Main Content Area
+   ============================================ */
+
+#page-content-wrapper {
+  margin-left: 250px;
+  width: calc(100% - 250px);
+  min-height: 100vh;
+  padding: var(--space-lg);
+  background: var(--monday-surface);
+  transition: margin-left var(--transition-normal), width var(--transition-normal);
+}
+
+/* ============================================
+   Monday-Style Cards
+   ============================================ */
+
+.card {
+  background: var(--monday-white);
+  border: none;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+  transition: all var(--transition-normal);
+}
+
+.card:hover {
+  box-shadow: var(--shadow-md);
+}
+
+.card-header {
+  background: var(--monday-white);
+  border-bottom: 1px solid var(--monday-grey-lighter);
+  padding: var(--space-md) var(--space-lg);
+  font-weight: 600;
+  font-size: var(--font-size-lg);
+  color: var(--monday-dark);
+}
+
+.card-body {
+  padding: var(--space-lg);
+}
+
+/* Stat Cards - Monday Style */
+.stat-card {
+  position: relative;
+  border: none;
+  border-radius: var(--radius-lg);
+  overflow: visible;
+  background: var(--monday-white);
+}
+
+.stat-card::before {
+  display: none;
+}
+
+.stat-card .card-body {
+  padding: var(--space-lg);
+}
+
+.stat-card .stat-icon {
+  position: absolute;
+  top: -12px;
+  right: var(--space-lg);
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-md);
+  font-size: 20px;
+  color: var(--monday-white);
+  box-shadow: var(--shadow-md);
+}
+
+.stat-card:nth-child(1) .stat-icon { background: linear-gradient(135deg, var(--monday-blue), var(--monday-royal)); }
+.stat-card:nth-child(2) .stat-icon { background: linear-gradient(135deg, var(--monday-green), var(--monday-aqua)); }
+.stat-card:nth-child(3) .stat-icon { background: linear-gradient(135deg, var(--monday-yellow), var(--monday-orange)); }
+.stat-card:nth-child(4) .stat-icon { background: linear-gradient(135deg, var(--monday-purple), var(--monday-pink)); }
+
+.stat-card .card-title {
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  color: var(--monday-grey);
+  text-transform: none;
+  letter-spacing: 0;
+  margin-bottom: var(--space-xs);
+}
+
+.stat-card .display-6 {
+  font-size: var(--font-size-3xl);
+  font-weight: 700;
+  color: var(--monday-dark);
+  margin: var(--space-xs) 0;
+}
+
+/* ============================================
+   Monday-Style Buttons
+   ============================================ */
+
+.btn {
+  font-family: var(--font-family);
+  font-weight: 500;
+  font-size: var(--font-size-md);
+  padding: var(--space-sm) var(--space-md);
+  border-radius: var(--radius-md);
+  border: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-sm);
+  transition: all var(--transition-fast);
+  text-decoration: none;
+}
+
+.btn-primary {
+  background: var(--monday-blue);
+  color: var(--monday-white);
+}
+
+.btn-primary:hover {
+  background: var(--monday-blue-hover);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-hover);
+}
+
+.btn-secondary {
+  background: var(--monday-grey-lighter);
+  color: var(--monday-dark);
+}
+
+.btn-secondary:hover {
+  background: var(--monday-grey-light);
+}
+
+.btn-success {
+  background: var(--monday-green);
+  color: var(--monday-white);
+}
+
+.btn-success:hover {
+  background: #00a65f;
+}
+
+.btn-danger {
+  background: var(--monday-red);
+  color: var(--monday-white);
+}
+
+.btn-danger:hover {
+  background: #c93a4f;
+}
+
+.btn-outline-primary {
+  background: transparent;
+  color: var(--monday-blue);
+  border: 1px solid var(--monday-blue);
+}
+
+.btn-outline-primary:hover {
+  background: var(--monday-blue);
+  color: var(--monday-white);
+}
+
+.btn-outline-secondary {
+  background: transparent;
+  /* Use darker color for better contrast on white backgrounds */
+  color: var(--monday-dark);
+  border: 1px solid var(--monday-grey-lighter);
+}
+
+.btn-outline-secondary:hover {
+  background: var(--monday-grey-lighter);
+  color: var(--monday-dark);
+}
+
+.btn-light {
+  background: rgba(255, 255, 255, 0.9);
+  color: var(--monday-dark);
+}
+
+.btn-light:hover {
+  background: var(--monday-white);
+}
+
+.btn-sm {
+  font-size: var(--font-size-sm);
+  padding: 6px 12px;
+}
+
+.btn-lg {
+  font-size: var(--font-size-lg);
+  padding: 12px 24px;
+}
+
+/* ============================================
+   Monday-Style Tables
+   ============================================ */
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--font-size-md);
+}
+
+.table thead th {
+  background: var(--monday-surface);
+  color: var(--monday-grey);
+  font-weight: 600;
+  font-size: var(--font-size-sm);
+  padding: var(--space-sm) var(--space-md);
+  border-bottom: 1px solid var(--monday-grey-lighter);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.table tbody td {
+  padding: var(--space-sm) var(--space-md);
+  border-bottom: 1px solid var(--monday-grey-lighter);
+  color: var(--monday-dark);
+  vertical-align: middle;
+}
+
+.table tbody tr {
+  transition: background var(--transition-fast);
+}
+
+.table tbody tr:hover {
+  background: rgba(0, 115, 234, 0.04);
+}
+
+.table-hover tbody tr:hover td {
+  cursor: pointer;
+}
+
+/* ============================================
+   Monday-Style Status Pills
+   ============================================ */
+
+.status-pill,
+.monday-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  min-width: 80px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+/* Status Colors */
+.status-done, .status-completed, .status-COMPLETED {
+  background: var(--status-done);
+  color: white;
+}
+
+.status-working, .status-in-progress, .status-IN_PROGRESS {
+  background: var(--status-working);
+  color: white;
+}
+
+.status-stuck, .status-blocked, .status-BLOCKED {
+  background: var(--status-stuck);
+  color: white;
+}
+
+.status-pending, .status-backlog, .status-BACKLOG {
+  background: var(--status-pending);
+  color: white;
+}
+
+.status-review, .status-IN_REVIEW {
+  background: var(--status-review);
+  color: white;
+}
+
+.status-planning, .status-PLANNING {
+  background: var(--monday-yellow);
+  color: white;
+}
+
+.status-active, .status-ACTIVE {
+  background: var(--monday-blue);
+  color: white;
+}
+
+.status-archived, .status-ARCHIVED {
+  background: var(--monday-grey);
+  color: white;
+}
+
+/* ============================================
+   Monday-Style Priority Pills
+   ============================================ */
+
+.priority-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: var(--font-size-xs);
+  font-weight: 500;
+}
+
+.priority-critical, .priority-CRITICAL {
+  background: var(--monday-red);
+  color: white;
+}
+
+.priority-high, .priority-HIGH {
+  background: #ffcdd2;
+  color: #c62828;
+}
+
+.priority-medium, .priority-MEDIUM {
+  background: #fff3e0;
+  color: #ef6c00;
+}
+
+.priority-low, .priority-LOW {
+  background: #e3f2fd;
+  color: #1565c0;
+}
+
+/* ============================================
+   Monday-Style Avatars
+   ============================================ */
+
+.monday-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-full);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: var(--font-size-sm);
+  color: white;
+  flex-shrink: 0;
+}
+
+.monday-avatar.sm { width: 24px; height: 24px; font-size: 10px; }
+.monday-avatar.lg { width: 40px; height: 40px; font-size: var(--font-size-md); }
+.monday-avatar.xl { width: 56px; height: 56px; font-size: var(--font-size-xl); }
+
+.monday-avatar-blue { background: var(--monday-blue); }
+.monday-avatar-green { background: var(--monday-green); }
+.monday-avatar-yellow { background: var(--monday-yellow); }
+.monday-avatar-red { background: var(--monday-red); }
+.monday-avatar-purple { background: var(--monday-purple); }
+.monday-avatar-aqua { background: var(--monday-aqua); }
+.monday-avatar-orange { background: var(--monday-orange); }
+
+/* Avatar Stack */
+.avatar-stack {
+  display: flex;
+}
+
+.avatar-stack .monday-avatar {
+  margin-left: -8px;
+  border: 2px solid white;
+}
+
+.avatar-stack .monday-avatar:first-child {
+  margin-left: 0;
+}
+
+/* ============================================
+   Monday-Style Progress
+   ============================================ */
+
+.monday-progress {
+  height: 6px;
+  background: var(--monday-grey-lighter);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.monday-progress-bar {
+  height: 100%;
+  background: var(--monday-green);
+  border-radius: 3px;
+  transition: width var(--transition-normal);
+}
+
+.monday-progress-bar.warning {
+  background: var(--monday-yellow);
+}
+
+.monday-progress-bar.danger {
+  background: var(--monday-red);
+}
+
+/* ============================================
+   Monday-Style Forms
+   ============================================ */
+
+.form-control {
+  font-family: var(--font-family);
+  font-size: var(--font-size-md);
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--monday-grey-lighter);
+  border-radius: var(--radius-md);
+  background: var(--monday-white);
+  color: var(--monday-dark);
+  transition: all var(--transition-fast);
+}
+
+.form-control:focus {
+  border-color: var(--monday-blue);
+  box-shadow: 0 0 0 3px rgba(0, 115, 234, 0.1);
+  outline: none;
+}
+
+.form-control::placeholder {
+  color: var(--monday-grey-light);
+}
+
+.form-select {
+  font-family: var(--font-family);
+  font-size: var(--font-size-md);
+  padding: var(--space-sm) var(--space-md);
+  padding-right: 36px;
+  border: 1px solid var(--monday-grey-lighter);
+  border-radius: var(--radius-md);
+  background: var(--monday-white);
+  color: var(--monday-dark);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.form-select:focus {
+  border-color: var(--monday-blue);
+  box-shadow: 0 0 0 3px rgba(0, 115, 234, 0.1);
+  outline: none;
+}
+
+.form-label {
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  color: var(--monday-grey);
+  margin-bottom: var(--space-xs);
+}
+
+/* ============================================
+   Monday-Style Search Box
+   ============================================ */
+
+.monday-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.monday-search input {
+  width: 100%;
+  padding: var(--space-sm) var(--space-md);
+  padding-left: 40px;
+  border: 1px solid var(--monday-grey-lighter);
+  border-radius: var(--radius-lg);
+  font-size: var(--font-size-md);
+  background: var(--monday-white);
+  transition: all var(--transition-fast);
+}
+
+.monday-search input:focus {
+  border-color: var(--monday-blue);
+  box-shadow: var(--shadow-md);
+  outline: none;
+}
+
+.monday-search i {
+  position: absolute;
+  left: 14px;
+  color: var(--monday-grey-light);
+}
+
+/* ============================================
+   Monday-Style Kanban
+   ============================================ */
+
+.monday-kanban {
+  display: flex;
+  gap: var(--space-md);
+  overflow-x: auto;
+  padding-bottom: var(--space-md);
+}
+
+.monday-kanban-column {
+  min-width: 280px;
+  max-width: 280px;
+  background: var(--monday-surface);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.monday-kanban-header {
+  padding: var(--space-md);
+  font-weight: 600;
+  font-size: var(--font-size-md);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.monday-kanban-header.blue { background: var(--monday-blue); }
+.monday-kanban-header.green { background: var(--monday-green); }
+.monday-kanban-header.yellow { background: var(--monday-yellow); }
+.monday-kanban-header.purple { background: var(--monday-purple); }
+.monday-kanban-header.grey { background: var(--monday-grey); }
+
+.monday-kanban-cards {
+  padding: var(--space-sm);
+  min-height: 200px;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.monday-kanban-card {
+  background: var(--monday-white);
+  border-radius: var(--radius-md);
+  padding: var(--space-md);
+  margin-bottom: var(--space-sm);
+  box-shadow: var(--shadow-xs);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  border-left: 3px solid transparent;
+}
+
+.monday-kanban-card:hover {
+  box-shadow: var(--shadow-md);
+  transform: translateY(-2px);
+}
+
+.monday-kanban-card.blue { border-left-color: var(--monday-blue); }
+.monday-kanban-card.green { border-left-color: var(--monday-green); }
+.monday-kanban-card.yellow { border-left-color: var(--monday-yellow); }
+.monday-kanban-card.red { border-left-color: var(--monday-red); }
+
+/* ============================================
+   Monday-Style Group Headers (Collapsible)
+   ============================================ */
+
+.monday-group {
+  margin-bottom: var(--space-md);
+}
+
+.monday-group-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  background: var(--monday-white);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  user-select: none;
+  transition: all var(--transition-fast);
+}
+
+.monday-group-header:hover {
+  background: var(--monday-surface);
+}
+
+.monday-group-header .color-bar {
+  width: 4px;
+  height: 20px;
+  border-radius: 2px;
+}
+
+.monday-group-header .color-bar.blue { background: var(--monday-blue); }
+.monday-group-header .color-bar.green { background: var(--monday-green); }
+.monday-group-header .color-bar.yellow { background: var(--monday-yellow); }
+.monday-group-header .color-bar.purple { background: var(--monday-purple); }
+.monday-group-header .color-bar.red { background: var(--monday-red); }
+
+.monday-group-header h6 {
+  font-weight: 600;
+  color: var(--monday-dark);
+  margin: 0;
+  flex: 1;
+}
+
+.monday-group-header .count {
+  background: var(--monday-grey-lighter);
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: var(--font-size-xs);
+  color: var(--monday-grey);
+}
+
+.monday-group-content {
+  margin-top: var(--space-sm);
+}
+
+/* ============================================
+   Monday-Style Page Headers
+   ============================================ */
+
+.monday-page-header {
+  background: linear-gradient(135deg, var(--monday-blue) 0%, var(--monday-royal) 100%);
+  color: white;
+  padding: var(--space-lg) var(--space-xl);
+  border-radius: var(--radius-lg);
+  margin-bottom: var(--space-lg);
+}
+
+.monday-page-header h1,
+.monday-page-header h2 {
+  font-weight: 700;
+  margin: 0;
+}
+
+.monday-page-header p {
+  margin: var(--space-sm) 0 0;
+  opacity: 0.9;
+}
+
+/* ============================================
+   Monday-Style Badges
+   ============================================ */
+
+.badge {
+  font-family: var(--font-family);
+  font-size: var(--font-size-xs);
+  font-weight: 500;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+}
+
+.badge-primary, .bg-primary {
+  background: var(--monday-blue) !important;
+  color: white !important;
+}
+
+.badge-success, .bg-success {
+  background: var(--monday-green) !important;
+  color: white !important;
+}
+
+.badge-warning, .bg-warning {
+  background: var(--monday-yellow) !important;
+  color: white !important;
+}
+
+.badge-danger, .bg-danger {
+  background: var(--monday-red) !important;
+  color: white !important;
+}
+
+.badge-info, .bg-info {
+  background: var(--monday-aqua) !important;
+  color: white !important;
+}
+
+.badge-secondary, .bg-secondary {
+  background: var(--monday-grey) !important;
+  color: white !important;
+}
+
+/* ============================================
+   Monday-Style Alerts
+   ============================================ */
+
+.alert {
+  border: none;
+  border-radius: var(--radius-md);
+  padding: var(--space-md);
+  font-size: var(--font-size-md);
+}
+
+.alert-success {
+  background: rgba(0, 200, 117, 0.1);
+  color: #00875a;
+  border-left: 4px solid var(--monday-green);
+}
+
+.alert-warning {
+  background: rgba(253, 171, 61, 0.1);
+  color: #9a6700;
+  border-left: 4px solid var(--monday-yellow);
+}
+
+.alert-danger {
+  background: rgba(226, 68, 92, 0.1);
+  color: #ae2e24;
+  border-left: 4px solid var(--monday-red);
+}
+
+.alert-info {
+  background: rgba(0, 115, 234, 0.1);
+  color: #0055cc;
+  border-left: 4px solid var(--monday-blue);
+}
+
+/* ============================================
+   Monday-Style Tooltips
+   ============================================ */
+
+[data-tooltip] {
+  position: relative;
+}
+
+[data-tooltip]:hover::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--monday-dark);
+  color: white;
+  padding: 6px 12px;
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-xs);
+  white-space: nowrap;
+  z-index: 1000;
+  margin-bottom: 4px;
+}
+
+/* ============================================
+   Animations & Transitions
+   ============================================ */
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+}
+
+@keyframes slideInRight {
+  from {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.fade-in {
+  animation: fadeInUp 0.4s ease-out;
+}
+
+.fade-in-delay-1 { animation-delay: 0.1s; }
+.fade-in-delay-2 { animation-delay: 0.2s; }
+.fade-in-delay-3 { animation-delay: 0.3s; }
+.fade-in-delay-4 { animation-delay: 0.4s; }
+
+/* ============================================
+   Loading States
+   ============================================ */
+
+.loading-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(255, 255, 255, 0.9);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+}
+
+.monday-spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid var(--monday-grey-lighter);
+  border-top-color: var(--monday-blue);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Skeleton Loading */
+.skeleton {
+  background: linear-gradient(90deg, var(--monday-grey-lighter) 25%, var(--monday-surface) 50%, var(--monday-grey-lighter) 75%);
+  background-size: 200% 100%;
+  animation: skeleton 1.5s ease-in-out infinite;
+  border-radius: var(--radius-sm);
+}
+
+@keyframes skeleton {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* ============================================
+   Scrollbars
+   ============================================ */
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--monday-grey-light);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--monday-grey);
+}
+
+/* Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--monday-grey-light) transparent;
+}
+
+/* ============================================
+   Responsive Design
+   ============================================ */
+
+@media (max-width: 992px) {
+  #sidebar-wrapper {
+    transform: translateX(-100%);
+    width: 250px;
+  }
+  
+  #sidebar-wrapper.show {
+    transform: translateX(0);
+  }
+  
+  #page-content-wrapper {
+    margin-left: 0;
+    width: 100%;
+  }
+  
+  .navbar-header .navbar {
+    margin-left: 0;
+    width: 100%;
+  }
+}
+
+@media (max-width: 768px) {
+  #page-content-wrapper {
+    padding: var(--space-md);
+  }
+  
+  .monday-page-header {
+    padding: var(--space-md);
+  }
+  
+  .stat-card .display-6 {
+    font-size: var(--font-size-2xl);
+  }
+}
+
+@media (max-width: 576px) {
+  .btn:not(.btn-sm) {
+    width: 100%;
+  }
+  
+  .monday-kanban {
+    flex-direction: column;
+  }
+  
+  .monday-kanban-column {
+    min-width: 100%;
+    max-width: 100%;
+  }
+}
+
+/* ============================================
+   Navbar adjustments
+   ============================================ */
+
+.navbar-header .navbar {
+  margin-left: 250px;
+  width: calc(100% - 250px);
+  transition: margin-left var(--transition-normal), width var(--transition-normal);
+  background: var(--monday-white);
+  border-bottom: 1px solid var(--monday-grey-lighter);
+  box-shadow: var(--shadow-xs);
+}
+
+/* Footer adjustments */
+footer {
+  margin-left: 250px !important;
+  background: var(--monday-dark) !important;
+}
+
+@media (max-width: 992px) {
+  footer {
+    margin-left: 0 !important;
+  }
+}
+
+/* ============================================
+   Utility Classes
+   ============================================ */
+
+.text-monday-blue { color: var(--monday-blue) !important; }
+.text-monday-green { color: var(--monday-green) !important; }
+.text-monday-yellow { color: var(--monday-yellow) !important; }
+.text-monday-red { color: var(--monday-red) !important; }
+.text-monday-purple { color: var(--monday-purple) !important; }
+.text-monday-grey { color: var(--monday-grey) !important; }
+
+.bg-monday-blue { background: var(--monday-blue) !important; }
+.bg-monday-green { background: var(--monday-green) !important; }
+.bg-monday-yellow { background: var(--monday-yellow) !important; }
+.bg-monday-red { background: var(--monday-red) !important; }
+.bg-monday-purple { background: var(--monday-purple) !important; }
+
+.hover-lift {
+  transition: transform var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.hover-lift:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-lg);
+}
+
+/* Dashboard specific styles */
+.kanban-board { overflow-x: auto; padding-bottom: 10px; }
+.kanban-column { flex-shrink: 0; }
+.kanban-card { transition: transform 0.15s, box-shadow 0.15s; }
+.kanban-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); }
+
+/* ============================================
+   Monday-Style Buttons
+   ============================================ */
+
+.monday-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px 16px;
+  font-size: 14px;
+  font-weight: 500;
+  border-radius: var(--radius-md);
+  border: none;
+  cursor: pointer;
+  transition: all var(--transition-normal);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.monday-btn:hover {
+  transform: translateY(-1px);
+}
+
+.monday-btn:active {
+  transform: translateY(0);
+}
+
+.monday-btn-primary {
+  background: var(--monday-blue);
+  color: white !important;
+}
+
+.monday-btn-primary:hover,
+.monday-btn-primary:focus,
+.monday-btn-primary:active,
+.monday-btn-primary:visited {
+  background: var(--monday-blue-hover);
+  color: white !important;
+  text-decoration: none;
+}
+
+a.monday-btn-primary {
+  color: white !important;
+}
+
+a.monday-btn-primary:hover,
+a.monday-btn-primary:focus {
+  color: white !important;
+  text-decoration: none;
+}
+
+.monday-btn-secondary {
+  background: var(--monday-grey-lighter);
+  color: var(--monday-dark);
+}
+
+.monday-btn-secondary:hover {
+  background: var(--monday-grey-light);
+}
+
+.monday-btn-success {
+  background: var(--monday-green);
+  color: white;
+}
+
+.monday-btn-success:hover {
+  background: #00a65a;
+}
+
+.monday-btn-danger {
+  background: var(--monday-red);
+  color: white;
+}
+
+.monday-btn-danger:hover {
+  background: #c43e52;
+}
+
+.monday-btn-outline {
+  background: transparent;
+  border: 1px solid var(--monday-border);
+  color: var(--monday-dark);
+}
+
+.monday-btn-outline:hover {
+  border-color: var(--monday-blue);
+  color: var(--monday-blue);
+  background: rgba(0, 115, 234, 0.04);
+}
+
+.monday-btn-sm {
+  padding: 6px 12px;
+  font-size: 12px;
+}
+
+.monday-btn-lg {
+  padding: 12px 24px;
+  font-size: 16px;
+}
+
+.monday-btn-icon {
+  padding: 8px;
+  min-width: 36px;
+}
+
+/* ============================================
+   Additional Variables
+   ============================================ */
+
+:root {
+  --monday-border: #e6e9ef;
+  --monday-light-grey: #f5f6f8;
+  --monday-text-secondary: #676879;
+}

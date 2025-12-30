@@ -1,0 +1,337 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ _('team') }} — {{ sys_app_name }}{% endblock %}
+
+{% block head %}
+<style>
+/* Monday.com Team Page Styles */
+.team-page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--monday-border);
+}
+
+.team-page-header h1 {
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--monday-dark);
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.team-page-header h1 i {
+  color: var(--monday-purple);
+}
+
+.team-stats-bar {
+  display: flex;
+  gap: 32px;
+  padding: 20px 24px;
+  background: white;
+  border-radius: 8px;
+  border: 1px solid var(--monday-border);
+  margin-bottom: 24px;
+}
+
+.team-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.team-stat .value {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--monday-dark);
+}
+
+.team-stat .label {
+  font-size: 13px;
+  color: var(--monday-text-secondary);
+}
+
+/* Monday People Cards */
+.people-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 16px;
+}
+
+.monday-person-card {
+  background: white;
+  border-radius: 8px;
+  border: 1px solid var(--monday-border);
+  padding: 20px;
+  transition: all 0.2s;
+}
+
+.monday-person-card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  border-color: var(--monday-blue);
+}
+
+.person-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.person-avatar {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  font-weight: 600;
+  color: white;
+  flex-shrink: 0;
+}
+
+.person-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.person-name {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--monday-dark);
+  margin-bottom: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.person-email {
+  font-size: 13px;
+  color: var(--monday-text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.person-role {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  background: var(--monday-light-grey);
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--monday-text-secondary);
+  margin-top: 6px;
+}
+
+/* Person Stats */
+.person-metrics {
+  display: flex;
+  gap: 12px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--monday-border);
+  margin-bottom: 12px;
+}
+
+.metric-box {
+  flex: 1;
+  text-align: center;
+  padding: 8px;
+  background: var(--monday-light-grey);
+  border-radius: 6px;
+}
+
+.metric-box .number {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--monday-dark);
+}
+
+.metric-box .text {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--monday-text-secondary);
+}
+
+.metric-box.highlight {
+  background: var(--monday-green);
+}
+
+.metric-box.highlight .number,
+.metric-box.highlight .text {
+  color: white;
+}
+
+/* Status Breakdown */
+.status-breakdown {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.status-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.status-tag .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.status-tag.backlog { background: rgba(196, 196, 196, 0.2); color: #888; }
+.status-tag.backlog .dot { background: #c4c4c4; }
+
+.status-tag.in-progress { background: rgba(0, 115, 234, 0.1); color: var(--monday-blue); }
+.status-tag.in-progress .dot { background: var(--monday-blue); }
+
+.status-tag.in-review { background: rgba(162, 93, 220, 0.1); color: var(--monday-purple); }
+.status-tag.in-review .dot { background: var(--monday-purple); }
+
+.status-tag.completed { background: rgba(0, 200, 117, 0.1); color: var(--monday-green); }
+.status-tag.completed .dot { background: var(--monday-green); }
+
+/* Empty State */
+.monday-empty-people {
+  text-align: center;
+  padding: 60px 20px;
+  background: white;
+  border-radius: 8px;
+  border: 1px solid var(--monday-border);
+}
+
+.monday-empty-people i {
+  font-size: 48px;
+  color: var(--monday-border);
+  margin-bottom: 16px;
+}
+
+.monday-empty-people h3 {
+  font-size: 18px;
+  font-weight: 500;
+  color: var(--monday-dark);
+  margin-bottom: 8px;
+}
+
+.monday-empty-people p {
+  color: var(--monday-text-secondary);
+  margin: 0;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Page Header -->
+<div class="team-page-header">
+  <h1>
+    <i class="fa-solid fa-users"></i>
+    {{ _('team_header') }}
+  </h1>
+</div>
+
+<!-- Team Stats Bar -->
+<div class="team-stats-bar">
+  <div class="team-stat">
+    <span class="value">{{ internal_users|length }}</span>
+    <span class="label">{{ _('team_members') if internal_users|length != 1 else _('team_member') }}</span>
+  </div>
+  <div class="team-stat">
+    <span class="value">{{ internal_users|sum(attribute='total_tasks') }}</span>
+    <span class="label">{{ _('total_tasks') }}</span>
+  </div>
+  <div class="team-stat">
+    <span class="value">{{ "%.0f"|format(internal_users|sum(attribute='hours_this_month')) }}h</span>
+    <span class="label">{{ _('hours_this_month') }}</span>
+  </div>
+</div>
+
+<!-- People Grid -->
+<div class="people-grid">
+{% if internal_users %}
+  {% for user in internal_users %}
+  <div class="monday-person-card">
+    <div class="person-header">
+      <div class="person-avatar" style="background: {{ ['#0073ea', '#00c875', '#fdab3d', '#e2445c', '#a25ddc', '#579bfc', '#ff7575', '#cab641'][loop.index0 % 8] }};">
+        {{ (user.first_name or user.email)[0]|upper }}
+      </div>
+      <div class="person-info">
+        <div class="person-name">{{ user.first_name or user.email.split('@')[0] }}</div>
+        <div class="person-email">{{ user.email }}</div>
+        {% if user.role %}
+        <span class="person-role">
+          <i class="fa-solid fa-shield-halved"></i>
+          {{ user.role.name }}
+        </span>
+        {% endif %}
+      </div>
+    </div>
+    
+    <div class="person-metrics">
+      <div class="metric-box">
+        <div class="number">{{ user.total_tasks }}</div>
+        <div class="text">{{ _('tasks') }}</div>
+      </div>
+      <div class="metric-box highlight">
+        <div class="number">{{ "%.0f"|format(user.hours_this_month) }}</div>
+        <div class="text">{{ _('hours') }}</div>
+      </div>
+      <div class="metric-box">
+        <div class="number">{{ user.task_by_status.get('COMPLETED', 0) }}</div>
+        <div class="text">{{ _('completed') }}</div>
+      </div>
+    </div>
+    
+    <div class="status-breakdown">
+      {% if user.task_by_status.get('BACKLOG', 0) > 0 %}
+      <span class="status-tag backlog">
+        <span class="dot"></span>
+        {{ user.task_by_status.get('BACKLOG', 0) }} {{ _('backlog') }}
+      </span>
+      {% endif %}
+      {% if user.task_by_status.get('IN_PROGRESS', 0) > 0 %}
+      <span class="status-tag in-progress">
+        <span class="dot"></span>
+        {{ user.task_by_status.get('IN_PROGRESS', 0) }} {{ _('in_progress') }}
+      </span>
+      {% endif %}
+      {% if user.task_by_status.get('IN_REVIEW', 0) > 0 %}
+      <span class="status-tag in-review">
+        <span class="dot"></span>
+        {{ user.task_by_status.get('IN_REVIEW', 0) }} {{ _('in_review') }}
+      </span>
+      {% endif %}
+      {% if user.task_by_status.get('COMPLETED', 0) > 0 %}
+      <span class="status-tag completed">
+        <span class="dot"></span>
+        {{ user.task_by_status.get('COMPLETED', 0) }} {{ _('completed') }}
+      </span>
+      {% endif %}
+    </div>
+  </div>
+  {% endfor %}
+{% else %}
+  <div class="col-12">
+    <div class="monday-empty-people">
+      <i class="fa-solid fa-user-group"></i>
+      <h3>{{ _('no_team_members') }}</h3>
+      <p>{{ _('no_internal_users') }}</p>
+    </div>
+  </div>
+{% endif %}
+</div>
+
+{% endblock %}

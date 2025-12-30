@@ -1,0 +1,645 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ task.title }} — {{ sys_app_name }}{% endblock %}
+
+{% block head %}
+<style>
+/* Usamos las variables CSS definidas en base.html */
+.task-header {
+  background: white;
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+  margin-bottom: 24px;
+}
+
+.task-title {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--monday-dark);
+  margin: 0;
+}
+
+.back-link {
+  color: var(--monday-blue);
+  text-decoration: none;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.back-link:hover { text-decoration: underline; }
+
+.status-pill {
+  display: inline-block;
+  padding: 6px 16px;
+  border-radius: 16px;
+  font-size: 13px;
+  font-weight: 500;
+  color: white;
+}
+
+.status-BACKLOG { background: #c4c4c4; }
+.status-IN_PROGRESS { background: var(--monday-blue); }
+.status-IN_REVIEW { background: var(--monday-purple); }
+.status-COMPLETED { background: var(--monday-green); }
+
+.priority-pill {
+  display: inline-block;
+  padding: 6px 16px;
+  border-radius: 16px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.priority-LOW { background: #e3f2fd; color: #1976d2; }
+.priority-MEDIUM { background: #fff3e0; color: #ef6c00; }
+.priority-HIGH { background: #ffebee; color: #d32f2f; }
+.priority-CRITICAL { background: #d32f2f; color: white; }
+
+.detail-card {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+  overflow: hidden;
+}
+
+.detail-card-header {
+  padding: 16px 20px;
+  background: var(--monday-light-grey);
+  font-weight: 600;
+  font-size: 15px;
+  border-bottom: 1px solid #eee;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.detail-card-body { padding: 20px; }
+
+.detail-item { margin-bottom: 16px; }
+.detail-item:last-child { margin-bottom: 0; }
+
+.detail-label {
+  font-size: 12px;
+  text-transform: uppercase;
+  color: #888;
+  margin-bottom: 4px;
+  letter-spacing: 0.5px;
+}
+
+.detail-value {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--monday-dark);
+}
+
+.assignee-display {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.assignee-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--monday-purple);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.time-table { width: 100%; }
+
+.time-table th {
+  background: var(--monday-light-grey);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 12px 16px;
+}
+
+.time-table td {
+  padding: 12px 16px;
+  border-bottom: 1px solid #eee;
+}
+
+.progress-section {
+  background: var(--monday-light-grey);
+  padding: 16px 20px;
+  border-top: 1px solid #eee;
+}
+
+.progress-bar-custom {
+  height: 8px;
+  background: #e0e0e0;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.3s;
+}
+
+.action-btn {
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.2s;
+}
+
+.btn-edit {
+  background: var(--monday-blue);
+  color: white;
+  border: none;
+}
+
+.btn-edit:hover { background: #0060c7; color: white; }
+
+.btn-delete {
+  background: white;
+  color: var(--monday-red);
+  border: 1px solid var(--monday-red);
+}
+
+.btn-delete:hover { background: var(--monday-red); color: white; }
+
+.btn-accept { background: var(--monday-green); color: white; border: none; }
+.btn-accept:hover { background: #1e9b45; color: white; }
+/* Attachments styles */
+.attachments-list { list-style: none; padding: 0; margin: 0; }
+
+.attachment-item {
+  display: flex;
+  align-items: center;
+  padding: 12px 16px;
+  border-bottom: 1px solid #eee;
+  gap: 12px;
+  transition: background 0.15s;
+}
+
+.attachment-item:last-child { border-bottom: none; }
+.attachment-item:hover { background: var(--monday-light-grey); }
+
+.attachment-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+}
+
+.attachment-icon.pdf { background: #ffebee; color: #d32f2f; }
+.attachment-icon.image { background: #e3f2fd; color: #1976d2; }
+.attachment-icon.doc { background: #e8f5e9; color: #388e3c; }
+.attachment-icon.spreadsheet { background: #fff3e0; color: #ef6c00; }
+.attachment-icon.archive { background: #f3e5f5; color: #7b1fa2; }
+.attachment-icon.default { background: var(--monday-light-grey); color: #666; }
+
+.attachment-info { flex: 1; min-width: 0; }
+
+.attachment-name {
+  font-weight: 500;
+  color: var(--monday-dark);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.attachment-meta {
+  font-size: 12px;
+  color: #888;
+}
+
+.attachment-actions { display: flex; gap: 8px; }
+
+.attachment-btn {
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+  font-size: 13px;
+  transition: all 0.15s;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.attachment-btn.download {
+  background: var(--monday-light-grey);
+  color: var(--monday-dark);
+}
+
+.attachment-btn.download:hover {
+  background: var(--monday-blue);
+  color: white;
+}
+
+.attachment-btn.delete {
+  background: #ffebee;
+  color: var(--monday-red);
+}
+
+.attachment-btn.delete:hover {
+  background: var(--monday-red);
+  color: white;
+}
+
+.upload-zone {
+  border: 2px dashed #ddd;
+  border-radius: 8px;
+  padding: 24px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  margin: 16px;
+}
+
+.upload-zone:hover {
+  border-color: var(--monday-blue);
+  background: rgba(0,115,234,0.05);
+}
+
+.upload-zone.dragover {
+  border-color: var(--monday-blue);
+  background: rgba(0,115,234,0.1);
+}
+
+.upload-zone i { font-size: 32px; color: #ccc; margin-bottom: 8px; }
+.upload-zone:hover i { color: var(--monday-blue); }
+
+.empty-attachments {
+  padding: 32px;
+  text-align: center;
+  color: #888;
+}
+
+.empty-attachments i {
+  font-size: 40px;
+  opacity: 0.3;
+  margin-bottom: 12px;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="task-header">
+  <a href="{{ url_for('main.project_detail', project_id=task.project_id) }}" class="back-link">
+    <i class="fa-solid fa-arrow-left"></i>{{ task.project.name }}
+  </a>
+  <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
+    <div>
+      <h1 class="task-title">{{ task.title }}</h1>
+      <div class="mt-3 d-flex gap-2 flex-wrap">
+        <span class="status-pill status-{{ task.status }}">
+          {{ {'BACKLOG':'Backlog','IN_PROGRESS':'En Progreso','IN_REVIEW':'En Revisión','COMPLETED':'Completado'}.get(task.status, task.status) }}
+        </span>
+        <span class="priority-pill priority-{{ task.priority }}">
+          {{ {'LOW':'Baja','MEDIUM':'Media','HIGH':'Alta','CRITICAL':'Crítica'}.get(task.priority, task.priority) }}
+        </span>
+        {% if task.is_external_visible %}
+        <span class="badge bg-info"><i class="fa-solid fa-eye me-1"></i>Visible para cliente</span>
+        {% endif %}
+      </div>
+    </div>
+    {% if current_user.is_internal %}
+    <div class="d-flex gap-2">
+      <a href="{{ url_for('main.edit_task', task_id=task.id) }}" class="action-btn btn-edit text-white" style="color: white !important;">
+        <i class="fa-solid fa-pen me-2"></i>
+        <span class="btn-text">Editar</span>
+      </a>
+      <form method="POST" action="{{ url_for('main.delete_task', task_id=task.id) }}" style="display:inline;"
+            onsubmit="return confirm('¿Eliminar esta tarea?');">
+        <button type="submit" class="action-btn btn-delete">
+          <i class="fa-solid fa-trash me-2"></i>Eliminar
+        </button>
+      </form>
+    </div>
+    {% elif (task.project.client_id and task.project.client_id == current_user.id) or (current_user in task.project.clients) %}
+      {% if task.assigned_client_id == current_user.id %}
+        {% if task.status != 'COMPLETED' %}
+        <form method="POST" action="{{ url_for('main.client_accept_task', task_id=task.id) }}" style="display:inline;">
+          <button type="submit" class="action-btn btn-accept">
+            <i class="fa-solid fa-check me-2"></i>Aceptar y Marcar como Completado
+          </button>
+        </form>
+        {% endif %}
+      {% else %}
+        <!-- Cliente puede ver en modo lectura, pero no puede aceptar si la tarea no está asignada a él -->
+      {% endif %}
+    {% endif %}
+  </div>
+</div>
+
+<div class="row g-4">
+  <div class="col-lg-8">
+    <div class="detail-card mb-4">
+      <div class="detail-card-header">
+        <span><i class="fa-solid fa-align-left me-2"></i>Descripción</span>
+      </div>
+      <div class="detail-card-body">
+        <p class="mb-0" style="white-space: pre-wrap;">{{ task.description or 'Sin descripción' }}</p>
+      </div>
+    </div>
+
+    <div class="detail-card mb-4">
+      <div class="detail-card-header">
+        <span><i class="fa-solid fa-link me-2"></i>Dependencias</span>
+      </div>
+      <div class="detail-card-body">
+        <div class="row">
+          <div class="col-md-6 detail-item">
+            <div class="detail-label">Predecesoras</div>
+            <div class="detail-value">
+              {% if task.predecessors %}
+                <ul class="mb-0">
+                  {% for p in task.predecessors %}
+                    <li><a href="{{ url_for('main.task_detail', task_id=p.id) }}">{{ p.title }}</a> <small class="text-muted">(ID {{ p.id }})</small></li>
+                  {% endfor %}
+                </ul>
+              {% else %}
+                <span class="text-muted">Ninguna</span>
+              {% endif %}
+            </div>
+          </div>
+          <div class="col-md-6 detail-item">
+            <div class="detail-label">Sucesoras</div>
+            <div class="detail-value">
+              {% if task.successors %}
+                <ul class="mb-0">
+                  {% for s in task.successors %}
+                    <li><a href="{{ url_for('main.task_detail', task_id=s.id) }}">{{ s.title }}</a> <small class="text-muted">(ID {{ s.id }})</small></li>
+                  {% endfor %}
+                </ul>
+              {% else %}
+                <span class="text-muted">Ninguna</span>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="detail-card">
+      <div class="detail-card-header">
+        <span><i class="fa-solid fa-clock me-2"></i>Registros de Tiempo</span>
+        {% if can_edit %}
+        <a href="{{ url_for('main.create_time_entry') }}?task_id={{ task.id }}" class="btn btn-sm btn-primary">
+          <i class="fa-solid fa-plus me-1"></i>Registrar
+        </a>
+        {% endif %}
+      </div>
+      <table class="time-table">
+        <thead>
+          <tr>
+            <th>Fecha</th>
+            <th>Usuario</th>
+            <th>Horas</th>
+            <th>Descripción</th>
+            <th class="text-end">Acciones</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% if time_entries %}
+            {% for entry in time_entries %}
+            <tr>
+              <td><strong>{{ entry.date|sys_date }}</strong></td>
+              <td>
+                <div class="assignee-display">
+                  <div class="assignee-avatar" style="width:24px;height:24px;font-size:10px;">{{ (entry.user.first_name or entry.user.email)[0]|upper }}</div>
+                  {{ entry.user.first_name or entry.user.email.split('@')[0] }}
+                </div>
+              </td>
+              <td class="fw-bold">{{ entry.hours }}h</td>
+              <td><small class="text-muted">{{ entry.description or '—' }}</small></td>
+              <td class="text-end">
+                <a href="{{ url_for('main.edit_time_entry', entry_id=entry.id) }}" class="btn btn-sm btn-outline-primary">
+                  <i class="fa-solid fa-pen"></i>
+                </a>
+              </td>
+            </tr>
+            {% endfor %}
+          {% else %}
+            <tr>
+              <td colspan="5" class="text-center py-4 text-muted">
+                <i class="fa-solid fa-clock fa-2x mb-2 d-block opacity-50"></i>
+                Sin registros de tiempo
+              </td>
+            </tr>
+          {% endif %}
+        </tbody>
+      </table>
+      {% if time_entries %}
+      <div class="progress-section">
+        <div class="d-flex justify-content-between align-items-center">
+          <strong>Total:</strong>
+          <span class="fw-bold">{{ "%.1f"|format(total_hours) }} horas</span>
+        </div>
+      </div>
+      {% endif %}
+    </div>
+
+    <!-- Attachments Section -->
+    <div class="detail-card mt-4">
+      <div class="detail-card-header">
+        <span><i class="fa-solid fa-paperclip me-2"></i>Archivos Adjuntos</span>
+        <span class="badge bg-secondary">{{ task.attachments|length }}</span>
+      </div>
+      
+      {% if task.attachments %}
+      <ul class="attachments-list">
+        {% for att in task.attachments %}
+        <li class="attachment-item">
+          {% set ext = att.filename.rsplit('.', 1)[-1].lower() if '.' in att.filename else '' %}
+          <div class="attachment-icon 
+            {% if ext == 'pdf' %}pdf
+            {% elif ext in ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'] %}image
+            {% elif ext in ['doc', 'docx'] %}doc
+            {% elif ext in ['xls', 'xlsx', 'csv'] %}spreadsheet
+            {% elif ext in ['zip', 'rar', '7z'] %}archive
+            {% else %}default{% endif %}">
+            {% if ext == 'pdf' %}<i class="fa-solid fa-file-pdf"></i>
+            {% elif ext in ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'] %}<i class="fa-solid fa-file-image"></i>
+            {% elif ext in ['doc', 'docx'] %}<i class="fa-solid fa-file-word"></i>
+            {% elif ext in ['xls', 'xlsx', 'csv'] %}<i class="fa-solid fa-file-excel"></i>
+            {% elif ext in ['zip', 'rar', '7z'] %}<i class="fa-solid fa-file-zipper"></i>
+            {% else %}<i class="fa-solid fa-file"></i>{% endif %}
+          </div>
+          <div class="attachment-info">
+            <div class="attachment-name" title="{{ att.filename }}">{{ att.filename }}</div>
+            <div class="attachment-meta">
+              {{ "%.1f"|format(att.file_size / 1024) }} KB • 
+              {{ att.uploaded_by.first_name or att.uploaded_by.email.split('@')[0] }} • 
+              {{ att.uploaded_at|sys_date }}
+            </div>
+          </div>
+          <div class="attachment-actions">
+            <a href="{{ url_for('main.download_attachment', attachment_id=att.id) }}" class="attachment-btn download" title="Descargar">
+              <i class="fa-solid fa-download"></i>
+            </a>
+            {% if current_user.is_internal or att.uploaded_by_id == current_user.id %}
+            <form action="{{ url_for('main.delete_attachment', attachment_id=att.id) }}" method="POST" style="display:inline;"
+                  onsubmit="return confirm('¿Eliminar este archivo?');">
+              <button type="submit" class="attachment-btn delete" title="Eliminar">
+                <i class="fa-solid fa-trash"></i>
+              </button>
+            </form>
+            {% endif %}
+          </div>
+        </li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <div class="empty-attachments">
+        <i class="fa-solid fa-paperclip d-block"></i>
+        <p class="mb-0">Sin archivos adjuntos</p>
+      </div>
+      {% endif %}
+
+      <!-- Upload Form -->
+      <form action="{{ url_for('main.upload_attachment', task_id=task.id) }}" method="POST" enctype="multipart/form-data" id="uploadForm">
+        <div class="upload-zone" id="uploadZone" onclick="document.getElementById('fileInput').click();">
+          <i class="fa-solid fa-cloud-upload-alt d-block"></i>
+          <div><strong>Arrastra archivos aquí</strong> o haz clic para seleccionar</div>
+          <small class="text-muted mt-2 d-block">Máx 16MB • PDF, imágenes, documentos, hojas de cálculo</small>
+          <input type="file" name="file" id="fileInput" style="display:none;" onchange="handleFileSelect(this)">
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="col-lg-4">
+    <div class="detail-card">
+      <div class="detail-card-header">
+        <span><i class="fa-solid fa-info-circle me-2"></i>Detalles</span>
+      </div>
+      <div class="detail-card-body">
+        <div class="detail-item">
+          <div class="detail-label">Asignado a</div>
+          <div class="detail-value">
+            {% if task.assigned_to %}
+            <div class="assignee-display">
+              <div class="assignee-avatar">{{ (task.assigned_to.first_name or task.assigned_to.email)[0]|upper }}</div>
+              {{ task.assigned_to.first_name or task.assigned_to.email }}
+            </div>
+            {% else %}
+            <span class="text-muted">Sin asignar</span>
+            {% endif %}
+          </div>
+        </div>
+
+        <div class="detail-item">
+          <div class="detail-label">Fecha de Vencimiento</div>
+          <div class="detail-value">
+            {% if task.due_date %}{{ task.due_date.strftime('%d %b %Y') }}{% else %}<span class="text-muted">—</span>{% endif %}
+          </div>
+        </div>
+
+        <div class="detail-item">
+          <div class="detail-label">Horas Estimadas</div>
+          <div class="detail-value">
+            {% if task.estimated_hours %}{{ task.estimated_hours }}h{% else %}<span class="text-muted">—</span>{% endif %}
+          </div>
+        </div>
+
+        <div class="detail-item">
+          <div class="detail-label">Horas Registradas</div>
+          <div class="detail-value">{{ "%.1f"|format(total_hours) }}h</div>
+        </div>
+
+        {% if task.estimated_hours %}
+        {% set est_hours = task.estimated_hours|float %}
+        {% set total_hours_float = total_hours|float %}
+        {% set pct = (total_hours_float / est_hours * 100) if est_hours else 0 %}
+        {% set pct_clamped = pct if pct < 100 else 100 %}
+        <div class="detail-item">
+          <div class="detail-label">Progreso de Horas</div>
+          <div class="progress-bar-custom mt-2">
+            <div class="progress-fill {% if total_hours_float >= est_hours %}bg-danger {% elif total_hours_float >= est_hours * 0.8 %}bg-warning {% else %}bg-success {% endif %}" data-width="{{ pct_clamped }}">
+            </div>
+          </div>
+          <small class="text-muted mt-1 d-block">{{ "%.0f"|format(pct) }}% del presupuesto</small>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+// Apply progress-fill widths set via data-width
+document.addEventListener('DOMContentLoaded', function(){
+  document.querySelectorAll('.progress-fill[data-width]').forEach(function(el){
+    var w = el.getAttribute('data-width') || 0;
+    el.style.width = String(w) + '%';
+  });
+});
+
+// File upload handling
+function handleFileSelect(input) {
+  if (input.files && input.files[0]) {
+    const file = input.files[0];
+    const maxSize = 16 * 1024 * 1024; // 16MB
+    
+    if (file.size > maxSize) {
+      alert('El archivo es demasiado grande. Máximo 16MB.');
+      input.value = '';
+      return;
+    }
+    
+    // Auto submit the form
+    document.getElementById('uploadForm').submit();
+  }
+}
+
+// Drag and drop handling
+const uploadZone = document.getElementById('uploadZone');
+const fileInput = document.getElementById('fileInput');
+
+['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+  uploadZone.addEventListener(eventName, (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+  });
+});
+
+['dragenter', 'dragover'].forEach(eventName => {
+  uploadZone.addEventListener(eventName, () => {
+    uploadZone.classList.add('dragover');
+  });
+});
+
+['dragleave', 'drop'].forEach(eventName => {
+  uploadZone.addEventListener(eventName, () => {
+    uploadZone.classList.remove('dragover');
+  });
+});
+
+uploadZone.addEventListener('drop', (e) => {
+  const files = e.dataTransfer.files;
+  if (files.length > 0) {
+    fileInput.files = files;
+    handleFileSelect(fileInput);
+  }
+});
+</script>
+{% endblock %}

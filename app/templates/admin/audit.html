@@ -1,0 +1,129 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ _('audit') }} — {{ _('administration') }} — {{ sys_app_name }}{% endblock %}
+
+{% block content %}
+<div class="mb-4">
+  <nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+      <li class="breadcrumb-item"><a href="{{ url_for('main.admin_dashboard') }}">{{ _('administration') }}</a></li>
+      <li class="breadcrumb-item active">{{ _('audit') }}</li>
+    </ol>
+  </nav>
+  <h2 class="fw-bold text-primary">
+    <i class="fa-solid fa-clipboard-list me-2"></i>{{ _('audit_title') }}
+  </h2>
+  <p class="text-muted">{{ _('audit_subtitle') }}</p>
+</div>
+
+<div class="card border-0 shadow-sm">
+  <div class="card-header bg-light d-flex justify-content-between align-items-center">
+    <h5 class="mb-0 fw-bold">{{ _('last_actions') }}</h5>
+    <span class="badge bg-secondary">{{ logs.total }} {{ _('records') }}</span>
+  </div>
+  <div class="card-body p-0">
+    {% if logs.items %}
+    <div class="table-responsive">
+      <table class="table table-hover mb-0">
+        <thead class="table-light">
+          <tr>
+            <th style="width: 160px;">{{ _('date_column') }}</th>
+            <th>{{ _('user_column') }}</th>
+            <th>{{ _('action_column') }}</th>
+            <th>{{ _('entity_column') }}</th>
+            <th>{{ _('details_column') }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for log in logs.items %}
+          <tr>
+            <td>
+              <small class="text-muted">{{ log.created_at.strftime('%d/%m/%Y %H:%M') }}</small>
+            </td>
+            <td>
+              {% if log.user %}
+                <span class="fw-semibold">{{ log.user.name }}</span>
+                <br><small class="text-muted">{{ log.user.email }}</small>
+              {% else %}
+                <span class="text-muted">{{ _('system_label') }}</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if log.action == 'CREATE' %}
+                <span class="badge bg-success">{{ _('action_create') }}</span>
+              {% elif log.action == 'UPDATE' %}
+                <span class="badge bg-warning text-dark">{{ _('action_update') }}</span>
+              {% elif log.action == 'DELETE' %}
+                <span class="badge bg-danger">{{ _('action_delete') }}</span>
+              {% else %}
+                <span class="badge bg-secondary">{{ log.action }}</span>
+              {% endif %}
+            </td>
+            <td>
+              <span class="fw-semibold">{{ log.entity_type }}</span>
+              <small class="text-muted">#{{ log.entity_id }}</small>
+            </td>
+            <td>
+              {% if log.changes %}
+                <button class="btn btn-sm btn-outline-secondary" type="button" 
+                        data-bs-toggle="collapse" data-bs-target="#changes{{ log.id }}">
+                  <i class="fa-solid fa-eye"></i> {{ _('view_changes') }}
+                </button>
+                <div class="collapse mt-2" id="changes{{ log.id }}">
+                  <pre class="bg-light p-2 rounded small mb-0" style="max-height: 150px; overflow: auto;">{{ log.changes | tojson(indent=2) }}</pre>
+                </div>
+              {% else %}
+                <span class="text-muted">—</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    
+    <!-- Paginación -->
+    {% if logs.pages > 1 %}
+    <div class="card-footer bg-light">
+      <nav aria-label="{{ _('audit_pagination') }}">
+        <ul class="pagination pagination-sm mb-0 justify-content-center">
+          {% if logs.has_prev %}
+            <li class="page-item">
+              <a class="page-link" href="{{ url_for('main.admin_audit', page=logs.prev_num) }}">
+                <i class="fa-solid fa-chevron-left"></i>
+              </a>
+            </li>
+          {% endif %}
+          
+          {% for page_num in logs.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=2) %}
+            {% if page_num %}
+              <li class="page-item {% if page_num == logs.page %}active{% endif %}">
+                <a class="page-link" href="{{ url_for('main.admin_audit', page=page_num) }}">{{ page_num }}</a>
+              </li>
+            {% else %}
+              <li class="page-item disabled"><span class="page-link">…</span></li>
+            {% endif %}
+          {% endfor %}
+          
+          {% if logs.has_next %}
+            <li class="page-item">
+              <a class="page-link" href="{{ url_for('main.admin_audit', page=logs.next_num) }}">
+                <i class="fa-solid fa-chevron-right"></i>
+              </a>
+            </li>
+          {% endif %}
+        </ul>
+      </nav>
+    </div>
+    {% endif %}
+    
+    {% else %}
+    <div class="text-center py-5 text-muted">
+      <i class="fa-solid fa-clipboard-list fa-3x mb-3 opacity-50"></i>
+      <p class="mb-0">{{ _('no_audit_logs') }}</p>
+      <p class="small">{{ _('actions_appear_here') }}</p>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

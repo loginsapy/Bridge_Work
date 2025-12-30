@@ -1,0 +1,430 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ _('reports') }} — {{ sys_app_name }}{% endblock %}
+
+{% block head %}
+<style>
+/* Monday.com Reports Page Styles */
+.reports-page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--monday-border);
+}
+
+.reports-page-header h1 {
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--monday-dark);
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.reports-page-header h1 i {
+  color: var(--monday-green);
+}
+
+/* Monday KPI Grid */
+.monday-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+@media (max-width: 992px) {
+  .monday-kpi-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 576px) {
+  .monday-kpi-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.monday-kpi-box {
+  background: white;
+  border-radius: 8px;
+  border: 1px solid var(--monday-border);
+  padding: 20px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  transition: all 0.2s;
+}
+
+.monday-kpi-box:hover {
+  border-color: var(--monday-blue);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+.kpi-icon-circle {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  flex-shrink: 0;
+}
+
+.kpi-icon-circle.blue { background: rgba(0, 115, 234, 0.1); color: var(--monday-blue); }
+.kpi-icon-circle.green { background: rgba(0, 200, 117, 0.1); color: var(--monday-green); }
+.kpi-icon-circle.purple { background: rgba(162, 93, 220, 0.1); color: var(--monday-purple); }
+.kpi-icon-circle.yellow { background: rgba(253, 171, 61, 0.15); color: #e68a00; }
+
+.kpi-content .value {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--monday-dark);
+  line-height: 1;
+  margin-bottom: 4px;
+}
+
+.kpi-content .label {
+  font-size: 13px;
+  color: var(--monday-text-secondary);
+}
+
+/* Monday Cards Row */
+.monday-cards-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+@media (max-width: 992px) {
+  .monday-cards-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+.monday-report-card {
+  background: white;
+  border-radius: 8px;
+  border: 1px solid var(--monday-border);
+  overflow: hidden;
+}
+
+.monday-report-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  background: var(--monday-light-grey);
+  border-bottom: 1px solid var(--monday-border);
+}
+
+.monday-report-header h3 {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--monday-dark);
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.monday-report-header h3 i {
+  color: var(--monday-text-secondary);
+}
+
+.monday-report-body {
+  padding: 20px;
+}
+
+/* Budget Section */
+.budget-stats {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.budget-stat {
+  text-align: center;
+}
+
+.budget-stat .value {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--monday-dark);
+}
+
+.budget-stat .label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--monday-text-secondary);
+}
+
+.budget-stat.available .value.positive {
+  color: var(--monday-green);
+}
+
+.budget-stat.available .value.negative {
+  color: var(--monday-red);
+}
+
+/* Monday Progress Bar */
+.monday-progress-container {
+  margin-top: 16px;
+}
+
+.monday-progress-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--monday-text-secondary);
+  margin-bottom: 8px;
+}
+
+.monday-progress-track {
+  height: 8px;
+  background: var(--monday-light-grey);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.monday-progress-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}
+
+.monday-progress-fill.green { background: var(--monday-green); }
+.monday-progress-fill.yellow { background: var(--monday-yellow); }
+.monday-progress-fill.red { background: var(--monday-red); }
+
+/* User Hours List */
+.user-hours-list {
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.user-hours-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--monday-border);
+}
+
+.user-hours-item:last-child {
+  border-bottom: none;
+}
+
+.user-hours-item .user-cell {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.user-hours-item .avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 600;
+  color: white;
+}
+
+.user-hours-item .email {
+  font-size: 13px;
+  color: var(--monday-dark);
+}
+
+.user-hours-item .hours {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 12px;
+  background: var(--monday-light-grey);
+  border-radius: 4px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--monday-dark);
+}
+
+/* Empty State */
+.monday-empty-report {
+  text-align: center;
+  padding: 32px 20px;
+  color: var(--monday-text-secondary);
+}
+
+.monday-empty-report i {
+  font-size: 32px;
+  color: var(--monday-border);
+  margin-bottom: 12px;
+}
+
+/* Info Banner */
+.monday-info-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: rgba(0, 115, 234, 0.08);
+  border-radius: 8px;
+  border: 1px solid rgba(0, 115, 234, 0.2);
+  font-size: 13px;
+  color: var(--monday-dark);
+}
+
+.monday-info-banner i {
+  color: var(--monday-blue);
+}
+
+.monday-info-banner a {
+  color: var(--monday-blue);
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.monday-info-banner a:hover {
+  text-decoration: underline;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Page Header -->
+<div class="reports-page-header">
+  <h1>
+    <i class="fa-solid fa-chart-line"></i>
+    {{ _('reports_header') }}
+  </h1>
+</div>
+
+<!-- KPIs -->
+<div class="monday-kpi-grid">
+  <div class="monday-kpi-box">
+    <div class="kpi-icon-circle blue">
+      <i class="fa-solid fa-folder"></i>
+    </div>
+    <div class="kpi-content">
+      <div class="value">{{ total_projects }}</div>
+      <div class="label">{{ _('total_projects') }}</div>
+    </div>
+  </div>
+  
+  <div class="monday-kpi-box">
+    <div class="kpi-icon-circle purple">
+      <i class="fa-solid fa-list-check"></i>
+    </div>
+    <div class="kpi-content">
+      <div class="value">{{ total_tasks }}</div>
+      <div class="label">{{ _('total_tasks') }}</div>
+    </div>
+  </div>
+  
+  <div class="monday-kpi-box">
+    <div class="kpi-icon-circle green">
+      <i class="fa-solid fa-circle-check"></i>
+    </div>
+    <div class="kpi-content">
+      <div class="value">{{ completed_tasks }}</div>
+      <div class="label">{{ _('completed') }}</div>
+    </div>
+  </div>
+  
+  <div class="monday-kpi-box">
+    <div class="kpi-icon-circle yellow">
+      <i class="fa-solid fa-percent"></i>
+    </div>
+    <div class="kpi-content">
+      <div class="value">{{ "%.0f"|format(completed_tasks / total_tasks * 100 if total_tasks > 0 else 0) }}%</div>
+      <div class="label">{{ _('completion_rate') }}</div>
+    </div>
+  </div>
+</div>
+
+<!-- Budget & Hours Cards -->
+<div class="monday-cards-row">
+  <!-- Budget Card -->
+  <div class="monday-report-card">
+    <div class="monday-report-header">
+      <h3><i class="fa-solid fa-chart-pie"></i> {{ _('total_budget') }}</h3>
+    </div>
+    <div class="monday-report-body">
+      <div class="budget-stats">
+        <div class="budget-stat">
+          <div class="value">{{ "%.0f"|format(total_budget) }}h</div>
+          <div class="label">{{ _('total_budget') }}</div>
+        </div>
+        <div class="budget-stat">
+          <div class="value">{{ "%.0f"|format(total_hours_spent) }}h</div>
+          <div class="label">{{ _('budget_used_label') }}</div>
+        </div>
+        <div class="budget-stat available">
+          <div class="value {% if total_budget - total_hours_spent >= 0 %}positive{% else %}negative{% endif %}">
+            {{ "%.0f"|format(total_budget - total_hours_spent) }}h
+          </div>
+          <div class="label">{{ _('available') }}</div>
+        </div>
+      </div>
+      
+      <div class="monday-progress-container">
+        <div class="monday-progress-label">
+          <span>{{ _('budget_used_label') }}</span>
+          <span>{{ "%.0f"|format(budget_usage_percent) }}%</span>
+        </div>
+        <div class="monday-progress-track">
+          <div class="monday-progress-fill 
+            {% if budget_usage_percent > 90 %}red
+            {% elif budget_usage_percent > 70 %}yellow
+            {% else %}green{% endif %}"
+            style="width: {{ [budget_usage_percent, 100] | min }}%">
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Hours by User Card -->
+  <div class="monday-report-card">
+    <div class="monday-report-header">
+      <h3><i class="fa-solid fa-users"></i> {{ _('hours_by_user') }}</h3>
+    </div>
+    <div class="monday-report-body">
+      {% if user_hours %}
+        <div class="user-hours-list">
+          {% for user_email, hours in user_hours %}
+          <div class="user-hours-item">
+            <div class="user-cell">
+              <div class="avatar" style="background: {{ ['#0073ea', '#00c875', '#fdab3d', '#e2445c', '#a25ddc', '#579bfc', '#ff7575', '#cab641'][loop.index0 % 8] }};">
+                {{ user_email[0]|upper }}
+              </div>
+              <span class="email">{{ user_email }}</span>
+            </div>
+            <span class="hours">{{ "%.1f"|format(hours) }}h</span>
+          </div>
+          {% endfor %}
+        </div>
+      {% else %}
+        <div class="monday-empty-report">
+          <i class="fa-solid fa-clock"></i>
+          <p>{{ _('no_records') }}</p>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<!-- Info Banner -->
+<div class="monday-info-banner">
+  <i class="fa-solid fa-circle-info"></i>
+  <span>{{ _('auto_update') }} <a href="{{ url_for('main.time_entries') }}">{{ _('log_more_hours') }}</a></span>
+</div>
+{% endblock %}

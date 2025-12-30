@@ -1,0 +1,370 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ _('dashboard') }} — {{ sys_app_name }}{% endblock %}
+
+{% block content %}
+{% if no_role %}
+<!-- No Role Message -->
+<div class="container py-5">
+  <div class="row justify-content-center">
+    <div class="col-md-6">
+      <div class="card border-0 shadow-sm text-center">
+        <div class="card-body py-5">
+          <i class="fa-solid fa-user-lock fa-4x text-warning mb-4"></i>
+          <h3 class="fw-bold">{{ _('no_role_title') }}</h3>
+          <p class="text-muted mb-4">{{ _('no_role_message') }}</p>
+          <a href="{{ url_for('main.profile') }}" class="btn btn-outline-primary">
+            <i class="fa-solid fa-user me-2"></i>{{ _('view_profile') }}
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% else %}
+<!-- Monday-Style Welcome Header -->
+<div class="monday-page-header mb-4 fade-in">
+  <div class="d-flex justify-content-between align-items-center">
+    <div>
+      <h2 class="mb-1">{{ _('welcome_back') }}, {{ current_user.first_name or 'User' }} 👋</h2>
+      <p class="mb-0 opacity-75">{{ _('summary') }}</p>
+    </div>
+    <div class="d-none d-md-flex align-items-center gap-3">
+      <span class="opacity-75"><i class="fa-regular fa-calendar me-2"></i>{{ now.strftime('%A, %d %b %Y') if now else '' }}</span>
+    </div>
+  </div>
+</div>
+
+<!-- KPI Cards - Monday Style -->
+<div class="row g-4 mb-4">
+  <div class="col-12 col-sm-6 col-xl-3">
+    <div class="card stat-card fade-in hover-lift">
+      <div class="card-body pt-4">
+        <div class="stat-icon">
+          <i class="fa-solid fa-folder-open"></i>
+        </div>
+        <p class="card-title mb-1">{{ _('active_projects') }}</p>
+        <h2 class="display-6 mb-2">{{ active_projects_count or 0 }}</h2>
+        <div class="d-flex align-items-center gap-2">
+          <span class="badge bg-success bg-opacity-10 text-success">
+            <i class="fa-solid fa-arrow-up me-1"></i>+2
+          </span>
+          <small class="text-muted">{{ _('since_last_month') }}</small>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-12 col-sm-6 col-xl-3">
+    <div class="card stat-card fade-in hover-lift" style="animation-delay: 0.1s;">
+      <div class="card-body pt-4">
+        <div class="stat-icon">
+          <i class="fa-regular fa-clock"></i>
+        </div>
+        <p class="card-title mb-1">{{ _('hours_this_week') }}</p>
+        <h2 class="display-6 mb-2">{{ hours_this_week or 0 }}h</h2>
+        <div class="d-flex align-items-center gap-2">
+          <span class="badge bg-info bg-opacity-10 text-info">
+            <i class="fa-solid fa-minus me-1"></i>12.5h
+          </span>
+          <small class="text-muted">{{ _('vs_last_week') }}</small>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {% if not (current_user.role and current_user.role.name == 'Participante') %}
+  <div class="col-12 col-sm-6 col-xl-3">
+    <div class="card stat-card fade-in hover-lift" style="animation-delay: 0.2s;">
+      <div class="card-body pt-4">
+        <div class="stat-icon">
+          <i class="fa-solid fa-chart-pie"></i>
+        </div>
+        <p class="card-title mb-1">{{ _('budget_used') }}</p>
+        <h2 class="display-6 mb-2">{{ '%.0f'|format(avg_budget_usage or 0) }}%</h2>
+        <div class="monday-progress mt-2" style="height: 4px;">
+          <div class="monday-progress-bar {% if avg_budget_usage > 80 %}danger{% elif avg_budget_usage > 60 %}warning{% endif %}" 
+               style="width: {{ avg_budget_usage or 0 }}%;"></div>
+        </div>
+        <small class="text-muted mt-2 d-block">{{ _('average_per_project') }}</small>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="col-12 col-sm-6 col-xl-3">
+    <div class="card stat-card fade-in hover-lift" style="animation-delay: 0.3s;">
+      <div class="card-body pt-4">
+        <div class="stat-icon">
+          <i class="fa-solid fa-circle-check"></i>
+        </div>
+        <p class="card-title mb-1">{{ _('tasks_completed') }}</p>
+        <h2 class="display-6 mb-2">{{ tasks_completed_count or 0 }}</h2>
+        <div class="d-flex align-items-center gap-2">
+          <span class="badge bg-success bg-opacity-10 text-success">
+            <i class="fa-solid fa-arrow-up me-1"></i>+8
+          </span>
+          <small class="text-muted">{{ _('this_week') }}</small>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Monday-Style Kanban Board -->
+<div class="row g-4 mb-4">
+  <div class="col-12 col-lg-8">
+    <div class="card">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <div class="d-flex align-items-center gap-2">
+          <i class="fa-solid fa-table-cells-large text-monday-blue"></i>
+          <h5 class="mb-0 fw-semibold">{{ _('projects_by_status') }}</h5>
+        </div>
+        <a href="{{ url_for('main.projects') }}" class="btn btn-sm btn-outline-primary">{{ _('view_all') }}</a>
+      </div>
+      <div class="card-body">
+        <div class="monday-kanban">
+          {% set status_config = {
+            'PLANNING': {'label': _('planning'), 'color': 'yellow', 'monday_class': 'monday-avatar-yellow'},
+            'ACTIVE': {'label': _('active_plural'), 'color': 'blue', 'monday_class': 'monday-avatar-blue'},
+            'COMPLETED': {'label': _('completed_plural'), 'color': 'green', 'monday_class': 'monday-avatar-green'},
+            'ARCHIVED': {'label': _('archived_plural'), 'color': 'grey', 'monday_class': 'monday-avatar-grey'}
+          } %}
+          {% for status, config in status_config.items() %}
+            <div class="monday-kanban-column">
+              <div class="monday-kanban-header {{ config.color }}">
+                <span>{{ config.label }}</span>
+                <span class="badge bg-white bg-opacity-25">{{ projects_by_status.get(status, [])|length }}</span>
+              </div>
+              <div class="monday-kanban-cards">
+                {% for project in projects_by_status.get(status, [])[:5] %}
+                  <a href="{{ url_for('main.project_detail', project_id=project.id) }}" class="text-decoration-none">
+                    <div class="monday-kanban-card {{ config.color }}">
+                      <div class="fw-semibold text-dark mb-1">{{ project.name }}</div>
+                      <div class="d-flex align-items-center justify-content-between">
+                        <div class="d-flex align-items-center gap-2">
+                          {% if project.clients %}
+                            <div class="monday-avatar sm {{ config.monday_class }}">
+                              {{ (project.clients[0].first_name or project.clients[0].email)[0]|upper }}
+                            </div>
+                            <small class="text-muted">{{ project.clients[0].first_name or project.clients[0].email.split('@')[0] }}</small>
+                          {% endif %}
+                        </div>
+                        {% if project.end_date %}
+                          <small class="text-muted">
+                            <i class="fa-regular fa-calendar me-1"></i>{{ project.end_date.strftime('%d %b') }}
+                          </small>
+                        {% endif %}
+                      </div>
+                      {% if project.progress %}
+                      <div class="monday-progress mt-2">
+                        <div class="monday-progress-bar" style="width: {{ project.progress }}%;"></div>
+                      </div>
+                      {% endif %}
+                    </div>
+                  </a>
+                {% else %}
+                  <div class="text-center text-muted small py-4">
+                    <i class="fa-regular fa-folder-open mb-2" style="font-size: 1.5rem; opacity: 0.5;"></i>
+                    <p class="mb-0">{{ _('no_projects') }}</p>
+                  </div>
+                {% endfor %}
+                {% if projects_by_status.get(status, [])|length > 5 %}
+                  <div class="text-center py-2">
+                    <a href="{{ url_for('main.projects') }}?status={{ status }}" class="text-muted small text-decoration-none">
+                      +{{ projects_by_status.get(status, [])|length - 5 }} {{ _('more') }} →
+                    </a>
+                  </div>
+                {% endif %}
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-12 col-lg-4">
+    <div class="card">
+      <div class="card-header">
+        <h5 class="mb-0 text-primary"><i class="fa-solid fa-chart-pie me-2"></i> {{ _('project_status') }}</h5>
+      </div>
+      <div class="card-body py-2">
+        <div class="chart-container" style="height: 150px;">
+          <canvas id="projectStatusChart" data-status='{{ project_status_data|tojson|safe }}'></canvas>
+        </div>
+        <div id="project-status-legend" class="mt-2">
+          {% set status_colors = {
+            'ACTIVE': 'success',
+            'PLANNING': 'warning',
+            'COMPLETED': 'info',
+            'ARCHIVED': 'secondary'
+          } %}
+          {% for status, count in project_status_data.items() %}
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <span class="d-flex align-items-center text-secondary">
+                <span class="badge rounded-circle p-2 me-2 bg-{{ status_colors.get(status, 'secondary') }}"></span> {{ status|title }}
+              </span>
+              <span class="fw-semibold text-primary">{{ count }}</span>
+            </div>
+          {% endfor %}
+          {% if not project_status_data %}
+            <div class="text-center text-secondary">{{ _('no_project_status_data') }}</div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Velocity Chart -->
+<div class="row g-4 mb-5">
+  <div class="col-12">
+    <div class="card">
+      <div class="card-header">
+        <h5 class="mb-0 text-primary"><i class="fa-solid fa-gauge-high me-2"></i> {{ _('team_velocity') }}</h5>
+      </div>
+      <div class="card-body">
+        <div class="chart-container" style="height: 300px;">
+          <canvas id="velocityChart"></canvas>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Projects and Activity Row -->
+<div class="row g-4 mb-5">
+  <div class="col-12 col-lg-7">
+    <div class="card">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <h5 class="mb-0 text-primary"><i class="fa-solid fa-folder me-2"></i> {{ _('recent_projects') }}</h5>
+        <a href="/projects" class="btn btn-sm btn-outline-primary">{{ _('view_all') }}</a>
+      </div>
+      <div class="card-body p-0">
+        <div class="table-responsive">
+          <table class="table table-hover mb-0">
+            <thead class="bg-light">
+              <tr>
+                <th class="text-secondary">{{ _('project') }}</th>
+                <th class="text-secondary">{{ _('client') }}</th>
+                <th class="text-secondary">{{ _('progress') }}</th>
+                <th class="text-secondary">{{ _('status') }}</th>
+                <th class="text-secondary">{{ _('due_date') }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% if recent_projects %}
+                {% for project in recent_projects %}
+                  <tr>
+                    <td>
+                      <div class="fw-semibold text-primary">
+                        <a href="{{ url_for('main.project_detail', project_id=project.id) }}" class="text-decoration-none text-primary">{{ project.name }}</a>
+                      </div>
+                      <small class="text-secondary">{{ project.project_type.replace('_', ' ')|title }}</small>
+                    </td>
+                    <td class="text-secondary">
+                      {% if project.clients %}
+                        {% for client in project.clients %}{{ client.first_name or client.email.split('@')[0] }}{% if not loop.last %}, {% endif %}{% endfor %}
+                      {% else %}
+                        N/A
+                      {% endif %}
+                    </td>
+                    <td>
+                      <div class="d-flex align-items-center gap-2">
+                        <div class="progress flex-grow-1" style="height: 6px;">
+                          <div class="progress-bar bg-primary" role="progressbar" style="width: {{ '%.0f'|format(project.progress or 0) }}%"></div>
+                        </div>
+                        <small class="text-secondary">{{ '%.0f'|format(project.progress or 0) }}%</small>
+                      </div>
+                    </td>
+                    <td><span class="badge badge-primary">{{ project.status|title }}</span></td>
+                    <td><small class="text-secondary">{{ project.end_date.strftime('%d %b %Y') if project.end_date else 'N/A' }}</small></td>
+                  </tr>
+                {% endfor %}
+              {% else %}
+                <tr>
+                  <td colspan="5" class="text-center text-secondary py-4">{{ _('no_recent_projects') }}</td>
+                </tr>
+              {% endif %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-12 col-lg-5">
+    <div class="card">
+      <div class="card-header">
+        <h5 class="mb-0 text-primary"><i class="fa-solid fa-clock-rotate-left me-2"></i> {{ _('recent_activity') }}</h5>
+      </div>
+      <div class="card-body" style="max-height: 400px; overflow-y: auto;">
+        {% if recent_activity %}
+          {% for activity in recent_activity %}
+            <div class="d-flex {% if not loop.last %}mb-3 pb-3 border-bottom{% endif %}">
+              <div class="flex-shrink-0">
+                <div
+                  class="rounded-circle bg-light text-primary d-flex align-items-center justify-content-center"
+                  style="width: 40px; height: 40px;">
+                  <i class="fa-solid fa-check"></i>
+                </div>
+              </div>
+              <div class="flex-grow-1 ms-3">
+                <div class="fw-semibold text-primary">{{ _('task_completed') }}</div>
+                <p class="text-secondary mb-1 small">
+                  {{ activity.assigned_to.first_name or _('someone') }} {{ _('completed_task') }} "{{ activity.title }}"
+                </p>
+                {% if activity.due_date %}
+                  <small class="text-secondary"><i class="fa-solid fa-clock me-1"></i> {{ activity.due_date.strftime('%d %b %Y') }}</small>
+                {% endif %}
+              </div>
+            </div>
+          {% endfor %}
+        {% else %}
+          <div class="text-center text-secondary py-4">{{ _('no_recent_activity') }}</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Team Overview -->
+<div class="row g-4 mb-5">
+  <div class="col-12">
+    <div class="card">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <h5 class="mb-0 text-primary"><i class="fa-solid fa-users me-2"></i> {{ _('team_recent_activity') }}</h5>
+        <a href="/team" class="btn btn-sm btn-outline-primary">{{ _('view_all') }}</a>
+      </div>
+      <div class="card-body">
+        <div class="row g-3">
+          {% if active_team_members %}
+            {% for member in active_team_members %}
+            <div class="col-6 col-md-4 col-lg-2">
+              <div class="text-center p-3 rounded-md hover-shadow bg-light">
+                <div class="rounded-circle mb-2 mx-auto d-flex align-items-center justify-content-center border border-primary border-3" style="width: 60px; height: 60px; background: #a25ddc; color: white; font-size: 20px; font-weight: 600;">
+                  {{ (member.first_name or member.email)[0]|upper }}
+                </div>
+                <div class="fw-semibold text-primary">{{ member.first_name or member.email.split('@')[0] }}</div>
+                <small class="text-secondary">{{ member.role.name if member.role else _('no_role') }}</small>
+                <div class="mt-2">
+                  <span class="badge bg-success">{{ "%.0f"|format(member.hours_logged or 0) }}h</span>
+                </div>
+                <small class="text-muted d-block mt-1">{{ member.recent_tasks_count }} {{ _('tasks_lowercase') }}</small>
+              </div>
+            </div>
+            {% endfor %}
+          {% else %}
+            <div class="col-12 text-center text-secondary py-4">
+              <i class="fa-solid fa-users fa-2x mb-2 opacity-50"></i>
+              <p class="mb-0">{{ _('no_team_recent_activity') }}</p>
+            </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

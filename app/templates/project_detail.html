@@ -1,0 +1,273 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ project.name }} — {{ sys_app_name }}{% endblock %}
+
+{% block content %}
+<!-- Header -->
+<div class="d-flex justify-content-between align-items-start mb-4">
+  <div>
+    <nav aria-label="breadcrumb">
+      <ol class="breadcrumb mb-1">
+        <li class="breadcrumb-item"><a href="{{ url_for('main.projects') }}">Proyectos</a></li>
+        <li class="breadcrumb-item active" aria-current="page">{{ project.name }}</li>
+      </ol>
+    </nav>
+    <h2 class="fw-bold text-primary mb-0">{{ project.name }}</h2>
+  </div>
+  <div>
+    {% if current_user.role and current_user.role.name in ['PMP', 'Admin'] %}
+      <a href="{{ url_for('main.edit_project', project_id=project.id) }}" class="btn btn-outline-secondary me-2 text-dark"><i class="fa-solid fa-pen me-2"></i>Editar</a>
+    {% endif %}
+    {% if current_user.is_internal %}
+      <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createTaskModal"><i class="fa-solid fa-plus me-2"></i>Nueva Tarea</button>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Metrics Cards -->
+<div class="row g-4 mb-4">
+  <div class="col-md-4">
+    <div class="card h-100 border-start border-4 border-primary">
+      <div class="card-body">
+        <h6 class="text-muted text-uppercase small fw-bold">Presupuesto de Horas</h6>
+        <div class="d-flex align-items-baseline">
+          <h3 class="mb-0 fw-bold">{{ metrics.total_hours_spent|round(1) }}h</h3>
+          <span class="text-muted ms-2">/ {{ project.budget_hours|default('-', true) }}h</span>
+        </div>
+        <div class="progress mt-2" style="height: 4px;">
+          <div class="progress-bar" role="progressbar" style="width: {{ (metrics.budget_usage_percent if metrics.budget_usage_percent is not none else 0)|round(1) }}%"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card h-100 border-start border-4 border-success">
+      <div class="card-body">
+        <h6 class="text-muted text-uppercase small fw-bold">Tareas Completadas</h6>
+        <div class="d-flex align-items-baseline">
+          <h3 class="mb-0 fw-bold">{{ metrics.completed_tasks }}</h3>
+          <span class="text-muted ms-2">/ {{ metrics.total_tasks }}</span>
+        </div>
+        <small class="text-success fw-semibold">
+          {% if metrics.total_tasks > 0 %}
+            {{ (metrics.completed_tasks / metrics.total_tasks * 100)|round|int }}%
+          {% else %}
+            0%
+          {% endif %}
+          completado
+        </small>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card h-100 border-start border-4 border-info">
+      <div class="card-body">
+        <h6 class="text-muted text-uppercase small fw-bold">Estado</h6>
+        <div class="mt-2">
+            <span class="badge bg-light text-dark border fs-6">{{ project.status|replace('_', ' ')|title }}</span>
+        </div>
+        {% if project.clients %}
+          <h6 class="text-muted text-uppercase small fw-bold mt-3">Clientes</h6>
+          <div class="d-flex flex-wrap gap-1 mt-1">
+            {% for client in project.clients %}
+              <span class="badge bg-secondary">{{ client.first_name }} {{ client.last_name }}</span>
+            {% endfor %}
+          </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Tasks Table -->
+<div class="card">
+  <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+    <h5 class="card-title mb-0">Tareas del Proyecto</h5>
+    <div class="d-flex align-items-center gap-2">
+      <div class="btn-group btn-group-sm" role="group" aria-label="View toggle">
+        <button id="view-table" class="btn btn-outline-secondary active">Tabla</button>
+        <button id="view-kanban" class="btn btn-outline-secondary">Kanban</button>
+      </div>
+      <div class="input-group w-auto">
+        <input type="text" class="form-control form-control-sm" placeholder="Filtrar tareas...">
+      </div>
+    </div>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead class="bg-light">
+        <tr>
+          <th class="ps-4">Tarea</th>
+          <th>Asignado</th>
+          <th>Estado</th>
+          <th>Vencimiento</th>
+          <th class="text-end pe-4">Acciones</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% if tasks %}
+          {% set status_colors = {'BACKLOG': 'secondary', 'IN_PROGRESS': 'primary', 'IN_REVIEW': 'info', 'COMPLETED': 'success', 'CANCELLED': 'danger'} %}
+          {% for task in tasks %}
+          <tr>
+            <td class="ps-4">
+              <div class="fw-semibold">{{ task.title }}</div>
+              <small class="text-muted">#{{ task.id }}</small>
+            </td>
+            <td>
+              {% if task.assigned_to %}
+                <div class="d-flex align-items-center">
+                  <div class="rounded-circle bg-light text-primary d-flex align-items-center justify-content-center me-2" style="width: 24px; height: 24px; font-size: 10px;">
+                    {{ task.assigned_to.first_name[0] if task.assigned_to.first_name else 'U' }}
+                  </div>
+                  <small>{{ task.assigned_to.first_name }}</small>
+                </div>
+              {% else %}
+                <span class="text-muted small">Sin asignar</span>
+              {% endif %}
+            </td>
+            <td><span class="badge bg-{{ status_colors.get(task.status, 'secondary') }}">{{ task.status.replace('_', ' ')|title }}</span></td>
+            <td><small class="text-muted">{{ task.due_date.strftime('%d %b %Y') if task.due_date else '-' }}</small></td>
+            <td class="text-end pe-4">
+              {% if current_user.is_internal %}
+                <a href="{{ url_for('main.edit_task', task_id=task.id) }}" class="btn btn-sm btn-outline-secondary" title="Editar"><i class="fa-solid fa-pen"></i></a>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        {% else %}
+          <tr>
+            <td colspan="5" class="text-center py-5 text-muted">Este proyecto no tiene tareas aún.</td>
+          </tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Kanban View -->
+<div id="kanban-board" class="row g-3 mt-4" style="display:none;">
+  {% set kanban_cols = ['BACKLOG','IN_PROGRESS','IN_REVIEW','COMPLETED'] %}
+  {% set col_titles = {'BACKLOG':'Backlog','IN_PROGRESS':'En Progreso','IN_REVIEW':'En Revisión','COMPLETED':'Completadas'} %}
+  {% for col in kanban_cols %}
+  <div class="col-md-3">
+    <div class="card h-100">
+      <div class="card-header bg-light">
+        <h6 class="mb-0">{{ col_titles.get(col, col) }}</h6>
+      </div>
+      <div class="card-body p-2 kanban-column" data-status="{{ col }}" ondragover="event.preventDefault();" ondrop="kanbanDrop(event, '{{ col }}')">
+        {% for task in tasks if task.status == col %}
+        <div class="card mb-2 task-card" draggable="true" data-task-id="{{ task.id }}" ondragstart="kanbanDrag(event, {{ task.id }})">
+          <div class="card-body py-2 px-3">
+            <div class="d-flex justify-content-between align-items-start">
+              <div>
+                <div class="fw-semibold">{{ task.title }}</div>
+                <small class="text-muted">#{{ task.id }}</small>
+              </div>
+              <div class="text-end">
+                {% if task.assigned_to %}
+                  <small class="text-muted">{{ task.assigned_to.first_name or task.assigned_to.email }}</small>
+                {% endif %}
+              </div>
+            </div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+<!-- Modal Nueva Tarea -->
+{% if current_user.is_internal %}
+<div class="modal fade" id="createTaskModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title fw-bold">Nueva Tarea</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <form method="POST" action="{{ url_for('main.create_task') }}">
+        <div class="modal-body">
+          <input type="hidden" name="project_id" value="{{ project.id }}">
+          
+          <div class="mb-3">
+            <label class="form-label">Título</label>
+            <input type="text" class="form-control" name="title" required placeholder="Título de la tarea">
+          </div>
+          
+          <div class="mb-3">
+            <label class="form-label">Descripción</label>
+            <textarea class="form-control" name="description" rows="3" placeholder="Detalles de la tarea..."></textarea>
+          </div>
+          
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Asignar a</label>
+              <select class="form-select" name="assigned_to_id">
+                <option value="">-- Sin asignar --</option>
+                {% for u in assignees %}
+                  <option value="{{ u.id }}">{{ u.first_name or u.email }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Prioridad</label>
+              <select class="form-select" name="priority">
+                <option value="LOW">Baja</option>
+                <option value="MEDIUM" selected>Media</option>
+                <option value="HIGH">Alta</option>
+                <option value="CRITICAL">Crítica</option>
+              </select>
+            </div>
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Vencimiento</label>
+              <input type="datetime-local" class="form-control" name="due_date">
+            </div>
+          </div>
+          
+          <div class="mb-3">
+            <label class="form-label">Horas Estimadas</label>
+            <input type="number" class="form-control" name="estimated_hours" step="0.5" placeholder="Ej. 8">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn btn-primary">Crear Tarea</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+// Toggle Table/Kanban views
+const tableEl = document.querySelector('.table-responsive');
+const kanbanEl = document.getElementById('kanban-board');
+const btnTable = document.getElementById('view-table');
+const btnKanban = document.getElementById('view-kanban');
+btnTable.addEventListener('click', () => { btnTable.classList.add('active'); btnKanban.classList.remove('active'); tableEl.style.display='block'; kanbanEl.style.display='none'; });
+btnKanban.addEventListener('click', () => { btnKanban.classList.add('active'); btnTable.classList.remove('active'); tableEl.style.display='none'; kanbanEl.style.display='flex'; });
+
+function kanbanDrag(evt, taskId){
+  evt.dataTransfer.setData('text/plain', taskId);
+}
+
+function kanbanDrop(evt, status){
+  evt.preventDefault();
+  const taskId = evt.dataTransfer.getData('text/plain');
+  fetch(`{{ url_for('main.move_task', task_id=0) }}`.replace('/0', '/' + taskId), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({status: status})
+  }).then(r => {
+    if(r.ok) location.reload();
+    else r.json().then(j=>alert(j.error || 'Error'))
+  })
+}
+</script>
+{% endblock %}
+{% endblock %}

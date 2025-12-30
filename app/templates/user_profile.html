@@ -1,0 +1,89 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ user.name }} — {{ sys_app_name }}{% endblock %}
+
+{% block content %}
+<div class="mb-4">
+  <h2 class="fw-bold text-primary">
+    <i class="fa-solid fa-user-circle me-2"></i>{{ user.name }}
+  </h2>
+  <p class="text-muted">Perfil de usuario</p>
+</div>
+
+<div class="row">
+  <div class="col-lg-4 mb-4">
+    <div class="card border-0 shadow-sm">
+      <div class="card-body text-center py-5">
+        <div class="mb-4">
+          <div class="mx-auto rounded-circle bg-primary bg-gradient d-flex align-items-center justify-content-center" 
+               style="width: 120px; height: 120px; font-size: 3rem;">
+            <span class="text-white fw-bold">
+              {{ (user.first_name or user.email)[0] | upper }}{{ (user.last_name or '')[0] | upper if user.last_name else '' }}
+            </span>
+          </div>
+        </div>
+        <h4 class="fw-bold mb-1">{{ user.name }}</h4>
+        <p class="text-muted mb-3">{{ user.email }}</p>
+      </div>
+    </div>
+
+    <div class="card border-0 shadow-sm mt-3">
+      <div class="card-header bg-light">
+        <h6 class="mb-0 fw-bold">Estadísticas</h6>
+      </div>
+      <div class="card-body p-0">
+        <div class="list-group list-group-flush">
+          <div class="list-group-item d-flex justify-content-between align-items-center">
+            <span>Tareas asignadas</span>
+            <span class="badge bg-primary rounded-pill">{{ stats.tasks_assigned }}</span>
+          </div>
+          <div class="list-group-item d-flex justify-content-between align-items-center">
+            <span>Completadas</span>
+            <span class="badge bg-success rounded-pill">{{ stats.tasks_completed }}</span>
+          </div>
+          {% if user.is_internal %}
+          <div class="list-group-item d-flex justify-content-between align-items-center">
+            <span>Proyectos gestionados</span>
+            <span class="badge bg-info rounded-pill">{{ stats.projects_managed }}</span>
+          </div>
+          {% endif %}
+          <div class="list-group-item d-flex justify-content-between align-items-center">
+            <span>Horas registradas</span>
+            <span class="badge bg-warning text-dark rounded-pill">{{ "%.1f"|format(stats.total_hours) }}h</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-8">
+    <div class="card border-0 shadow-sm mb-4">
+      <div class="card-header bg-light d-flex justify-content-between align-items-center">
+        <h5 class="mb-0 fw-bold">Actividad reciente</h5>
+      </div>
+      <div class="card-body">
+        {% if recent_tasks %}
+          <div class="list-group list-group-flush">
+            {% for task in recent_tasks %}
+            <a href="{{ url_for('main.task_detail', task_id=task.id) }}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+              <div>
+                <span class="fw-semibold">{{ task.title }}</span>
+                {% if task.project %}
+                  <small class="text-muted ms-2">en {{ task.project.name }}</small>
+                {% endif %}
+              </div>
+              <div class="d-flex align-items-center gap-3">
+                <small class="text-muted">{% if task.last_activity %}{{ task.last_activity.strftime('%d/%m/%Y %H:%M') }}{% else %}—{% endif %}</small>
+                <span class="badge {% if task.status == 'DONE' %}bg-success{% elif task.status == 'IN_PROGRESS' %}bg-primary{% else %}bg-secondary{% endif %}">{{ task.status }}</span>
+              </div>
+            </a>
+            {% endfor %}
+          </div>
+        {% else %}
+          <div class="text-center py-4 text-muted">Sin actividad reciente</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

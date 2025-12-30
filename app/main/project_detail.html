@@ -1,0 +1,126 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ project.name }} — {{ sys_app_name }}{% endblock %}
+
+{% block content %}
+<!-- Header -->
+<div class="d-flex justify-content-between align-items-start mb-4">
+  <div>
+    <nav aria-label="breadcrumb">
+      <ol class="breadcrumb mb-1">
+        <li class="breadcrumb-item"><a href="{{ url_for('main.projects') }}">Proyectos</a></li>
+        <li class="breadcrumb-item active" aria-current="page">{{ project.name }}</li>
+      </ol>
+    </nav>
+    <h2 class="fw-bold text-primary mb-0">{{ project.name }}</h2>
+  </div>
+  <div>
+    <button class="btn btn-outline-secondary me-2"><i class="fa-solid fa-pen me-2"></i>Editar</button>
+    <button class="btn btn-primary"><i class="fa-solid fa-plus me-2"></i>Nueva Tarea</button>
+  </div>
+</div>
+
+<!-- Metrics Cards -->
+<div class="row g-4 mb-4">
+  <div class="col-md-4">
+    <div class="card h-100 border-start border-4 border-primary">
+      <div class="card-body">
+        <h6 class="text-muted text-uppercase small fw-bold">Presupuesto de Horas</h6>
+        <div class="d-flex align-items-baseline">
+          <h3 class="mb-0 fw-bold">{{ metrics.total_hours_spent|round(1) }}h</h3>
+          <span class="text-muted ms-2">/ {{ project.budget_hours }}h</span>
+        </div>
+        <div class="progress mt-2" style="height: 4px;">
+          <div class="progress-bar" role="progressbar" style="width: {{ metrics.budget_usage_percent or 0 }}%"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card h-100 border-start border-4 border-success">
+      <div class="card-body">
+        <h6 class="text-muted text-uppercase small fw-bold">Tareas Completadas</h6>
+        <div class="d-flex align-items-baseline">
+          <h3 class="mb-0 fw-bold">{{ metrics.completed_tasks }}</h3>
+          <span class="text-muted ms-2">/ {{ metrics.total_tasks }}</span>
+        </div>
+        <small class="text-success fw-semibold">
+          {% if metrics.total_tasks > 0 %}
+            {{ (metrics.completed_tasks / metrics.total_tasks * 100)|round|int }}%
+          {% else %}
+            0%
+          {% endif %}
+          completado
+        </small>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card h-100 border-start border-4 border-info">
+      <div class="card-body">
+        <h6 class="text-muted text-uppercase small fw-bold">Estado</h6>
+        <div class="mt-2">
+            <span class="badge bg-light text-dark border fs-6">{{ project.status|replace('_', ' ')|title }}</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Tasks Table -->
+<div class="card">
+  <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+    <h5 class="card-title mb-0">Tareas del Proyecto</h5>
+    <div class="input-group w-auto">
+      <input type="text" class="form-control form-control-sm" placeholder="Filtrar tareas...">
+    </div>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead class="bg-light">
+        <tr>
+          <th class="ps-4">Tarea</th>
+          <th>Asignado</th>
+          <th>Estado</th>
+          <th>Vencimiento</th>
+          <th class="text-end pe-4">Acciones</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% if tasks %}
+          {% set status_colors = {'BACKLOG': 'secondary', 'IN_PROGRESS': 'primary', 'IN_REVIEW': 'info', 'COMPLETED': 'success', 'CANCELLED': 'danger'} %}
+          {% for task in tasks %}
+          <tr>
+            <td class="ps-4">
+              <div class="fw-semibold">{{ task.title }}</div>
+              <small class="text-muted">#{{ task.id }}</small>
+            </td>
+            <td>
+              {% if task.assigned_to %}
+                <div class="d-flex align-items-center">
+                  <div class="rounded-circle bg-light text-primary d-flex align-items-center justify-content-center me-2" style="width: 24px; height: 24px; font-size: 10px;">
+                    {{ task.assigned_to.first_name[0] if task.assigned_to.first_name else 'U' }}
+                  </div>
+                  <small>{{ task.assigned_to.first_name }}</small>
+                </div>
+              {% else %}
+                <span class="text-muted small">Sin asignar</span>
+              {% endif %}
+            </td>
+            <td><span class="badge bg-{{ status_colors.get(task.status, 'secondary') }}">{{ task.status.replace('_', ' ')|title }}</span></td>
+            <td><small class="text-muted">{{ task.due_date.strftime('%d %b %Y') if task.due_date else '-' }}</small></td>
+            <td class="text-end pe-4">
+              <button class="btn btn-sm btn-outline-secondary"><i class="fa-solid fa-pen"></i></button>
+            </td>
+          </tr>
+          {% endfor %}
+        {% else %}
+          <tr>
+            <td colspan="5" class="text-center py-5 text-muted">Este proyecto no tiene tareas aún.</td>
+          </tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,89 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ _('login') }} — {{ sys_app_name }}{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+  <div class="row justify-content-center">
+    <div class="col-lg-6">
+      <div class="card shadow-sm">
+        <div class="card-body p-4">
+          <div class="text-center mb-4">
+            <h3 class="fw-bold mb-1">{{ _('welcome') }}</h3>
+            <p class="text-muted mb-0">{{ _('choose_login_method') }}</p>
+          </div>
+
+          <div class="row g-3">
+            <!-- Acceso con usuario local -->
+            <div class="col-12">
+              <div class="border rounded p-3 h-100">
+                <h6 class="fw-semibold mb-3">{{ _('local_access') }}</h6>
+                <form method="post" action="{{ url_for('auth.login') }}" class="needs-validation" novalidate>
+                  <div class="mb-3">
+                    <label class="form-label">{{ _('email_address') }}</label>
+                    <input type="email" class="form-control" name="email" placeholder="tu@correo.com" required>
+                    <div class="invalid-feedback">{{ _('enter_valid_email') }}</div>
+                  </div>
+                  <div class="mb-3">
+                    <label class="form-label">{{ _('password') }}</label>
+                    <input type="password" class="form-control" name="password" placeholder="••••••••" required>
+                    <div class="invalid-feedback">{{ _('password_required') }}</div>
+                  </div>
+                  <div class="d-grid">
+                    <button type="submit" class="btn btn-primary" name="action" value="local">
+                      <i class="fa-solid fa-right-to-bracket me-2"></i> {{ _('login') }}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+
+            <!-- Acceso con Azure Entra ID (SSO) -->
+            <div class="col-12">
+              <div class="border rounded p-3 h-100">
+                <h6 class="fw-semibold mb-3">{{ _('microsoft_access') }}</h6>
+                <form method="post" action="{{ url_for('auth.login') }}">
+                  <div class="d-grid">
+                    {% if config.AZURE_CLIENT_ID and config.AZURE_CLIENT_ID != 'tu-client-id-de-azure' %}
+                      <button type="submit" class="btn btn-outline-dark" name="action" value="sso">
+                        <i class="fa-brands fa-microsoft me-2"></i> {{ _('access_with_entra') }}
+                      </button>
+                      <small class="text-muted d-block mt-2">{{ _('redirect_provider') }}</small>
+                    {% else %}
+                      <button type="button" class="btn btn-outline-dark" disabled>
+                        <i class="fa-brands fa-microsoft me-2"></i> {{ _('entra_not_configured') }}
+                      </button>
+                      <small class="text-warning d-block mt-2"><i class="fa-solid fa-exclamation-triangle me-1"></i>{{ _('sso_not_configured') }}</small>
+                    {% endif %}
+                  </div>
+                </form>
+              </div>
+            </div>
+          </div>
+
+          <div class="text-center mt-3">
+            <small class="text-muted">{{ _('need_help') }}</small>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  // Bootstrap validation helpers
+  (function () {
+    'use strict'
+    const forms = document.querySelectorAll('.needs-validation')
+    Array.prototype.slice.call(forms).forEach(function (form) {
+      form.addEventListener('submit', function (event) {
+        if (!form.checkValidity()) {
+          event.preventDefault()
+          event.stopPropagation()
+        }
+        form.classList.add('was-validated')
+      }, false)
+    })
+  })()
+</script>
+{% endblock %}

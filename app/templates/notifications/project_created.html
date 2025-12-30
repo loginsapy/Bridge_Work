@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            line-height: 1.6;
+            color: #323338;
+            background-color: #f5f6f8;
+            margin: 0;
+            padding: 0;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            background-color: #ffffff;
+        }
+        .header {
+            background: linear-gradient(135deg, #a25ddc 0%, #8d4bc9 100%);
+            padding: 30px 40px;
+            text-align: center;
+        }
+        .header h1 {
+            color: #ffffff;
+            margin: 0;
+            font-size: 24px;
+            font-weight: 600;
+        }
+        .content {
+            padding: 40px;
+        }
+        .greeting {
+            font-size: 18px;
+            color: #323338;
+            margin-bottom: 20px;
+        }
+        .info-box {
+            background: linear-gradient(135deg, #f3e8ff 0%, #f8f0ff 100%);
+            border: 2px solid #a25ddc;
+            padding: 25px;
+            margin: 25px 0;
+            border-radius: 12px;
+            text-align: center;
+        }
+        .info-box .icon {
+            font-size: 48px;
+            margin-bottom: 15px;
+        }
+        .info-box h2 {
+            margin: 0 0 10px 0;
+            font-size: 20px;
+            color: #a25ddc;
+        }
+        .info-box p {
+            margin: 0;
+            color: #323338;
+            font-size: 16px;
+        }
+        .details {
+            margin: 25px 0;
+        }
+        .detail-row {
+            display: flex;
+            padding: 10px 0;
+            border-bottom: 1px solid #e6e9ef;
+        }
+        .detail-label {
+            font-weight: 600;
+            color: #676879;
+            width: 120px;
+            flex-shrink: 0;
+        }
+        .detail-value {
+            color: #323338;
+        }
+        .btn {
+            display: inline-block;
+            background: #a25ddc;
+            color: #ffffff !important;
+            padding: 14px 30px;
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 14px;
+            margin: 20px 0;
+        }
+        .btn:hover {
+            background: #8d4bc9;
+        }
+        .footer {
+            background-color: #f5f6f8;
+            padding: 25px 40px;
+            text-align: center;
+            font-size: 12px;
+            color: #676879;
+        }
+        .footer a {
+            color: #a25ddc;
+            text-decoration: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>{{ app_name|default('BridgeWork') }}</h1>
+        </div>
+        <div class="content">
+            <p class="greeting">Hola {{ user.name or user.username }},</p>
+            
+            <div class="info-box">
+                <div class="icon">🆕</div>
+                <h2>Nuevo Proyecto Creado</h2>
+                <p>{{ message }}</p>
+            </div>
+            
+            {% if project %}
+            <div class="details">
+                <div class="detail-row">
+                    <span class="detail-label">Proyecto:</span>
+                    <span class="detail-value">{{ project.name }}</span>
+                </div>
+                {% if project.description %}
+                <div class="detail-row">
+                    <span class="detail-label">Descripción:</span>
+                    <span class="detail-value">{{ project.description[:100] }}{% if project.description|length > 100 %}...{% endif %}</span>
+                </div>
+                {% endif %}
+                {% if project.status %}
+                <div class="detail-row">
+                    <span class="detail-label">Estado:</span>
+                    <span class="detail-value">{{ project.status }}</span>
+                </div>
+                {% endif %}
+                {% if project.start_date %}
+                <div class="detail-row">
+                    <span class="detail-label">Fecha inicio:</span>
+                    <span class="detail-value">{{ project.start_date.strftime('%d/%m/%Y') }}</span>
+                </div>
+                {% endif %}
+            </div>
+            {% endif %}
+            
+            <center>
+                <a href="{{ dashboard_url }}" class="btn">Ver Proyecto</a>
+            </center>
+        </div>
+        <div class="footer">
+            <p>Este correo fue enviado desde <a href="{{ dashboard_url }}">{{ app_name }}</a></p>
+            <p>Sistema de Gestión de Proyectos</p>
+        </div>
+    </div>
+</body>
+</html>

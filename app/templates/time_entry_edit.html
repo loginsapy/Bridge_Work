@@ -1,0 +1,157 @@
+{% extends 'base.html' %}
+
+{% block title %}{% if entry %}Editar{% else %}Registrar{% endif %} Tiempo — {{ sys_app_name }}{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h2 class="fw-bold mb-0 text-primary">
+    {% if entry %}
+      Editar Registro de Tiempo
+    {% else %}
+      Registrar Horas
+    {% endif %}
+  </h2>
+  <a href="{{ url_for('main.time_entries') }}" class="btn btn-outline-secondary">
+    <i class="fa-solid fa-arrow-left me-2"></i>Volver
+  </a>
+</div>
+
+{% if entry and not is_owner and (current_user.role and current_user.role.name == 'PMP') %}
+  <div class="alert alert-info">Solo puedes marcar como <strong>Facturado</strong> en este registro. Otros campos no son editables.</div>
+{% endif %}
+{% set is_owner = entry and entry.user_id == current_user.id %}
+<div class="row">
+  <div class="col-lg-6">
+    <div class="card">
+      <div class="card-body">
+        <form method="POST">
+          <div class="mb-3">
+            <label for="task_id" class="form-label">Tarea <span class="text-danger">*</span></label>
+            <select name="task_id" id="task_id" class="form-select" required {% if entry and not is_owner %}disabled{% endif %}>
+              <option value="">Selecciona una tarea</option>
+              {% if tasks %}
+                {% for task in tasks %}
+                <option value="{{ task.id }}" 
+                  {% if (entry and entry.task_id == task.id) or (selected_task_id and selected_task_id == task.id) %}selected{% endif %}>
+                  {{ task.title }} — {{ task.project.name }}
+                </option>
+                {% endfor %}
+              {% else %}
+                <option value="" disabled>No hay tareas disponibles</option>
+              {% endif %}
+            </select>
+          </div>
+
+          {% if entry and not is_owner %}
+          <div class="mb-3">
+            <label for="date" class="form-label">Fecha <span class="text-danger">*</span></label>
+            <input type="date" name="date" id="date" class="form-control" value="{{ entry.date.isoformat() }}" required disabled>
+          </div>
+
+          <div class="mb-3">
+            <label for="hours" class="form-label">Horas <span class="text-danger">*</span></label>
+            <input type="number" name="hours" id="hours" class="form-control" placeholder="0.5" step="0.5" min="0.5" max="24" value="{{ entry.hours }}" required disabled>
+            <small class="form-text text-muted">Increments: 0.5, 1, 1.5, 2, etc.</small>
+          </div>
+
+          <div class="mb-3">
+            <label for="description" class="form-label">Descripción</label>
+            <textarea name="description" id="description" class="form-control" rows="4" placeholder="Detalles del trabajo realizado" disabled>{{ entry.description }}</textarea>
+            <small class="form-text text-muted">Opcional: describe el trabajo realizado</small>
+          </div>
+          {% else %}
+          <div class="mb-3">
+            <label for="date" class="form-label">Fecha <span class="text-danger">*</span></label>
+            <input type="date" name="date" id="date" class="form-control" value="{{ entry.date.isoformat() if entry else now.date().isoformat() }}" required>
+          </div>
+
+          <div class="mb-3">
+            <label for="hours" class="form-label">Horas <span class="text-danger">*</span></label>
+            <input type="number" name="hours" id="hours" class="form-control" placeholder="0.5" step="0.5" min="0.5" max="24" value="{{ entry.hours if entry else '' }}" required>
+            <small class="form-text text-muted">Increments: 0.5, 1, 1.5, 2, etc.</small>
+          </div>
+
+          <div class="mb-3">
+            <label for="description" class="form-label">Descripción</label>
+            <textarea name="description" id="description" class="form-control" rows="4" placeholder="Detalles del trabajo realizado">{{ entry.description if entry else '' }}</textarea>
+            <small class="form-text text-muted">Opcional: describe el trabajo realizado</small>
+          </div>
+          {% endif %}
+
+          {% if current_user.role and current_user.role.name == 'PMP' %}
+          <div class="form-check mb-4">
+            <input class="form-check-input" type="checkbox" name="is_billable" id="is_billable" 
+              {% if entry and entry.is_billable %}checked{% endif %}>
+            <label class="form-check-label" for="is_billable">
+              Marcar como <strong>Facturado</strong>
+            </label>
+            <small class="form-text text-muted d-block mt-2">
+              Las horas facturadas se incluyen en reportes de facturación
+            </small>
+          </div>
+          {% else %}
+          <!-- For non-PMP users, show billable status read-only -->
+          <div class="mb-4">
+            <label class="form-label">Facturado</label>
+            <div>
+              {% if entry and entry.is_billable %}
+                <span class="badge bg-success">Sí</span>
+              {% else %}
+                <span class="badge bg-secondary">No</span>
+              {% endif %}
+            </div>
+            <small class="form-text text-muted d-block mt-2">Solo los usuarios PMP pueden marcar horas como facturadas</small>
+          </div>
+          {% endif %}
+
+          <div class="d-grid gap-2 d-sm-flex justify-content-sm-end">
+            <a href="{{ url_for('main.time_entries') }}" class="btn btn-outline-secondary">Cancelar</a>
+            <button type="submit" class="btn btn-primary">
+              <i class="fa-solid fa-save me-2"></i>
+              {% if entry %}Actualizar{% else %}Registrar{% endif %} Tiempo
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-6">
+    <div class="card">
+      <div class="card-header bg-light">
+        <h5 class="card-title mb-0">Ayuda</h5>
+      </div>
+      <div class="card-body">
+        <h6 class="mb-3">¿Cómo registrar horas?</h6>
+        <ol class="small">
+          <li>Selecciona la <strong>tarea</strong> en la que trabajaste</li>
+          <li>Ingresa la <strong>fecha</strong> del trabajo</li>
+          <li>Especifica cuántas <strong>horas</strong> dedicaste</li>
+          <li>Añade una <strong>descripción</strong> (opcional)</li>
+          <li>Marca como <strong>Facturado</strong> si aplica (solo usuarios PMP pueden marcarlo)</li>
+        </ol>
+
+        <hr class="my-3">
+
+        <h6 class="mb-3">Consejos</h6>
+        <ul class="small">
+          <li>Registra el tiempo lo más pronto posible</li>
+          <li>Sé preciso con las horas (0.5, 1, 1.5, etc.)</li>
+          <li>Usa la descripción para detalles importantes</li>
+          <li>Revisa tus registros regularmente</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  // Set today's date if creating new entry
+  const dateInput = document.getElementById('date');
+  if (!dateInput.value) {
+    const today = new Date().toISOString().split('T')[0];
+    dateInput.value = today;
+  }
+</script>
+
+{% endblock %}

@@ -1,0 +1,139 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ _('general_config_title') }} — {{ _('administration') }} — {{ sys_app_name }}{% endblock %}
+
+{% block content %}
+<div class="mb-4">
+  <nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+      <li class="breadcrumb-item"><a href="{{ url_for('main.admin_dashboard') }}">{{ _('administration') }}</a></li>
+      <li class="breadcrumb-item active">{{ _('general_config_title') }}</li>
+    </ol>
+  </nav>
+  <h2 class="fw-bold text-primary">
+    <i class="fa-solid fa-sliders me-2"></i>{{ _('general_config_title') }}
+  </h2>
+  <p class="text-muted">{{ _('global_preferences') }}</p>
+</div>
+
+<form action="{{ url_for('main.admin_general') }}" method="POST">
+  <div class="row">
+    <div class="col-lg-8">
+      <!-- Regional -->
+      <div class="card border-0 shadow-sm mb-4">
+        <div class="card-header bg-light">
+          <h5 class="mb-0 fw-bold"><i class="fa-solid fa-globe me-2 text-primary"></i>{{ _('regional_config') }}</h5>
+        </div>
+        <div class="card-body">
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label class="form-label fw-semibold">{{ _('default_currency') }}</label>
+              <select name="default_currency" class="form-select">
+                {% for curr in currencies %}
+                  <option value="{{ curr }}" {% if settings.default_currency == curr %}selected{% endif %}>{{ currency_names.get(curr, curr) }}</option>
+                {% endfor %}
+              </select>
+              <small class="text-muted">{{ _('currency_for_reports') }}</small>
+            </div>
+            <div class="col-md-6 mb-3">
+              <label class="form-label fw-semibold">{{ _('timezone') }}</label>
+              <select name="timezone" class="form-select">
+                {% for tz in timezones %}
+                  <option value="{{ tz }}" {% if settings.timezone == tz %}selected{% endif %}>{{ tz }}</option>
+                {% endfor %}
+              </select>
+            </div>
+          </div>
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label class="form-label fw-semibold">{{ _('date_format') }}</label>
+              <select name="date_format" class="form-select">
+                <option value="DD/MM/YYYY" {% if settings.date_format == 'DD/MM/YYYY' %}selected{% endif %}>DD/MM/YYYY (31/12/2025)</option>
+                <option value="MM/DD/YYYY" {% if settings.date_format == 'MM/DD/YYYY' %}selected{% endif %}>MM/DD/YYYY (12/31/2025)</option>
+                <option value="YYYY-MM-DD" {% if settings.date_format == 'YYYY-MM-DD' %}selected{% endif %}>YYYY-MM-DD (2025-12-31)</option>
+              </select>
+            </div>
+            <div class="col-md-6 mb-3">
+              <label class="form-label fw-semibold">{{ _('time_format') }}</label>
+              <select name="time_format" class="form-select">
+                <option value="24h" {% if settings.time_format == '24h' %}selected{% endif %}>{{ _('time_format_24') }} (14:30)</option>
+                <option value="12h" {% if settings.time_format == '12h' %}selected{% endif %}>{{ _('time_format_12') }} (2:30 PM)</option>
+              </select>
+            </div>
+          </div>
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label class="form-label fw-semibold">{{ _('language') }}</label>
+              <select name="language" class="form-select">
+                <option value="es" {% if settings.language == 'es' %}selected{% endif %}>Español</option>
+                <option value="en" {% if settings.language == 'en' %}selected{% endif %}>English</option>
+              </select>
+            </div>
+            <div class="col-md-6 mb-3">
+              <label class="form-label fw-semibold">{{ _('week_start') }}</label>
+              <select name="week_start" class="form-select">
+                <option value="monday" {% if settings.week_start == 'monday' %}selected{% endif %}>{{ _('monday') }}</option>
+                <option value="sunday" {% if settings.week_start == 'sunday' %}selected{% endif %}>{{ _('sunday') }}</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Comportamiento de Tareas -->
+      <div class="card border-0 shadow-sm mb-4">
+        <div class="card-header bg-light">
+          <h5 class="mb-0 fw-bold"><i class="fa-solid fa-tasks me-2 text-primary"></i>{{ _('task_behavior') }}</h5>
+        </div>
+        <div class="card-body">
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label class="form-label fw-semibold">{{ _('task_initial_status') }}</label>
+              <select name="default_task_status" class="form-select">
+                <option value="BACKLOG" {% if settings.default_task_status == 'BACKLOG' %}selected{% endif %}>{{ _('backlog') }}</option>
+                <option value="TODO" {% if settings.default_task_status == 'TODO' %}selected{% endif %}>{{ _('todo') }}</option>
+                <option value="IN_PROGRESS" {% if settings.default_task_status == 'IN_PROGRESS' %}selected{% endif %}>{{ _('in_progress') }}</option>
+              </select>
+              <small class="text-muted">{{ _('status_on_create') }}</small>
+            </div>
+            <div class="col-md-6 mb-3">
+              <div class="form-check mt-4">
+                <input type="checkbox" name="require_task_approval" class="form-check-input" id="requireApproval" 
+                       value="true" {% if settings.require_task_approval %}checked{% endif %}>
+                <label class="form-check-label" for="requireApproval">
+                  <strong>{{ _('require_client_approval') }}</strong>
+                </label>
+              </div>
+              <small class="text-muted">{{ _('tasks_need_approval') }}</small>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <div class="d-flex gap-2">
+        <button type="submit" class="btn btn-primary">
+          <i class="fa-solid fa-save me-2"></i>{{ _('save_config') }}
+        </button>
+        <a href="{{ url_for('main.admin_dashboard') }}" class="btn btn-outline-secondary">{{ _('cancel') }}</a>
+      </div>
+    </div>
+    
+    <div class="col-lg-4">
+      <div class="card border-0 shadow-sm bg-light">
+        <div class="card-body">
+          <h6 class="fw-bold mb-3"><i class="fa-solid fa-info-circle me-2 text-info"></i>{{ _('config_info_title') }}</h6>
+          <p class="small text-muted mb-2">
+            {{ _('config_info') }}
+          </p>
+          <ul class="small text-muted ps-3 mb-0">
+            <li><strong>{{ _('currency') }}:</strong> {{ _('currency_info') }}</li>
+            <li><strong>{{ _('timezone') }}:</strong> {{ _('timezone_info') }}</li>
+            <li><strong>{{ _('date_format') }}:</strong> {{ _('date_format_info') }}</li>
+            <li><strong>{{ _('approvals') }}:</strong> {{ _('approval_info') }}</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+</form>
+{% endblock %}

@@ -1,0 +1,111 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ _('roles') }} — {{ _('administration') }} — {{ sys_app_name }}{% endblock %}
+
+{% block content %}
+<div class="mb-4">
+  <nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+      <li class="breadcrumb-item"><a href="{{ url_for('main.admin_dashboard') }}">{{ _('administration') }}</a></li>
+      <li class="breadcrumb-item active">{{ _('roles') }}</li>
+    </ol>
+  </nav>
+  <h2 class="fw-bold text-primary">
+    <i class="fa-solid fa-shield me-2"></i>{{ _('role_management') }}
+  </h2>
+  <p class="text-muted">{{ _('define_roles_permissions') }}</p>
+</div>
+
+<div class="row">
+  <div class="col-lg-8">
+    <div class="card border-0 shadow-sm">
+      <div class="card-header bg-light d-flex justify-content-between align-items-center">
+        <h5 class="mb-0 fw-bold">{{ _('system_roles') }}</h5>
+        <span class="badge bg-primary">{{ roles|length }} {{ _('system_roles_count') }}</span>
+      </div>
+      <div class="card-body p-0">
+        {% if roles %}
+        <div class="table-responsive">
+          <table class="table table-hover align-middle mb-0">
+            <thead class="table-light">
+              <tr>
+                <th>{{ _('role_name') }}</th>
+                <th class="text-center">{{ _('users') }}</th>
+                <th class="text-center">{{ _('actions') }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for r in roles %}
+              <tr>
+                <td>
+                  <span class="fw-semibold">{{ r.name }}</span>
+                  {% if r.name == 'PMP' %}
+                    <span class="badge bg-danger ms-1">{{ _('admin_badge') }}</span>
+                  {% elif r.name == 'Cliente' %}
+                    <span class="badge bg-info ms-1">{{ _('external_badge') }}</span>
+                  {% endif %}
+                </td>
+                <td class="text-center">
+                  <span class="badge bg-light text-dark">{{ r.users|length }}</span>
+                </td>
+                <td class="text-center">
+                  {% if r.users|length == 0 %}
+                    <form action="{{ url_for('main.admin_delete_role', role_id=r.id) }}" method="POST" class="d-inline"
+                          onsubmit="return confirm('{{ _('delete_role') }} {{ r.name }}?')">
+                      <button type="submit" class="btn btn-sm btn-outline-danger">
+                        <i class="fa-solid fa-trash"></i>
+                      </button>
+                    </form>
+                  {% else %}
+                    <span class="text-muted small">{{ _('in_use') }}</span>
+                  {% endif %}
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% else %}
+        <div class="text-center py-5 text-muted">
+          <i class="fa-solid fa-shield fa-3x mb-3 opacity-50"></i>
+          <p class="mb-0">{{ _('no_roles_defined') }}</p>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  
+  <div class="col-lg-4">
+    <!-- Crear nuevo rol -->
+    <div class="card border-0 shadow-sm mb-3">
+      <div class="card-header bg-light">
+        <h6 class="mb-0 fw-bold"><i class="fa-solid fa-plus me-2"></i>{{ _('create_new_role') }}</h6>
+      </div>
+      <div class="card-body">
+        <form method="POST">
+          <div class="mb-3">
+            <label class="form-label">{{ _('role_name') }}</label>
+            <input class="form-control" name="name" placeholder="{{ _('role_placeholder') }}" required>
+          </div>
+          <button class="btn btn-primary w-100" type="submit">
+            <i class="fa-solid fa-plus me-2"></i>{{ _('create_role') }}
+          </button>
+        </form>
+      </div>
+    </div>
+    
+    <!-- Info -->
+    <div class="card border-0 shadow-sm bg-light">
+      <div class="card-body">
+        <h6 class="fw-bold mb-3"><i class="fa-solid fa-info-circle me-2 text-info"></i>{{ _('system_roles') }}</h6>
+        <ul class="small text-muted ps-3 mb-0">
+          <li><strong>PMP:</strong> {{ _('pmp_description') }}</li>
+          <li><strong>Developer:</strong> {{ _('developer_description') }}</li>
+          <li><strong>{{ _('client') }}:</strong> {{ _('client_description') }}</li>
+          <li>{{ _('roles_delete_note') }}</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,60 @@
+{% extends 'base.html' %}
+
+{% block title %}Proyectos — {{ sys_app_name }}{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h2 class="fw-bold mb-0 text-primary">Proyectos</h2>
+  <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createProjectModal"><i class="fa-solid fa-plus me-2"></i>Nuevo Proyecto</button>
+</div>
+
+<div class="row g-4">
+  {% if projects %}
+    {% for project in projects %}
+    <div class="col-md-6 col-xl-4">
+      <div class="card h-100 hover-shadow transition-all">
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-start mb-3">
+            <h5 class="card-title fw-bold mb-0">
+              <a href="{{ url_for('main.project_detail', project_id=project.id) }}" class="text-decoration-none text-dark stretched-link">{{ project.name }}</a>
+            </h5>
+            {% set status_colors = {'ACTIVE': 'success', 'COMPLETED': 'primary', 'ON_HOLD': 'warning', 'ARCHIVED': 'secondary'} %}
+            <span class="badge bg-{{ status_colors.get(project.status, 'secondary') }} rounded-pill">{{ project.status|replace('_', ' ')|title }}</span>
+          </div>
+          
+          <p class="card-text text-muted small mb-4 line-clamp-2">{{ project.description or 'Sin descripción' }}</p>
+          
+          <div class="mb-3">
+            <div class="d-flex justify-content-between small mb-1">
+              <span class="fw-semibold">Progreso</span>
+              <span>{{ "%.0f"|format(project.progress) }}%</span>
+            </div>
+            <div class="progress" style="height: 6px;">
+              <div class="progress-bar bg-{{ 'success' if project.progress < 80 else 'warning' if project.progress < 100 else 'danger' }}" role="progressbar" style="width: {{ project.progress }}%"></div>
+            </div>
+          </div>
+          
+          <div class="row g-0 text-center small text-muted mt-auto">
+            <div class="col border-end">
+              <div class="fw-bold text-dark">{{ project.hours_spent }}h</div>
+              <div>Incurridas</div>
+            </div>
+            <div class="col">
+              <div class="fw-bold text-dark">{{ project.budget_hours or 0 }}h</div>
+              <div>Presupuesto</div>
+            </div>
+          </div>
+        </div>
+        <div class="card-footer bg-white border-top-0 py-3">
+          <small class="text-muted"><i class="fa-regular fa-calendar me-1"></i> Inicio: {{ project.start_date.strftime('%d %b %Y') if project.start_date else 'TBD' }}</small>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  {% else %}
+    <div class="col-12">
+      <div class="alert alert-info">No hay proyectos activos. ¡Crea el primero!</div>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

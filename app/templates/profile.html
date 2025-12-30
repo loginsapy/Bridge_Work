@@ -1,0 +1,312 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ _('my_profile') }} — {{ sys_app_name }}{% endblock %}
+
+{% block content %}
+<div class="mb-4">
+  <h2 class="fw-bold text-primary">
+    <i class="fa-solid fa-user-circle me-2"></i>{{ _('my_profile') }}
+  </h2>
+  <p class="text-muted">{{ _('manage_profile') }}</p>
+</div>
+
+<div class="row">
+  <!-- Sidebar con info del usuario -->
+  <div class="col-lg-4 mb-4">
+    <div class="card border-0 shadow-sm">
+      <div class="card-body text-center py-5">
+        <!-- Avatar -->
+        <div class="mb-4">
+          <div class="mx-auto rounded-circle bg-primary bg-gradient d-flex align-items-center justify-content-center" 
+               style="width: 120px; height: 120px; font-size: 3rem;">
+            <span class="text-white fw-bold">
+              {{ (current_user.first_name or current_user.email)[0] | upper }}{{ (current_user.last_name or '')[0] | upper if current_user.last_name else '' }}
+            </span>
+          </div>
+        </div>
+        
+        <!-- Nombre -->
+        <h4 class="fw-bold mb-1">{{ current_user.name }}</h4>
+        <p class="text-muted mb-3">{{ current_user.email }}</p>
+        
+        <!-- Badges de tipo de autenticación -->
+        <div class="mb-3">
+          {% if current_user.azure_oid %}
+            <span class="badge bg-primary bg-gradient px-3 py-2">
+              <i class="fa-brands fa-microsoft me-1"></i> Azure AD
+            </span>
+          {% else %}
+            <span class="badge bg-secondary px-3 py-2">
+              <i class="fa-solid fa-key me-1"></i> Usuario Local
+            </span>
+          {% endif %}
+          
+          {% if current_user.is_internal %}
+            <span class="badge bg-success px-3 py-2 ms-1">
+              <i class="fa-solid fa-building me-1"></i> {{ _('internal') }}
+            </span>
+          {% else %}
+            <span class="badge bg-info px-3 py-2 ms-1">
+              <i class="fa-solid fa-handshake me-1"></i> {{ _('client') }}
+            </span>
+          {% endif %}
+        </div>
+        
+        <!-- Rol -->
+        {% if current_user.role %}
+          <div class="text-muted small">
+            <i class="fa-solid fa-shield me-1"></i> {{ _('role') }}: <strong>{{ current_user.role.name }}</strong>
+          </div>
+        {% endif %}
+        
+        <!-- Fecha de registro -->
+        <div class="text-muted small mt-2">
+          <i class="fa-solid fa-calendar me-1"></i> 
+          {{ _('member_since') }} {{ current_user.created_at.strftime('%d %b %Y') if current_user.created_at else 'N/A' }}
+        </div>
+      </div>
+    </div>
+    
+    <!-- Stats Cards -->
+    <div class="card border-0 shadow-sm mt-3">
+      <div class="card-header bg-light">
+        <h6 class="mb-0 fw-bold">
+          <i class="fa-solid fa-chart-bar me-2 text-primary"></i>{{ _('statistics') }}
+        </h6>
+      </div>
+      <div class="card-body p-0">
+        <div class="list-group list-group-flush">
+          <div class="list-group-item d-flex justify-content-between align-items-center">
+            <span><i class="fa-solid fa-tasks me-2 text-muted"></i> {{ _('tasks_assigned') }}</span>
+            <span class="badge bg-primary rounded-pill">{{ stats.tasks_assigned }}</span>
+          </div>
+          <div class="list-group-item d-flex justify-content-between align-items-center">
+            <span><i class="fa-solid fa-check-circle me-2 text-success"></i> {{ _('completed') }}</span>
+            <span class="badge bg-success rounded-pill">{{ stats.tasks_completed }}</span>
+          </div>
+          {% if current_user.is_internal %}
+          <div class="list-group-item d-flex justify-content-between align-items-center">
+            <span><i class="fa-solid fa-folder me-2 text-info"></i> {{ _('projects_managed') }}</span>
+            <span class="badge bg-info rounded-pill">{{ stats.projects_managed }}</span>
+          </div>
+          {% endif %}
+          <div class="list-group-item d-flex justify-content-between align-items-center">
+            <span><i class="fa-solid fa-clock me-2 text-warning"></i> {{ _('hours_logged') }}</span>
+            <span class="badge bg-warning text-dark rounded-pill">{{ "%.1f"|format(stats.total_hours|float) }}h</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  <!-- Contenido principal -->
+  <div class="col-lg-8">
+    <!-- Información del perfil (editable para usuarios locales) -->
+    <div class="card border-0 shadow-sm mb-4">
+      <div class="card-header bg-light d-flex justify-content-between align-items-center">
+        <h5 class="mb-0 fw-bold">
+          <i class="fa-solid fa-id-card me-2 text-primary"></i>Información Personal
+        </h5>
+        {% if current_user.azure_oid %}
+          <span class="badge bg-light text-muted border">
+            <i class="fa-solid fa-lock me-1"></i> Gestionado por Azure AD
+          </span>
+        {% endif %}
+      </div>
+      <div class="card-body">
+        <form method="POST">
+          <input type="hidden" name="action" value="update_profile">
+          
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label class="form-label fw-semibold">Nombre</label>
+              {% if current_user.azure_oid %}
+                <input type="text" class="form-control bg-light" value="{{ current_user.first_name or '' }}" disabled>
+                <small class="text-muted">Sincronizado desde Azure AD</small>
+              {% else %}
+                <input type="text" name="first_name" class="form-control" 
+                       value="{{ current_user.first_name or '' }}" placeholder="Tu nombre">
+              {% endif %}
+            </div>
+            <div class="col-md-6 mb-3">
+              <label class="form-label fw-semibold">Apellido</label>
+              {% if current_user.azure_oid %}
+                <input type="text" class="form-control bg-light" value="{{ current_user.last_name or '' }}" disabled>
+                <small class="text-muted">Sincronizado desde Azure AD</small>
+              {% else %}
+                <input type="text" name="last_name" class="form-control" 
+                       value="{{ current_user.last_name or '' }}" placeholder="Tu apellido">
+              {% endif %}
+            </div>
+          </div>
+          
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Correo Electrónico</label>
+            <input type="email" class="form-control bg-light" value="{{ current_user.email }}" disabled>
+            <small class="text-muted">El correo no puede ser modificado</small>
+          </div>
+          
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label class="form-label fw-semibold">Tipo de Usuario</label>
+              <input type="text" class="form-control bg-light" 
+                     value="{% if current_user.is_internal %}Usuario Interno{% else %}Cliente{% endif %}" disabled>
+            </div>
+            <div class="col-md-6 mb-3">
+              <label class="form-label fw-semibold">Método de Autenticación</label>
+              <input type="text" class="form-control bg-light" 
+                     value="{% if current_user.azure_oid %}Microsoft Azure AD{% else %}Credenciales Locales{% endif %}" disabled>
+            </div>
+          </div>
+          
+          {% if not current_user.azure_oid %}
+            <hr class="my-4">
+            <button type="submit" class="btn btn-primary">
+              <i class="fa-solid fa-save me-2"></i>Guardar Cambios
+            </button>
+          {% endif %}
+        </form>
+      </div>
+    </div>
+    
+    <!-- Cambio de contraseña (solo usuarios locales) -->
+    {% if not current_user.azure_oid %}
+    <div class="card border-0 shadow-sm mb-4">
+      <div class="card-header bg-light">
+        <h5 class="mb-0 fw-bold">
+          <i class="fa-solid fa-lock me-2 text-primary"></i>Cambiar Contraseña
+        </h5>
+      </div>
+      <div class="card-body">
+        <form method="POST">
+          <input type="hidden" name="action" value="change_password">
+          
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Contraseña Actual</label>
+            <input type="password" name="current_password" class="form-control" required>
+          </div>
+          
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label class="form-label fw-semibold">Nueva Contraseña</label>
+              <input type="password" name="new_password" class="form-control" required minlength="8">
+              <small class="text-muted">Mínimo 8 caracteres</small>
+            </div>
+            <div class="col-md-6 mb-3">
+              <label class="form-label fw-semibold">Confirmar Contraseña</label>
+              <input type="password" name="confirm_password" class="form-control" required minlength="8">
+            </div>
+          </div>
+          
+          <button type="submit" class="btn btn-warning">
+            <i class="fa-solid fa-key me-2"></i>Cambiar Contraseña
+          </button>
+        </form>
+      </div>
+    </div>
+    {% else %}
+    <div class="card border-0 shadow-sm mb-4 bg-light">
+      <div class="card-body">
+        <div class="d-flex align-items-center">
+          <div class="me-3">
+            <i class="fa-brands fa-microsoft fa-2x text-primary"></i>
+          </div>
+          <div>
+            <h6 class="mb-1 fw-bold">Cuenta de Azure AD</h6>
+            <p class="mb-0 text-muted small">
+              Tu contraseña y datos de autenticación se gestionan desde 
+              <a href="https://myaccount.microsoft.com/" target="_blank" rel="noopener">
+                el portal de Microsoft <i class="fa-solid fa-external-link-alt ms-1"></i>
+              </a>
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+    
+    <!-- Actividad Reciente -->
+    <div class="card border-0 shadow-sm mb-4">
+      <div class="card-header bg-light">
+        <h5 class="mb-0 fw-bold">
+          <i class="fa-solid fa-history me-2 text-primary"></i>Actividad Reciente
+        </h5>
+      </div>
+      <div class="card-body p-0">
+        {% if recent_tasks %}
+        <div class="list-group list-group-flush">
+          {% for task in recent_tasks %}
+          <a href="{{ url_for('main.task_detail', task_id=task.id) }}" 
+             class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+            <div>
+              <i class="fa-solid fa-clipboard-check me-2 text-muted"></i>
+              <span class="fw-semibold">{{ task.title }}</span>
+              {% if task.project %}
+                <small class="text-muted ms-2">en {{ task.project.name }}</small>
+              {% endif %}
+            </div>
+            <span class="badge 
+              {% if task.status == 'DONE' %}bg-success
+              {% elif task.status == 'IN_PROGRESS' %}bg-primary
+              {% elif task.status == 'REVIEW' %}bg-warning
+              {% else %}bg-secondary{% endif %}">
+              {{ task.status | replace('_', ' ') }}
+            </span>
+          </a>
+          {% endfor %}
+        </div>
+        {% else %}
+        <div class="text-center py-4 text-muted">
+          <i class="fa-solid fa-inbox fa-2x mb-2 opacity-50"></i>
+          <p class="mb-0">No hay tareas asignadas</p>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+    
+    <!-- Últimos registros de tiempo -->
+    {% if recent_time_entries %}
+    <div class="card border-0 shadow-sm">
+      <div class="card-header bg-light">
+        <h5 class="mb-0 fw-bold">
+          <i class="fa-solid fa-clock me-2 text-primary"></i>Últimos Registros de Tiempo
+        </h5>
+      </div>
+      <div class="card-body p-0">
+        <div class="table-responsive">
+          <table class="table table-hover mb-0">
+            <thead class="table-light">
+              <tr>
+                <th>Fecha</th>
+                <th>Tarea</th>
+                <th class="text-end">Horas</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for entry in recent_time_entries %}
+              <tr>
+                <td>{{ entry.date|sys_date }}</td>
+                <td>
+                  {% if entry.task %}
+                    <a href="{{ url_for('main.task_detail', task_id=entry.task_id) }}" class="text-decoration-none">
+                      {{ entry.task.title }}
+                    </a>
+                  {% else %}
+                    <span class="text-muted">—</span>
+                  {% endif %}
+                </td>
+                <td class="text-end">
+                  <span class="badge bg-light text-dark">{{ entry.hours }}h</span>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+    
+  </div>
+</div>
+{% endblock %}

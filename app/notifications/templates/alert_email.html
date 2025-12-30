@@ -1,0 +1,11 @@
+<html>
+  <body>
+    <p>You have <strong>{{count}}</strong> pending tasks due soon.</p>
+    <ul>
+    {% for t in tasks %}
+      <li>Task #{{t}}</li>
+    {% endfor %}
+    </ul>
+    <p><a href="/dashboard">Open dashboard</a></p>
+  </body>
+</html>

@@ -1,0 +1,345 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ _('users') }} — {{ _('administration') }} — {{ sys_app_name }}{% endblock %}
+
+{% block head %}
+<style>
+:root {
+  --monday-blue: #0073ea;
+  --monday-green: #00c875;
+  --monday-yellow: #fdab3d;
+  --monday-red: #e2445c;
+  --monday-purple: #a25ddc;
+  --monday-grey: #c4c4c4;
+  --monday-dark: #323338;
+  --monday-light-grey: #f5f6f8;
+  --monday-border: #e6e9ef;
+}
+
+.admin-container {
+  background: white;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+}
+
+.admin-header {
+  background: var(--monday-purple);
+  color: white;
+  padding: 16px 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.admin-header h5 { margin: 0; font-weight: 600; }
+
+.admin-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  background: var(--monday-light-grey);
+  border-bottom: 1px solid var(--monday-border);
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.search-box {
+  display: flex;
+  align-items: center;
+  background: white;
+  border: 1px solid var(--monday-border);
+  border-radius: 6px;
+  padding: 6px 12px;
+  gap: 8px;
+}
+
+.search-box input {
+  border: none;
+  background: transparent;
+  outline: none;
+  font-size: 14px;
+  width: 200px;
+}
+
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.admin-table th {
+  background: var(--monday-light-grey);
+  padding: 12px 16px;
+  text-align: left;
+  font-weight: 500;
+  color: var(--monday-dark);
+  border-bottom: 1px solid var(--monday-border);
+}
+
+.admin-table td {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--monday-border);
+  vertical-align: middle;
+}
+
+.admin-table tr:hover { background: #f0f3ff; }
+
+.user-info { display: flex; align-items: center; gap: 12px; }
+
+.user-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--monday-purple);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.user-avatar.inactive { background: var(--monday-grey); }
+
+.user-details { display: flex; flex-direction: column; }
+.user-name { font-weight: 500; color: var(--monday-dark); }
+.user-email { font-size: 12px; color: #666; }
+
+.badge-role {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 500;
+  background: var(--monday-blue);
+  color: white;
+}
+
+.badge-role.pmp { background: var(--monday-purple); }
+.badge-role.participante { background: var(--monday-green); }
+.badge-role.cliente { background: var(--monday-yellow); color: #333; }
+
+.badge-type {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.badge-type.interno { background: #e3f2fd; color: #1976d2; }
+.badge-type.externo { background: #fff3e0; color: #f57c00; }
+
+.badge-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.badge-status.active { background: #e8f5e9; color: #388e3c; }
+.badge-status.inactive { background: #ffebee; color: #d32f2f; }
+.badge-status i { font-size: 8px; }
+
+.action-buttons { display: flex; gap: 8px; }
+
+.btn-action {
+  padding: 6px 12px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: all 0.15s;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.btn-action.edit { background: var(--monday-light-grey); color: var(--monday-dark); }
+.btn-action.edit:hover { background: var(--monday-blue); color: white; }
+.btn-action.delete { background: #ffebee; color: var(--monday-red); }
+.btn-action.delete:hover { background: var(--monday-red); color: white; }
+
+.btn-new-user {
+  background: var(--monday-blue);
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-weight: 500;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  text-decoration: none;
+  transition: all 0.15s;
+}
+
+.btn-new-user:hover { background: #0060c2; color: white; }
+
+.stats-bar {
+  display: flex;
+  gap: 24px;
+  padding: 12px 20px;
+  background: white;
+  border-bottom: 1px solid var(--monday-border);
+}
+
+.stat-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #666;
+}
+
+.stat-item strong { color: var(--monday-dark); font-size: 16px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="mb-4">
+  <nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+      <li class="breadcrumb-item"><a href="{{ url_for('main.admin_dashboard') }}">{{ _('administration') }}</a></li>
+      <li class="breadcrumb-item active">{{ _('users') }}</li>
+    </ol>
+  </nav>
+</div>
+
+<div class="container-fluid py-4">
+  <div class="admin-container">
+    <div class="admin-header">
+      <div class="d-flex align-items-center gap-3">
+        <h5><i class="fa-solid fa-users me-2"></i>{{ _('users_admin_title') }}</h5>
+        <span class="badge bg-light text-dark">{{ users|length }} {{ _('users_count') }}</span>
+      </div>
+      <a href="{{ url_for('main.admin_create_user') }}" class="btn-new-user">
+        <i class="fa-solid fa-plus"></i>{{ _('new_user') }}
+      </a>
+    </div>
+
+    <div class="stats-bar">
+      <div class="stat-item">
+        <i class="fa-solid fa-user-tie"></i>
+        <span>{{ _('internals') }}: <strong>{{ users|selectattr('is_internal')|list|length }}</strong></span>
+      </div>
+      <div class="stat-item">
+        <i class="fa-solid fa-user"></i>
+        <span>{{ _('clients_label') }}: <strong>{{ users|rejectattr('is_internal')|list|length }}</strong></span>
+      </div>
+      <div class="stat-item">
+        <i class="fa-solid fa-circle-check"></i>
+        <span>{{ _('actives') }}: <strong>{{ users|selectattr('is_active')|list|length }}</strong></span>
+      </div>
+    </div>
+
+    <div class="admin-toolbar">
+      <div class="search-box">
+        <i class="fa-solid fa-search" style="color: var(--monday-grey)"></i>
+        <input type="text" id="searchUsers" placeholder="{{ _('search_users_placeholder') }}" onkeyup="filterUsers(this.value)">
+      </div>
+      <div class="d-flex gap-2">
+        <a href="{{ url_for('main.admin_roles') }}" class="btn btn-outline-secondary btn-sm">
+          <i class="fa-solid fa-shield-halved me-1"></i>{{ _('manage_roles') }}
+        </a>
+      </div>
+    </div>
+
+    {% if users %}
+    <div class="table-responsive">
+      <table class="admin-table">
+        <thead>
+          <tr>
+            <th style="min-width: 280px">{{ _('user') }}</th>
+            <th style="min-width: 120px">{{ _('role') }}</th>
+            <th style="min-width: 100px">{{ _('type') }}</th>
+            <th style="min-width: 100px">{{ _('status') }}</th>
+            <th style="width: 150px; text-align: center">{{ _('actions') }}</th>
+          </tr>
+        </thead>
+        <tbody id="usersTable">
+          {% for u in users %}
+          <tr data-email="{{ u.email }}" data-name="{{ (u.first_name or '') ~ ' ' ~ (u.last_name or '') }}">
+            <td>
+              <div class="user-info">
+                <div class="user-avatar {% if not u.is_active %}inactive{% endif %}">
+                  {{ (u.first_name or u.email)[0]|upper }}
+                </div>
+                <div class="user-details">
+                  <span class="user-name">{{ u.first_name or '' }} {{ u.last_name or '' }}{% if not u.first_name and not u.last_name %}{{ u.email.split('@')[0] }}{% endif %}</span>
+                  <span class="user-email">{{ u.email }}</span>
+                </div>
+              </div>
+            </td>
+            <td>
+              {% if u.role %}
+              <span class="badge-role {{ u.role.name|lower }}">{{ u.role.name }}</span>
+              {% else %}
+              <span style="color: #999">{{ _('no_role') }}</span>
+              {% endif %}
+            </td>
+            <td>
+              <span class="badge-type {{ 'interno' if u.is_internal else 'externo' }}">
+                {{ _('internal') if u.is_internal else _('client') }}
+              </span>
+            </td>
+            <td>
+              <span class="badge-status {{ 'active' if u.is_active else 'inactive' }}">
+                <i class="fa-solid fa-circle"></i>
+                {{ _('active') if u.is_active else _('inactive') }}
+              </span>
+            </td>
+            <td>
+              <div class="action-buttons" style="justify-content: center">
+                <a href="{{ url_for('main.admin_edit_user', user_id=u.id) }}" class="btn-action edit" title="{{ _('edit') }}">
+                  <i class="fa-solid fa-pen"></i>
+                </a>
+                {% if u.id != current_user.id %}
+                <form action="{{ url_for('main.admin_delete_user', user_id=u.id) }}" method="POST" style="display:inline" 
+                      onsubmit="return confirm('{{ _('delete_user_confirm') }} {{ u.email }}?')">
+                  <button type="submit" class="btn-action delete" title="{{ _('delete') }}">
+                    <i class="fa-solid fa-trash"></i>
+                  </button>
+                </form>
+                {% endif %}
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="text-center py-5">
+      <i class="fa-solid fa-users fa-3x text-muted mb-3"></i>
+      <h5>{{ _('no_users') }}</h5>
+      <a href="{{ url_for('main.admin_create_user') }}" class="btn-new-user mt-3">
+        <i class="fa-solid fa-plus"></i>{{ _('new_user') }}
+      </a>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+function filterUsers(term) {
+  const rows = document.querySelectorAll('#usersTable tr');
+  const search = term.toLowerCase();
+  rows.forEach(row => {
+    const email = row.dataset.email?.toLowerCase() || '';
+    const name = row.dataset.name?.toLowerCase() || '';
+    row.style.display = (email.includes(search) || name.includes(search)) ? '' : 'none';
+  });
+}
+</script>
+{% endblock %}

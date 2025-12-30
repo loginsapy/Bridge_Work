@@ -1,0 +1,619 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ _('projects') }} — {{ sys_app_name }}{% endblock %}
+
+{% block head %}
+<style>
+/* Monday-style Project Board */
+.monday-board-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 0;
+  margin-bottom: 16px;
+}
+
+.monday-board-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.monday-board-title h1 {
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--monday-dark);
+  margin: 0;
+}
+
+.monday-board-actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* View Switcher */
+.view-switcher {
+  display: flex;
+  background: var(--monday-grey-lighter);
+  border-radius: 8px;
+  padding: 4px;
+}
+
+.view-switcher button {
+  background: transparent;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--monday-grey);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.view-switcher button.active {
+  background: white;
+  color: var(--monday-dark);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.view-switcher button:hover:not(.active) {
+  color: var(--monday-dark);
+}
+
+/* Monday Table */
+.monday-table-container {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+  overflow: hidden;
+}
+
+.monday-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.monday-table th {
+  background: var(--monday-surface);
+  padding: 12px 16px;
+  text-align: left;
+  font-weight: 500;
+  font-size: 13px;
+  color: var(--monday-grey);
+  border-bottom: 1px solid var(--monday-grey-lighter);
+  white-space: nowrap;
+}
+
+.monday-table th:first-child {
+  padding-left: 20px;
+}
+
+.monday-table td {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--monday-grey-lighter);
+  font-size: 14px;
+}
+
+.monday-table td:first-child {
+  padding-left: 20px;
+}
+
+.monday-table tr {
+  transition: background 0.1s;
+}
+
+.monday-table tr:hover {
+  background: rgba(0, 115, 234, 0.04);
+}
+
+.monday-table tr:hover td:first-child {
+  border-left: 3px solid var(--monday-blue);
+}
+
+/* Project Name Cell */
+.project-name-cell {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.project-color-bar {
+  width: 4px;
+  height: 32px;
+  border-radius: 2px;
+}
+
+.project-name-cell a {
+  color: var(--monday-dark);
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.project-name-cell a:hover {
+  color: var(--monday-blue);
+}
+
+/* Status Cell */
+.monday-status-cell {
+  display: flex;
+  align-items: center;
+}
+
+.monday-status-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 16px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 500;
+  min-width: 100px;
+  text-align: center;
+  color: white;
+}
+
+.monday-status-pill.planning { background: var(--monday-yellow); }
+.monday-status-pill.active { background: var(--monday-blue); }
+.monday-status-pill.in_progress { background: var(--monday-blue); }
+.monday-status-pill.completed { background: var(--monday-green); }
+.monday-status-pill.archived { background: var(--monday-grey); }
+.monday-status-pill.on_hold { background: var(--monday-orange); }
+.monday-status-pill.blocked { background: var(--monday-red); }
+
+/* Progress Cell */
+.monday-progress-cell {
+  min-width: 120px;
+}
+
+.progress-with-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.progress-bar-mini {
+  flex: 1;
+  height: 6px;
+  background: var(--monday-grey-lighter);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.progress-bar-mini-fill {
+  height: 100%;
+  background: var(--monday-green);
+  border-radius: 3px;
+  transition: width 0.3s;
+}
+
+.progress-bar-mini-fill.warning { background: var(--monday-yellow); }
+.progress-bar-mini-fill.danger { background: var(--monday-red); }
+
+.progress-text {
+  font-size: 12px;
+  color: var(--monday-grey);
+  min-width: 35px;
+}
+
+/* Client Cell */
+.client-avatars {
+  display: flex;
+}
+
+.client-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--monday-purple);
+  color: white;
+  font-size: 11px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: -6px;
+  border: 2px solid white;
+}
+
+.client-avatar:first-child {
+  margin-left: 0;
+}
+
+/* Hours Cell */
+.hours-cell {
+  font-weight: 500;
+}
+
+.hours-budget {
+  color: var(--monday-grey);
+  font-size: 12px;
+}
+
+/* Date Cell */
+.date-cell {
+  font-size: 13px;
+  color: var(--monday-grey);
+}
+
+.date-cell.overdue {
+  color: var(--monday-red);
+}
+
+.date-cell.soon {
+  color: var(--monday-yellow);
+}
+
+/* Actions Cell */
+.actions-cell {
+  display: flex;
+  gap: 4px;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+tr:hover .actions-cell {
+  opacity: 1;
+}
+
+.action-btn {
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+  color: var(--monday-grey);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.1s;
+}
+
+.action-btn:hover {
+  background: var(--monday-grey-lighter);
+  color: var(--monday-dark);
+}
+
+/* Empty State */
+.monday-empty-state {
+  text-align: center;
+  padding: 80px 20px;
+  background: white;
+  border-radius: 12px;
+}
+
+.monday-empty-state i {
+  font-size: 48px;
+  color: var(--monday-grey-light);
+  margin-bottom: 16px;
+}
+
+.monday-empty-state h4 {
+  color: var(--monday-dark);
+  margin-bottom: 8px;
+  font-weight: 600;
+}
+
+.monday-empty-state p {
+  color: var(--monday-grey);
+  margin-bottom: 24px;
+}
+
+/* Grid View */
+.projects-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 20px;
+}
+
+.project-card {
+  background: white;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+  transition: all 0.2s;
+  border-left: 4px solid var(--monday-blue);
+}
+
+.project-card:hover {
+  box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+  transform: translateY(-4px);
+}
+
+.project-card.planning { border-left-color: var(--monday-yellow); }
+.project-card.active { border-left-color: var(--monday-blue); }
+.project-card.in_progress { border-left-color: var(--monday-blue); }
+.project-card.completed { border-left-color: var(--monday-green); }
+.project-card.archived { border-left-color: var(--monday-grey); }
+.project-card.on_hold { border-left-color: var(--monday-orange); }
+.project-card.blocked { border-left-color: var(--monday-red); }
+
+.project-card-header {
+  padding: 20px;
+  border-bottom: 1px solid var(--monday-grey-lighter);
+}
+
+.project-card-header h5 {
+  margin: 0;
+  font-weight: 600;
+  font-size: 16px;
+}
+
+.project-card-header h5 a {
+  color: var(--monday-dark);
+  text-decoration: none;
+}
+
+.project-card-body {
+  padding: 20px;
+}
+
+.project-description {
+  color: var(--monday-grey);
+  font-size: 14px;
+  line-height: 1.5;
+  margin-bottom: 16px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.project-stats-row {
+  display: flex;
+  gap: 16px;
+}
+
+.project-stat {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--monday-grey);
+}
+
+.project-stat i {
+  font-size: 12px;
+}
+
+.project-card-footer {
+  padding: 16px 20px;
+  background: var(--monday-surface);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+#gridView { display: none; }
+#gridView.active { display: grid; }
+#tableView { display: none; }
+#tableView.active { display: block; }
+</style>
+{% endblock %}
+
+{% block content %}
+{% if no_role %}
+<!-- No Role Message -->
+<div class="container py-5">
+  <div class="row justify-content-center">
+    <div class="col-md-6">
+      <div class="card border-0 shadow-sm text-center">
+        <div class="card-body py-5">
+          <i class="fa-solid fa-user-lock fa-4x text-warning mb-4"></i>
+          <h3 class="fw-bold">{{ _('no_role_title') }}</h3>
+          <p class="text-muted mb-4">{{ _('no_role_message') }}</p>
+          <a href="{{ url_for('main.profile') }}" class="btn btn-outline-primary">
+            <i class="fa-solid fa-user me-2"></i>{{ _('view_profile') }}
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% else %}
+<!-- Board Header -->
+<div class="monday-board-header">
+  <div class="monday-board-title">
+    <i class="fa-solid fa-table-cells-large" style="font-size: 24px; color: var(--monday-blue);"></i>
+    <h1>{{ _('projects_header') }}</h1>
+  </div>
+  <div class="monday-board-actions">
+    <div class="view-switcher">
+      <button class="active" onclick="switchView('table')">
+        <i class="fa-solid fa-table-list me-1"></i> {{ _('table') if sys_language == 'en' else 'Tabla' }}
+      </button>
+      <button onclick="switchView('grid')">
+        <i class="fa-solid fa-grid-2 me-1"></i> {{ _('cards') if sys_language == 'en' else 'Tarjetas' }}
+      </button>
+    </div>
+    {% if current_user.is_internal %}
+    <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createProjectModal">
+      <i class="fa-solid fa-plus me-1"></i>{{ _('new_project') }}
+    </button>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Table View -->
+<div id="tableView" class="active">
+  {% if projects %}
+  <div class="monday-table-container">
+    <table class="monday-table">
+      <thead>
+        <tr>
+          <th style="min-width: 250px;">{{ _('project') }}</th>
+          <th style="min-width: 120px;">{{ _('status') }}</th>
+          <th style="min-width: 150px;">{{ _('progress') }}</th>
+          <th style="min-width: 100px;">{{ _('client') }}</th>
+          <th style="min-width: 120px;">{{ _('hours') }}</th>
+          <th style="min-width: 140px;">{{ _('due_date') }}</th>
+          <th style="width: 80px;"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for project in projects %}
+        <tr>
+          <td>
+            <div class="project-name-cell">
+              <div class="project-color-bar" style="background: {% if project.status == 'PLANNING' %}var(--monday-yellow){% elif project.status == 'ACTIVE' or project.status == 'IN_PROGRESS' %}var(--monday-blue){% elif project.status == 'COMPLETED' %}var(--monday-green){% elif project.status == 'BLOCKED' %}var(--monday-red){% elif project.status == 'ON_HOLD' %}var(--monday-orange){% else %}var(--monday-grey){% endif %};"></div>
+              <div>
+                <a href="{{ url_for('main.project_detail', project_id=project.id) }}">{{ project.name }}</a>
+                <div class="text-muted" style="font-size: 12px;">{{ project.project_type|replace('_', ' ')|title }}</div>
+              </div>
+            </div>
+          </td>
+          <td>
+            <div class="monday-status-cell">
+              <span class="monday-status-pill {{ project.status|lower }}">
+                {{ project.status|replace('_', ' ')|title }}
+              </span>
+            </div>
+          </td>
+          <td>
+            <div class="monday-progress-cell">
+              <div class="progress-with-label">
+                <div class="progress-bar-mini">
+                  <div class="progress-bar-mini-fill {% if project.progress > 80 %}{% elif project.progress > 50 %}warning{% else %}{% endif %}" 
+                       style="width: {{ project.progress }}%;"></div>
+                </div>
+                <span class="progress-text">{{ "%.0f"|format(project.progress) }}%</span>
+              </div>
+            </div>
+          </td>
+          <td>
+            {% if project.clients %}
+            <div class="client-avatars">
+              {% for client in project.clients[:3] %}
+              <div class="client-avatar" title="{{ client.first_name or client.email }}">
+                {{ (client.first_name or client.email)[0]|upper }}
+              </div>
+              {% endfor %}
+              {% if project.clients|length > 3 %}
+              <div class="client-avatar" style="background: var(--monday-grey);">+{{ project.clients|length - 3 }}</div>
+              {% endif %}
+            </div>
+            {% else %}
+            <span class="text-muted">—</span>
+            {% endif %}
+          </td>
+          <td>
+            <div class="hours-cell">
+              {{ project.hours_spent }}h
+              <span class="hours-budget">/ {{ project.budget_hours or '∞' }}h</span>
+            </div>
+          </td>
+          <td>
+            <div class="date-cell {% if project.end_date and project.end_date < now.date() %}overdue{% endif %}">
+              {% if project.end_date %}
+              <i class="fa-regular fa-calendar me-1"></i>{{ project.end_date.strftime('%d %b %Y') }}
+              {% else %}
+              —
+              {% endif %}
+            </div>
+          </td>
+          <td>
+            <div class="actions-cell">
+              <a href="{{ url_for('main.project_detail', project_id=project.id) }}" class="action-btn" title="View">
+                <i class="fa-solid fa-eye"></i>
+              </a>
+              {% if current_user_role_name in ['PMP','Admin'] %}
+              <a href="{{ url_for('main.edit_project', project_id=project.id) }}" class="action-btn" title="Edit">
+                <i class="fa-solid fa-pen"></i>
+              </a>
+              {% endif %}
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="monday-empty-state">
+    <i class="fa-regular fa-folder-open"></i>
+    <h4>{{ _('no_projects') }}</h4>
+    <p>{{ _('create_first_project') }}</p>
+    {% if current_user_role_name in ['PMP','Admin'] %}
+    <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createProjectModal">
+      <i class="fa-solid fa-plus me-2"></i>{{ _('create_project') }}
+    </button>
+    {% endif %}
+  </div>
+  {% endif %}
+</div>
+
+<!-- Grid View -->
+<div id="gridView" class="projects-grid">
+  {% for project in projects %}
+  <div class="project-card {{ project.status|lower }}">
+    <div class="project-card-header">
+      <div class="d-flex justify-content-between align-items-start">
+        <h5><a href="{{ url_for('main.project_detail', project_id=project.id) }}">{{ project.name }}</a></h5>
+        <span class="monday-status-pill {{ project.status|lower }}" style="font-size: 11px; padding: 4px 10px; min-width: auto;">
+          {{ project.status|replace('_', ' ')|title }}
+        </span>
+      </div>
+    </div>
+    <div class="project-card-body">
+      <p class="project-description">{{ project.description or _('no_description') }}</p>
+      
+      <div class="monday-progress mb-3">
+        <div class="monday-progress-bar" style="width: {{ project.progress }}%;"></div>
+      </div>
+      
+      <div class="project-stats-row">
+        <div class="project-stat">
+          <i class="fa-regular fa-clock"></i>
+          {{ project.hours_spent }}h / {{ project.budget_hours or '∞' }}h
+        </div>
+        <div class="project-stat">
+          <i class="fa-regular fa-calendar"></i>
+          {{ project.end_date.strftime('%d %b') if project.end_date else _('no_end_date') }}
+        </div>
+      </div>
+    </div>
+    <div class="project-card-footer">
+      {% if project.clients %}
+      <div class="client-avatars">
+        {% for client in project.clients[:2] %}
+        <div class="client-avatar" title="{{ client.first_name or client.email }}">
+          {{ (client.first_name or client.email)[0]|upper }}
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      {% if project.members %}
+      <div class="member-avatars ms-2">
+        {% for member in project.members[:2] %}
+        <div class="member-avatar" title="{{ member.first_name or member.email }}">
+          {{ (member.first_name or member.email)[0]|upper }}
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+      {% if current_user_role_name in ['PMP','Admin'] %}
+      <a href="{{ url_for('main.edit_project', project_id=project.id) }}" class="action-btn">
+        <i class="fa-solid fa-pen"></i>
+      </a>
+      {% endif %}
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+function switchView(view) {
+  const buttons = document.querySelectorAll('.view-switcher button');
+  buttons.forEach(btn => btn.classList.remove('active'));
+  event.target.closest('button').classList.add('active');
+  
+  document.getElementById('tableView').classList.toggle('active', view === 'table');
+  document.getElementById('gridView').classList.toggle('active', view === 'grid');
+}
+</script>
+{% endblock %}

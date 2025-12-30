@@ -1,0 +1,137 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ _('content') }} — {{ _('administration') }} — {{ sys_app_name }}{% endblock %}
+
+{% block content %}
+<div class="mb-4">
+  <nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+      <li class="breadcrumb-item"><a href="{{ url_for('main.admin_dashboard') }}">{{ _('administration') }}</a></li>
+      <li class="breadcrumb-item active">{{ _('content_title') }}</li>
+    </ol>
+  </nav>
+  <h2 class="fw-bold text-primary">
+    <i class="fa-solid fa-pen-fancy me-2"></i>{{ _('content_title') }}
+  </h2>
+  <p class="text-muted">{{ _('content_subtitle') }}</p>
+</div>
+
+<form action="{{ url_for('main.admin_content') }}" method="POST">
+  <div class="row">
+    <div class="col-lg-8">
+      <!-- Footer -->
+      <div class="card border-0 shadow-sm mb-4">
+        <div class="card-header bg-light">
+          <h5 class="mb-0 fw-bold"><i class="fa-solid fa-shoe-prints me-2 text-primary"></i>{{ _('footer') }}</h5>
+        </div>
+        <div class="card-body">
+          <div class="mb-3">
+            <label class="form-label fw-semibold">{{ _('footer_text') }}</label>
+            <textarea name="footer_text" class="form-control" rows="2" placeholder="{{ _('footer_text_hint') }}">{{ settings.footer_text }}</textarea>
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">{{ _('copyright_text') }}</label>
+            <input type="text" name="copyright_text" class="form-control" value="{{ settings.copyright_text }}" placeholder="© 2025 Your Company">
+            <small class="text-muted">{{ _('copyright_hint') }}</small>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Contacto -->
+      <div class="card border-0 shadow-sm mb-4">
+        <div class="card-header bg-light">
+          <h5 class="mb-0 fw-bold"><i class="fa-solid fa-headset me-2 text-primary"></i>{{ _('support') }}</h5>
+        </div>
+        <div class="card-body">
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label class="form-label fw-semibold">{{ _('support_email') }}</label>
+              <input type="email" name="support_email" class="form-control" value="{{ settings.support_email }}" placeholder="support@yourcompany.com">
+            </div>
+            <div class="col-md-6 mb-3">
+              <label class="form-label fw-semibold">{{ _('support_phone') }}</label>
+              <input type="tel" name="support_phone" class="form-control" value="{{ settings.support_phone }}" placeholder="+1 555 123 4567">
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Enlaces Legales -->
+      <div class="card border-0 shadow-sm mb-4">
+        <div class="card-header bg-light">
+          <h5 class="mb-0 fw-bold"><i class="fa-solid fa-scale-balanced me-2 text-primary"></i>{{ _('legal_links') }}</h5>
+        </div>
+        <div class="card-body">
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label class="form-label fw-semibold">{{ _('terms_url') }}</label>
+              <input type="url" name="terms_url" class="form-control" value="{{ settings.terms_url }}" placeholder="https://yourcompany.com/terms">
+            </div>
+            <div class="col-md-6 mb-3">
+              <label class="form-label fw-semibold">{{ _('privacy_url') }}</label>
+              <input type="url" name="privacy_url" class="form-control" value="{{ settings.privacy_url }}" placeholder="https://yourcompany.com/privacy">
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Mensajes -->
+      <div class="card border-0 shadow-sm mb-4">
+        <div class="card-header bg-light">
+          <h5 class="mb-0 fw-bold"><i class="fa-solid fa-message me-2 text-primary"></i>{{ _('system_messages') }}</h5>
+        </div>
+        <div class="card-body">
+          <div class="mb-3">
+            <label class="form-label fw-semibold">{{ _('welcome_message') }}</label>
+            <textarea name="welcome_message" class="form-control" rows="3" placeholder="{{ _('welcome_message_hint') }}">{{ settings.welcome_message }}</textarea>
+            <small class="text-muted">{{ _('welcome_message_hint') }}</small>
+          </div>
+        </div>
+      </div>
+      
+      <div class="d-flex gap-2">
+        <button type="submit" class="btn btn-primary">
+          <i class="fa-solid fa-save me-2"></i>{{ _('save_content') }}
+        </button>
+        <a href="{{ url_for('main.admin_dashboard') }}" class="btn btn-outline-secondary">{{ _('cancel') }}</a>
+      </div>
+    </div>
+    
+    <div class="col-lg-4">
+      <!-- Preview Footer -->
+      <div class="card border-0 shadow-sm">
+        <div class="card-header bg-light">
+          <h6 class="mb-0 fw-bold"><i class="fa-solid fa-eye me-2"></i>{{ _('footer_preview') }}</h6>
+        </div>
+        <div class="card-body bg-dark text-white rounded-bottom">
+          <div class="small mb-2" id="previewFooterText">{{ settings.footer_text or _('footer_text_hint') }}</div>
+          <div class="d-flex justify-content-between align-items-center">
+            <small class="text-white-50" id="previewCopyright">{{ settings.copyright_text }}</small>
+            <div>
+              {% if settings.terms_url %}<a href="#" class="text-white-50 small me-2">{{ _('terms') }}</a>{% endif %}
+              {% if settings.privacy_url %}<a href="#" class="text-white-50 small">{{ _('privacy') }}</a>{% endif %}
+            </div>
+          </div>
+          {% if settings.support_email or settings.support_phone %}
+          <hr class="border-secondary my-2">
+          <small class="text-white-50">
+            {% if settings.support_email %}<i class="fa-solid fa-envelope me-1"></i>{{ settings.support_email }}{% endif %}
+            {% if settings.support_phone %}<span class="ms-2"><i class="fa-solid fa-phone me-1"></i>{{ settings.support_phone }}</span>{% endif %}
+          </small>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+</form>
+
+<script>
+// Preview en tiempo real
+document.querySelector('textarea[name="footer_text"]').addEventListener('input', function(e) {
+  document.getElementById('previewFooterText').textContent = e.target.value || 'Tu texto del footer aquí...';
+});
+document.querySelector('input[name="copyright_text"]').addEventListener('input', function(e) {
+  document.getElementById('previewCopyright').textContent = e.target.value;
+});
+</script>
+{% endblock %}

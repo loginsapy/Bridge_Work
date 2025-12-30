@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="{{ sys_language|default('es') }}">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+  <meta name="description" content="{{ sys_app_name }} - {{ sys_app_subtitle }}">
+  <meta name="author" content="{{ sys_app_name }} Team">
+
+  <title>{% block title %}{{ sys_app_name }} - {{ sys_app_subtitle }}{% endblock %}</title>
+
+  {% if sys_favicon_path %}
+  <link rel="icon" href="{{ sys_favicon_path }}" type="image/x-icon">
+  {% endif %}
+
+  <!-- Google Fonts - Figtree (Monday.com style) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Figtree:wght@300;400;500;600;700;800&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+  <!-- Bootstrap 5 (CDN) -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <!-- FontAwesome -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <!-- Monday-style CSS -->
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/monday.css') }}">
+  <!-- App styles (overrides) -->
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
+  
+  <!-- Dynamic Theme Colors -->
+  <style>
+    :root {
+      --bs-primary: {{ sys_primary_color }};
+      --bs-primary-rgb: {{ sys_primary_color | replace('#', '') }};
+      --sidebar-bg: {{ sys_sidebar_color }};
+      /* Dynamic theme variables for use in child templates */
+      --app-primary: {{ sys_primary_color }};
+      --app-primary-light: {{ sys_primary_color }}20;
+      --app-sidebar: {{ sys_sidebar_color }};
+      --app-secondary: {{ sys_secondary_color }};
+      /* Monday-style variables mapped to system config */
+      --monday-blue: {{ sys_primary_color }};
+      --monday-green: #00c875;
+      --monday-yellow: #fdab3d;
+      --monday-red: #e2445c;
+      --monday-purple: #a25ddc;
+      --monday-grey: #c4c4c4;
+      --monday-dark: {{ sys_sidebar_color }};
+      --monday-light-grey: #f5f6f8;
+    }
+    .btn-primary {
+      background-color: {{ sys_primary_color }};
+      border-color: {{ sys_primary_color }};
+    }
+    .btn-primary:hover {
+      background-color: {{ sys_primary_color }};
+      border-color: {{ sys_primary_color }};
+      filter: brightness(0.9);
+    }
+    .btn-outline-primary {
+      color: {{ sys_primary_color }};
+      border-color: {{ sys_primary_color }};
+    }
+    .btn-outline-primary:hover {
+      background-color: {{ sys_primary_color }};
+      border-color: {{ sys_primary_color }};
+    }
+    .text-primary {
+      color: {{ sys_primary_color }} !important;
+    }
+    .bg-primary {
+      background-color: {{ sys_primary_color }} !important;
+    }
+    a:not(.btn):not(.nav-link):not(.list-group-item) {
+      color: {{ sys_primary_color }};
+    }
+    #sidebar-wrapper {
+      background: {{ sys_sidebar_color }} !important;
+    }
+  </style>
+  {% block head %}{% endblock %}
+</head>
+
+<body class="app-body">
+  <div id="loading-overlay" class="loading-overlay">
+    <div class="spinner-border text-primary" role="status">
+      <span class="visually-hidden">Cargando...</span>
+    </div>
+  </div>
+
+  <header class="navbar-header">
+    {% if current_user.is_authenticated %}
+      {% include 'components/_navbar.html' %}
+    {% endif %}
+  </header>
+
+  <div class="d-flex" id="wrapper">
+    {% if current_user.is_authenticated %}
+      {% include 'components/_sidebar.html' %}
+    {% endif %}
+
+    <main id="page-content-wrapper" class="w-100 p-4">
+      <div class="container-fluid">
+        <!-- Flash Messages Container -->
+        <div id="flash-messages" class="mb-4">
+          {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            {% for category, message in messages %}
+            <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+              {{ message }}
+              <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+            {% endfor %}
+          {% endif %}
+          {% endwith %}
+        </div>
+
+        {% block content %}{% endblock %}
+      </div>
+    </main>
+  </div>
+
+  <!-- Footer -->
+  {% if current_user.is_authenticated %}
+  <footer class="bg-dark text-white py-3 mt-auto" style="margin-left: 280px;">
+    <div class="container-fluid px-4">
+      <div class="row align-items-center">
+        <div class="col-md-6">
+          {% if sys_footer_text %}
+            <small class="text-white-50">{{ sys_footer_text }}</small>
+          {% endif %}
+        </div>
+        <div class="col-md-6 text-md-end">
+          <small class="text-white-50">{{ sys_copyright_text }}</small>
+          {% if sys_support_email %}
+            <span class="mx-2 text-white-50">|</span>
+            <a href="mailto:{{ sys_support_email }}" class="text-white-50 text-decoration-none small">
+              <i class="fa-solid fa-envelope me-1"></i>{{ sys_support_email }}
+            </a>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </footer>
+  {% endif %}
+
+  <!-- JS: Bootstrap and dependencies -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+  {% block scripts %}{% endblock %}
+  <script>
+    // Global script for loading overlay and flash messages auto-dismiss
+    document.addEventListener('DOMContentLoaded', function() {
+      // Hide loading overlay when page is fully loaded
+      const loadingOverlay = document.getElementById('loading-overlay');
+      if (loadingOverlay) {
+        loadingOverlay.style.display = 'none';
+      }
+
+      // Auto-dismiss flash messages after 5 seconds
+      document.querySelectorAll('.alert-dismissible').forEach(alert => {
+        setTimeout(() => {
+          new bootstrap.Alert(alert).close();
+        }, 5000);
+      });
+    });
+
+    // Simple functions to show/hide loading overlay manually
+    function showLoading() {
+      document.getElementById('loading-overlay').style.display = 'flex';
+    }
+
+    function hideLoading() {
+      document.getElementById('loading-overlay').style.display = 'none';
+    }
+  </script>
+
+  <!-- Modal: Incomplete Predecessors (global) -->
+  <div class="modal fade" id="predecessorModal" tabindex="-1" aria-labelledby="predecessorModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="predecessorModalLabel">Predecesoras incompletas</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+        </div>
+        <div class="modal-body">
+          <p>No se puede marcar esta tarea como completada mientras existan las siguientes predecesoras incompletas:</p>
+          <ul id="predecessorList" class="list-group mb-3"></ul>
+          <div class="small text-muted">Puedes ir a la tarea para completarla o revisar su estado.</div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+
+</html>

@@ -1,0 +1,182 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ _('appearance') }} — {{ _('administration') }} — {{ sys_app_name }}{% endblock %}
+
+{% block content %}
+<div class="mb-4">
+  <nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+      <li class="breadcrumb-item"><a href="{{ url_for('main.admin_dashboard') }}">{{ _('administration') }}</a></li>
+      <li class="breadcrumb-item active">{{ _('appearance') }}</li>
+    </ol>
+  </nav>
+  <h2 class="fw-bold text-primary">
+    <i class="fa-solid fa-palette me-2"></i>{{ _('branding_title') }}
+  </h2>
+  <p class="text-muted">{{ _('branding_subtitle') }}</p>
+</div>
+
+<form action="{{ url_for('main.admin_branding') }}" method="POST" enctype="multipart/form-data">
+  <div class="row">
+    <div class="col-lg-8">
+      <!-- Identidad -->
+      <div class="card border-0 shadow-sm mb-4">
+        <div class="card-header bg-light">
+          <h5 class="mb-0 fw-bold"><i class="fa-solid fa-id-card me-2 text-primary"></i>{{ _('identity') }}</h5>
+        </div>
+        <div class="card-body">
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label class="form-label fw-semibold">{{ _('app_name') }}</label>
+              <input type="text" name="app_name" class="form-control" value="{{ settings.app_name }}" placeholder="BridgeWork">
+              <small class="text-muted">{{ _('app_name_hint') }}</small>
+            </div>
+            <div class="col-md-6 mb-3">
+              <label class="form-label fw-semibold">{{ _('subtitle') }}</label>
+              <input type="text" name="app_subtitle" class="form-control" value="{{ settings.app_subtitle }}" placeholder="Project Manager">
+              <small class="text-muted">{{ _('subtitle_hint') }}</small>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Logotipos -->
+      <div class="card border-0 shadow-sm mb-4">
+        <div class="card-header bg-light">
+          <h5 class="mb-0 fw-bold"><i class="fa-solid fa-image me-2 text-primary"></i>{{ _('logos') }}</h5>
+        </div>
+        <div class="card-body">
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label class="form-label fw-semibold">{{ _('main_logo') }}</label>
+              <input type="file" name="logo" class="form-control" accept="image/*">
+              <small class="text-muted">{{ _('logo_hint') }}</small>
+              {% if settings.logo_path %}
+                <div class="mt-2 p-2 bg-dark rounded">
+                  <img src="{{ settings.logo_path }}" alt="Logo actual" style="max-height: 40px;">
+                </div>
+              {% endif %}
+            </div>
+            <div class="col-md-6 mb-3">
+              <label class="form-label fw-semibold">{{ _('favicon') }}</label>
+              <input type="file" name="favicon" class="form-control" accept="image/x-icon,image/png">
+              <small class="text-muted">{{ _('favicon_hint') }}</small>
+              {% if settings.favicon_path %}
+                <div class="mt-2">
+                  <img src="{{ settings.favicon_path }}" alt="Favicon actual" style="max-height: 32px;">
+                </div>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Colores -->
+      <div class="card border-0 shadow-sm mb-4">
+        <div class="card-header bg-light">
+          <h5 class="mb-0 fw-bold"><i class="fa-solid fa-droplet me-2 text-primary"></i>{{ _('colors') }}</h5>
+        </div>
+        <div class="card-body">
+          <div class="row">
+            <div class="col-md-4 mb-3">
+              <label class="form-label fw-semibold">{{ _('primary_color') }}</label>
+              <div class="input-group">
+                <input type="color" name="primary_color" class="form-control form-control-color" value="{{ settings.primary_color }}" id="primaryColor">
+                <input type="text" class="form-control" value="{{ settings.primary_color }}" id="primaryColorText" onchange="document.getElementById('primaryColor').value = this.value">
+              </div>
+              <small class="text-muted">{{ _('primary_color_hint') }}</small>
+            </div>
+            <div class="col-md-4 mb-3">
+              <label class="form-label fw-semibold">{{ _('secondary_color') }}</label>
+              <div class="input-group">
+                <input type="color" name="secondary_color" class="form-control form-control-color" value="{{ settings.secondary_color }}" id="secondaryColor">
+                <input type="text" class="form-control" value="{{ settings.secondary_color }}" id="secondaryColorText" onchange="document.getElementById('secondaryColor').value = this.value">
+              </div>
+              <small class="text-muted">{{ _('secondary_color_hint') }}</small>
+            </div>
+            <div class="col-md-4 mb-3">
+              <label class="form-label fw-semibold">{{ _('sidebar_color') }}</label>
+              <div class="input-group">
+                <input type="color" name="sidebar_color" class="form-control form-control-color" value="{{ settings.sidebar_color }}" id="sidebarColor">
+                <input type="text" class="form-control" value="{{ settings.sidebar_color }}" id="sidebarColorText" onchange="document.getElementById('sidebarColor').value = this.value">
+              </div>
+              <small class="text-muted">{{ _('sidebar_color_hint') }}</small>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <div class="d-flex gap-2">
+        <button type="submit" class="btn btn-primary">
+          <i class="fa-solid fa-save me-2"></i>{{ _('save_changes') }}
+        </button>
+        <a href="{{ url_for('main.admin_dashboard') }}" class="btn btn-outline-secondary">{{ _('cancel') }}</a>
+      </div>
+    </div>
+    
+    <div class="col-lg-4">
+      <!-- Preview -->
+      <div class="card border-0 shadow-sm sticky-top" style="top: 1rem;">
+        <div class="card-header bg-light">
+          <h6 class="mb-0 fw-bold"><i class="fa-solid fa-eye me-2"></i>{{ _('preview') }}</h6>
+        </div>
+        <div class="card-body">
+          <div class="preview-sidebar rounded mb-3 p-3" id="previewSidebar" style="background-color: {{ settings.sidebar_color }};">
+            <div class="d-flex align-items-center text-white mb-3">
+              <i class="fa-solid fa-bridge fa-lg me-2"></i>
+              <div>
+                <div class="fw-bold" id="previewAppName">{{ settings.app_name }}</div>
+                <small class="opacity-75" id="previewSubtitle">{{ settings.app_subtitle }}</small>
+              </div>
+            </div>
+            <div class="list-group list-group-flush bg-transparent">
+              <div class="list-group-item bg-transparent border-0 text-white-50 py-1 px-2 small">
+                <i class="fa-solid fa-gauge me-2"></i> {{ _('dashboard') }}
+              </div>
+              <div class="list-group-item bg-transparent border-0 text-white py-1 px-2 small" id="previewActiveItem" style="background-color: rgba(255,255,255,0.1); border-radius: 4px;">
+                <i class="fa-solid fa-folder me-2"></i> {{ _('projects') }}
+              </div>
+            </div>
+          </div>
+          
+          <div class="mb-3">
+            <button class="btn btn-sm w-100" id="previewBtn" style="background-color: {{ settings.primary_color }}; color: white;">
+              <i class="fa-solid fa-plus me-1"></i> {{ _('primary_button') }}
+            </button>
+          </div>
+          <div class="mb-3">
+            <button class="btn btn-sm btn-outline-primary w-100" id="previewBtnOutline">
+              {{ _('outline_button') }}
+            </button>
+          </div>
+          <p class="small text-muted mb-0">
+            <a href="#" id="previewLink" style="color: {{ settings.primary_color }};">{{ _('sample_link') }}</a>
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+</form>
+
+<script>
+// Preview en tiempo real
+document.getElementById('primaryColor').addEventListener('input', function(e) {
+  document.getElementById('primaryColorText').value = e.target.value;
+  document.getElementById('previewBtn').style.backgroundColor = e.target.value;
+  document.getElementById('previewLink').style.color = e.target.value;
+});
+
+document.getElementById('sidebarColor').addEventListener('input', function(e) {
+  document.getElementById('sidebarColorText').value = e.target.value;
+  document.getElementById('previewSidebar').style.backgroundColor = e.target.value;
+});
+
+document.querySelector('input[name="app_name"]').addEventListener('input', function(e) {
+  document.getElementById('previewAppName').textContent = e.target.value || 'BridgeWork';
+});
+
+document.querySelector('input[name="app_subtitle"]').addEventListener('input', function(e) {
+  document.getElementById('previewSubtitle').textContent = e.target.value || 'Project Manager';
+});
+</script>
+{% endblock %}

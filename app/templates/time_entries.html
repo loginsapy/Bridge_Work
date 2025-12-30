@@ -1,0 +1,459 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ _('time_entries') }} — {{ sys_app_name }}{% endblock %}
+
+{% block head %}
+<style>
+/* Monday.com Time Entries Page Styles */
+.time-page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--monday-border);
+}
+
+.time-page-header h1 {
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--monday-dark);
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.time-page-header h1 i {
+  color: var(--monday-green);
+}
+
+/* Week Summary Card */
+.week-summary {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 20px 24px;
+  background: white;
+  border-radius: 8px;
+  border: 1px solid var(--monday-border);
+  margin-bottom: 24px;
+}
+
+  /* Filter badges */
+  .filter-badges { margin-top: 8px; display:flex; gap:8px; flex-wrap:wrap; align-items:center }
+  .filter-badges .badge { padding: 6px 10px; font-size: 13px; }
+  .filter-badges .count { margin-left: 12px; color: var(--monday-text-secondary); font-size: 13px }
+
+  /* Responsive filter form */
+  .time-filter-form { display:flex; gap:8px; align-items:center }
+  .time-filter-form .form-control, .time-filter-form .form-select { width: auto }
+  @media (max-width: 720px) {
+    .time-filter-form { flex-wrap:wrap }
+    .time-filter-form .form-control, .time-filter-form .form-select { width: 100% }
+  }
+
+.week-content .value {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--monday-dark);
+}
+
+.week-content .label {
+  font-size: 13px;
+  color: var(--monday-text-secondary);
+}
+
+/* Monday Time Table */
+.monday-time-table {
+  background: white;
+  border-radius: 8px;
+  border: 1px solid var(--monday-border);
+  overflow: hidden;
+}
+
+.monday-time-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  background: var(--monday-light-grey);
+  border-bottom: 1px solid var(--monday-border);
+}
+
+.monday-time-header h3 {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--monday-dark);
+  margin: 0;
+}
+
+.monday-time-table table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.monday-time-table th {
+  padding: 12px 16px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--monday-text-secondary);
+  text-align: left;
+  background: var(--monday-light-grey);
+  border-bottom: 1px solid var(--monday-border);
+}
+
+.monday-time-table td {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--monday-border);
+  vertical-align: middle;
+}
+
+.monday-time-table tr:last-child td {
+  border-bottom: none;
+}
+
+.monday-time-table tr:hover td {
+  background: rgba(0, 115, 234, 0.04);
+}
+
+/* Date Cell */
+.date-cell {
+  font-weight: 600;
+  color: var(--monday-dark);
+  font-size: 13px;
+}
+
+/* User Cell */
+.user-cell {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.user-cell .avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 600;
+  color: white;
+}
+
+.user-cell .name {
+  font-size: 13px;
+  color: var(--monday-dark);
+}
+
+/* Task Cell */
+.task-link {
+  color: var(--monday-blue);
+  text-decoration: none;
+  font-weight: 500;
+  font-size: 13px;
+}
+
+.task-link:hover {
+  text-decoration: underline;
+}
+
+/* Description Cell */
+.description-cell {
+  font-size: 13px;
+  color: var(--monday-text-secondary);
+  max-width: 200px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Hours Badge */
+.hours-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  background: var(--monday-light-grey);
+  border-radius: 4px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--monday-dark);
+}
+
+/* Billable Status */
+.billable-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.billable-badge.yes {
+  background: rgba(0, 200, 117, 0.15);
+  color: var(--monday-green);
+}
+
+.billable-badge.no {
+  background: var(--monday-light-grey);
+  color: var(--monday-text-secondary);
+}
+
+/* Action Buttons */
+.action-btns {
+  display: flex;
+  gap: 4px;
+  justify-content: flex-end;
+}
+
+.action-btn {
+  padding: 6px 10px;
+  border: 1px solid var(--monday-border);
+  border-radius: 4px;
+  background: white;
+  color: var(--monday-text-secondary);
+  cursor: pointer;
+  transition: all 0.2s;
+  font-size: 12px;
+}
+
+.action-btn:hover {
+  border-color: var(--monday-blue);
+  color: var(--monday-blue);
+}
+
+.action-btn.delete:hover {
+  border-color: var(--monday-red);
+  color: var(--monday-red);
+}
+
+/* Empty State */
+.monday-empty-time {
+  text-align: center;
+  padding: 48px 20px;
+}
+
+.monday-empty-time i {
+  font-size: 40px;
+  color: var(--monday-border);
+  margin-bottom: 16px;
+}
+
+.monday-empty-time p {
+  color: var(--monday-text-secondary);
+  margin-bottom: 16px;
+}
+
+.monday-empty-time a {
+  color: var(--monday-blue);
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.monday-empty-time a:hover {
+  text-decoration: underline;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Page Header -->
+<div class="time-page-header">
+  <h1>
+    <i class="fa-regular fa-clock"></i>
+    {{ _('time_header') }}
+  </h1>
+  {% if current_user.is_internal %}
+  <a href="{{ url_for('main.create_time_entry') }}" class="monday-btn monday-btn-primary">
+    <i class="fa-solid fa-plus"></i>
+    {{ _('register_hours') }}
+  </a>
+  {% endif %}
+</div>
+
+<!-- Week Summary -->
+<div class="week-summary">
+  <div class="week-icon">
+    <i class="fa-solid fa-calendar-week"></i>
+  </div>
+  <div class="week-content">
+    <div class="value">{{ "%.1f"|format(total_hours_week) }}h</div>
+    <div class="label">{{ _('this_week') }}</div>
+  </div>
+</div>
+
+<!-- Time Entries Table -->
+<div class="monday-time-table">
+  <div class="monday-time-header">
+    <h3>{{ _('recent_history') }}</h3>
+    <div>
+      <form class="time-filter-form" method="GET" action="{{ url_for('main.time_entries') }}">
+        <input type="date" name="start_date" class="form-control form-control-sm" value="{{ request.args.get('start_date','') }}" placeholder="Start">
+        <input type="date" name="end_date" class="form-control form-control-sm" value="{{ request.args.get('end_date','') }}" placeholder="End">
+        {% if users %}
+        <select name="user_id" class="form-select form-select-sm">
+          <option value="">Todos</option>
+          {% for u in users %}
+            <option value="{{ u.id }}" {% if request.args.get('user_id') and request.args.get('user_id')|int == u.id %}selected{% endif %}>{{ u.first_name or u.email }}</option>
+          {% endfor %}
+        </select>
+        {% endif %}
+        <button class="btn btn-sm btn-outline-secondary" type="submit">{{ _('filter') }}</button>
+        <a href="{{ url_for('main.time_entries') }}" class="btn btn-sm btn-outline-secondary">{{ _('clear') }}</a>
+      </form>
+
+      <!-- Active filters badges -->
+      <div class="filter-badges">
+        {% if request.args.get('start_date') %}
+          {% set p = request.args.to_dict() %}
+          {% set _ = p.pop('start_date', None) %}
+          <span class="badge bg-secondary">Desde: {{ request.args.get('start_date') }} <a href="{{ url_for('main.time_entries', **p) }}" class="ms-2 text-white text-decoration-none">&times;</a></span>
+        {% endif %}
+        {% if request.args.get('end_date') %}
+          {% set p = request.args.to_dict() %}
+          {% set _ = p.pop('end_date', None) %}
+          <span class="badge bg-secondary">Hasta: {{ request.args.get('end_date') }} <a href="{{ url_for('main.time_entries', **p) }}" class="ms-2 text-white text-decoration-none">&times;</a></span>
+        {% endif %}
+        {% if request.args.get('user_id') %}
+          {% set p = request.args.to_dict() %}
+          {% set _ = p.pop('user_id', None) %}
+          {% set selected_user = users|selectattr('id','equalto', request.args.get('user_id')|int)|first %}
+          <span class="badge bg-secondary">Usuario: {{ (selected_user.first_name or selected_user.email) if selected_user else request.args.get('user_id') }} <a href="{{ url_for('main.time_entries', **p) }}" class="ms-2 text-white text-decoration-none">&times;</a></span>
+        {% endif %}
+        <span class="count">Mostrando {{ time_entries|length }} de {{ total_count }}</span>
+      </div>
+    </div>
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th>{{ _('date') }}</th>
+        <th>{{ _('user') }}</th>
+        <th>{{ _('task') }}</th>
+        <th>{{ _('description') }}</th>
+        <th>{{ _('hours') }}</th>
+        <th style="text-align: center;">{{ _('billed') }}</th>
+        <th style="text-align: right;">{{ _('actions') }}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% if time_entries %}
+        {% for entry in time_entries %}
+        <tr>
+          {% set show_user = (current_user.role and current_user.role.name in ['PMP','Admin']) %}
+
+          <td class="date-cell">{{ entry.date|sys_date }}</td>
+          <td>
+            <div class="user-cell">
+              {% set avatar_colors = ['#0073ea', '#00c875', '#fdab3d', '#e2445c', '#a25ddc'] %}
+              <div class="avatar" data-color="{{ avatar_colors[loop.index0 % avatar_colors|length] }}">
+                {{ entry.user.email[0]|upper }}
+              </div>
+              <span class="name">{{ entry.user.first_name or entry.user.email.split('@')[0] }}</span>
+            </div>
+          </td>
+          <td>
+            {% if entry.task %}
+              <a href="{{ url_for('main.task_detail', task_id=entry.task.id) }}" class="task-link">
+                {{ entry.task.title }}
+              </a>
+            {% else %}
+              <span style="color: var(--monday-text-secondary);">—</span>
+            {% endif %}
+          </td>
+          <td class="description-cell" title="{{ entry.description or '—' }}">
+            {{ entry.description or '—' }}
+          </td>
+          <td>
+            <span class="hours-badge">{{ "%.1f"|format(entry.hours) }}h</span>
+          </td>
+          <td style="text-align: center;">
+            {% if entry.is_billable %}
+              <span class="billable-badge yes">{{ _('yes') }}</span>
+            {% else %}
+              <span class="billable-badge no">{{ _('no') }}</span>
+            {% endif %}
+          </td>
+          <td>
+            <div class="action-btns">
+              {% if (current_user.role and current_user.role.name in ['PMP','Admin']) or entry.user_id == current_user.id %}
+              <a href="{{ url_for('main.edit_time_entry', entry_id=entry.id) }}" class="action-btn" title="{{ _('edit') }}">
+                <i class="fa-solid fa-pen"></i>
+              </a>
+              <form method="POST" action="{{ url_for('main.delete_time_entry', entry_id=entry.id) }}" style="display:inline;" data-confirm="{{ _('delete_entry') }}">
+                <button type="submit" class="action-btn delete" title="{{ _('delete') }}">
+                  <i class="fa-solid fa-trash"></i>
+                </button>
+              </form>
+              {% else %}
+              <span class="text-muted small">&mdash;</span>
+              {% endif %}
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      {% else %}
+        <tr>
+          <td colspan="7">
+            <div class="monday-empty-time">
+              <i class="fa-regular fa-clock"></i>
+              <p>{{ _('no_time_entries') }}</p>
+              <a href="{{ url_for('main.create_time_entry') }}">{{ _('register_hours') }}</a>
+            </div>
+          </td>
+        </tr>
+      {% endif %}
+    </tbody>
+  </table>
+</div>
+
+<script>
+// Set avatar colors from data attribute
+document.addEventListener('DOMContentLoaded', function(){
+  document.querySelectorAll('.avatar[data-color]').forEach(function(el){
+    el.style.background = el.getAttribute('data-color');
+  });
+});
+</script>
+
+<script>
+// Confirmable delete forms
+document.addEventListener('DOMContentLoaded', function(){
+  document.querySelectorAll('form[data-confirm]').forEach(function(form){
+    form.addEventListener('submit', function(e){
+      var msg = form.getAttribute('data-confirm') || 'Confirm?';
+      if(!confirm(msg)){
+        e.preventDefault();
+      }
+    });
+  });
+});
+</script>
+
+  <!-- Pagination -->
+  {% if page_urls and page_urls|length > 1 %}
+  <nav aria-label="Page navigation" class="mt-3">
+    <ul class="pagination">
+      {% if prev_url %}
+        <li class="page-item"><a class="page-link" href="{{ prev_url }}">&laquo; {{ _('previous') }}</a></li>
+      {% endif %}
+
+      {% for p in page_urls %}
+        <li class="page-item {% if p.active %}active{% endif %}"><a class="page-link" href="{{ p.url }}">{{ p.num }}</a></li>
+      {% endfor %}
+
+      {% if next_url %}
+        <li class="page-item"><a class="page-link" href="{{ next_url }}">{{ _('next') }} &raquo;</a></li>
+      {% endif %}
+    </ul>
+  </nav>
+  {% endif %}
+
+{% endblock %}

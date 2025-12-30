@@ -1,0 +1,272 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ _('clients') }} — {{ sys_app_name }}{% endblock %}
+
+{% block head %}
+<style>
+/* Monday.com Clients Page Styles */
+.clients-page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--monday-border);
+}
+
+.clients-page-header h1 {
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--monday-dark);
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.clients-page-header h1 i {
+  color: var(--monday-yellow);
+}
+
+/* Monday Table for Clients */
+.monday-clients-table {
+  background: white;
+  border-radius: 8px;
+  border: 1px solid var(--monday-border);
+  overflow: hidden;
+}
+
+.monday-clients-table table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.monday-clients-table th {
+  background: var(--monday-light-grey);
+  padding: 12px 16px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--monday-text-secondary);
+  text-align: left;
+  border-bottom: 1px solid var(--monday-border);
+}
+
+.monday-clients-table td {
+  padding: 16px;
+  border-bottom: 1px solid var(--monday-border);
+  vertical-align: middle;
+}
+
+.monday-clients-table tr:last-child td {
+  border-bottom: none;
+}
+
+.monday-clients-table tr:hover td {
+  background: rgba(0, 115, 234, 0.04);
+}
+
+/* Client Cell */
+.client-cell {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.client-avatar-lg {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  font-weight: 600;
+  color: white;
+  flex-shrink: 0;
+}
+
+.client-info .name {
+  font-weight: 500;
+  color: var(--monday-dark);
+  font-size: 14px;
+}
+
+.client-info .email {
+  font-size: 12px;
+  color: var(--monday-text-secondary);
+}
+
+/* Project Status Mini Pills */
+.project-status-mini {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.mini-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.mini-status.planning { background: rgba(196, 196, 196, 0.3); color: #666; }
+.mini-status.active { background: rgba(0, 115, 234, 0.15); color: var(--monday-blue); }
+.mini-status.on_hold { background: rgba(253, 171, 61, 0.2); color: #e68a00; }
+.mini-status.completed { background: rgba(0, 200, 117, 0.15); color: var(--monday-green); }
+
+/* Pending Badge */
+.pending-approval-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: var(--monday-yellow);
+  color: white;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.no-pending {
+  color: var(--monday-text-secondary);
+  font-size: 13px;
+}
+
+/* Total Projects */
+.project-count {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.project-count .number {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--monday-dark);
+}
+
+.project-count .label {
+  font-size: 12px;
+  color: var(--monday-text-secondary);
+}
+
+/* Empty State */
+.monday-empty-clients {
+  text-align: center;
+  padding: 60px 20px;
+}
+
+.monday-empty-clients i {
+  font-size: 48px;
+  color: var(--monday-border);
+  margin-bottom: 16px;
+}
+
+.monday-empty-clients h3 {
+  font-size: 18px;
+  font-weight: 500;
+  color: var(--monday-dark);
+  margin-bottom: 8px;
+}
+
+.monday-empty-clients p {
+  color: var(--monday-text-secondary);
+  margin: 0;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Page Header -->
+<div class="clients-page-header">
+  <h1>
+    <i class="fa-solid fa-building-user"></i>
+    {{ _('clients_header') }}
+  </h1>
+</div>
+
+<!-- Monday-style Clients Table -->
+<div class="monday-clients-table">
+  <table>
+    <thead>
+      <tr>
+        <th>{{ _('client') }}</th>
+        <th>{{ _('projects') }}</th>
+        <th>{{ _('status_breakdown') }}</th>
+        <th>{{ _('pending_approvals') }}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% if clients %}
+        {% for client in clients %}
+        <tr>
+          <td>
+            <div class="client-cell">
+              <div class="client-avatar-lg" style="background: {{ ['#0073ea', '#00c875', '#fdab3d', '#e2445c', '#a25ddc', '#579bfc', '#ff7575', '#cab641'][loop.index0 % 8] }};">
+                {{ (client.first_name or client.email)[0]|upper }}
+              </div>
+              <div class="client-info">
+                <div class="name">{{ client.first_name or client.email.split('@')[0] }}</div>
+                <div class="email">{{ client.email }}</div>
+              </div>
+            </div>
+          </td>
+          <td>
+            <div class="project-count">
+              <span class="number">{{ client.total_projects }}</span>
+              <span class="label">{{ _('projects') }}</span>
+            </div>
+          </td>
+          <td>
+            <div class="project-status-mini">
+              {% if client.project_by_status.get('active', 0) > 0 %}
+              <span class="mini-status active">{{ client.project_by_status.get('active', 0) }} {{ _('active') }}</span>
+              {% endif %}
+              {% if client.project_by_status.get('planning', 0) > 0 %}
+              <span class="mini-status planning">{{ client.project_by_status.get('planning', 0) }} {{ _('planning') }}</span>
+              {% endif %}
+              {% if client.project_by_status.get('on_hold', 0) > 0 %}
+              <span class="mini-status on_hold">{{ client.project_by_status.get('on_hold', 0) }} {{ _('on_hold') }}</span>
+              {% endif %}
+              {% if client.project_by_status.get('completed', 0) > 0 %}
+              <span class="mini-status completed">{{ client.project_by_status.get('completed', 0) }} {{ _('completed') }}</span>
+              {% endif %}
+              {% if client.total_projects == 0 %}
+              <span class="no-pending">—</span>
+              {% endif %}
+            </div>
+          </td>
+          <td>
+            {% if client.pending_approvals > 0 %}
+            <span class="pending-approval-badge">
+              <i class="fa-solid fa-clock"></i>
+              {{ client.pending_approvals }} {{ _('pending') }}
+            </span>
+            {% else %}
+            <span class="no-pending">{{ _('none') }}</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      {% else %}
+        <tr>
+          <td colspan="4">
+            <div class="monday-empty-clients">
+              <i class="fa-solid fa-building-user"></i>
+              <h3>{{ _('no_clients') }}</h3>
+              <p>{{ _('no_clients_message') }}</p>
+            </div>
+          </td>
+        </tr>
+      {% endif %}
+    </tbody>
+  </table>
+</div>
+
+{% endblock %}
