@@ -516,7 +516,7 @@ tr:hover .actions-cell {
               <a href="{{ url_for('main.project_detail', project_id=project.id) }}" class="action-btn" title="View">
                 <i class="fa-solid fa-eye"></i>
               </a>
-              {% if current_user_role_name in ['PMP','Admin'] %}
+              {% if (current_user_role_name|default('')|lower in ['pmp','admin']) or (current_user.role and (current_user.role.name|lower in ['pmp','admin'])) %}
               <a href="{{ url_for('main.edit_project', project_id=project.id) }}" class="action-btn" title="Edit">
                 <i class="fa-solid fa-pen"></i>
               </a>
@@ -533,7 +533,7 @@ tr:hover .actions-cell {
     <i class="fa-regular fa-folder-open"></i>
     <h4>{{ _('no_projects') }}</h4>
     <p>{{ _('create_first_project') }}</p>
-    {% if current_user_role_name in ['PMP','Admin'] %}
+    {% if (current_user_role_name|default('')|lower in ['pmp','admin']) or (current_user.role and (current_user.role.name|lower in ['pmp','admin'])) %}
     <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createProjectModal">
       <i class="fa-solid fa-plus me-2"></i>{{ _('create_project') }}
     </button>
@@ -592,7 +592,7 @@ tr:hover .actions-cell {
         {% endfor %}
       </div>
       {% endif %}
-      {% if current_user_role_name in ['PMP','Admin'] %}
+      {% if (current_user_role_name|default('')|lower in ['pmp','admin']) or (current_user.role and (current_user.role.name|lower in ['pmp','admin'])) %}
       <a href="{{ url_for('main.edit_project', project_id=project.id) }}" class="action-btn">
         <i class="fa-solid fa-pen"></i>
       </a>
