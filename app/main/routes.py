@@ -778,7 +778,8 @@ def create_task():
         else:
             flash(f"Tarea '{task.title}' creada.", 'success')
 
-        send_email = SystemSettings.get('notify_task_assigned', True)
+        send_email_setting = SystemSettings.get('notify_task_assigned', 'true')
+        send_email = send_email_setting == 'true' or send_email_setting == True
         email_sent = False
         
         # Notificar al usuario interno asignado (si es diferente al creador)
@@ -2358,7 +2359,8 @@ def edit_task(task_id):
 
             db.session.commit()
             
-            send_email = SystemSettings.get('notify_task_assigned', True)
+            send_email_setting = SystemSettings.get('notify_task_assigned', 'true')
+            send_email = send_email_setting == 'true' or send_email_setting == True
             email_sent = False
             
             # Notificar si se asignó a un nuevo usuario interno

@@ -114,16 +114,29 @@
               <small class="text-muted">#{{ task.id }}</small>
             </td>
             <td>
-              {% if task.assigned_to %}
-                <div class="d-flex align-items-center">
-                  <div class="rounded-circle bg-light text-primary d-flex align-items-center justify-content-center me-2" style="width: 24px; height: 24px; font-size: 10px;">
-                    {{ task.assigned_to.first_name[0] if task.assigned_to.first_name else 'U' }}
+              <div class="d-flex flex-column">
+                {% if task.assigned_to %}
+                  <div class="d-flex align-items-center">
+                    <div class="rounded-circle bg-light text-primary d-flex align-items-center justify-content-center me-2" style="width: 24px; height: 24px; font-size: 10px;">
+                      {{ task.assigned_to.first_name[0] if task.assigned_to.first_name else 'U' }}
+                    </div>
+                    <small>{{ task.assigned_to.first_name }}</small>
                   </div>
-                  <small>{{ task.assigned_to.first_name }}</small>
-                </div>
-              {% else %}
-                <span class="text-muted small">Sin asignar</span>
-              {% endif %}
+                {% endif %}
+
+                {% if task.assigned_client %}
+                  <div class="d-flex align-items-center mt-1">
+                    <div class="rounded-circle bg-light text-success d-flex align-items-center justify-content-center me-2" style="width: 24px; height: 24px; font-size: 10px;">
+                      {{ task.assigned_client.first_name[0] if task.assigned_client.first_name else 'C' }}
+                    </div>
+                    <small class="text-muted">Cliente: {{ task.assigned_client.first_name or task.assigned_client.email }}</small>
+                  </div>
+                {% endif %}
+
+                {% if not task.assigned_to and not task.assigned_client %}
+                  <span class="text-muted small">Sin asignar</span>
+                {% endif %}
+              </div>
             </td>
             <td><span class="badge bg-{{ status_colors.get(task.status, 'secondary') }}">{{ task.status.replace('_', ' ')|title }}</span></td>
             <td><small class="text-muted">{{ task.due_date.strftime('%d %b %Y') if task.due_date else '-' }}</small></td>
@@ -165,7 +178,10 @@
               </div>
               <div class="text-end">
                 {% if task.assigned_to %}
-                  <small class="text-muted">{{ task.assigned_to.first_name or task.assigned_to.email }}</small>
+                  <small class="text-muted d-block">{{ task.assigned_to.first_name or task.assigned_to.email }}</small>
+                {% endif %}
+                {% if task.assigned_client %}
+                  <small class="text-muted d-block">Cliente: {{ task.assigned_client.first_name or task.assigned_client.email }}</small>
                 {% endif %}
               </div>
             </div>
@@ -203,11 +219,20 @@
           
           <div class="row">
             <div class="col-md-6 mb-3">
-              <label class="form-label">Asignar a</label>
+              <label class="form-label">Asignar a (Interno)</label>
               <select class="form-select" name="assigned_to_id">
                 <option value="">-- Sin asignar --</option>
                 {% for u in assignees %}
                   <option value="{{ u.id }}">{{ u.first_name or u.email }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Asignar a (Cliente)</label>
+              <select class="form-select" name="assigned_client_id">
+                <option value="">-- Sin asignar --</option>
+                {% for c in project.clients %}
+                  <option value="{{ c.id }}">{{ c.first_name or c.email }} {{ c.last_name or '' }}</option>
                 {% endfor %}
               </select>
             </div>

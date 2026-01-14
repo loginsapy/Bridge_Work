@@ -185,30 +185,47 @@ class NotificationService:
             from ..models import SystemSettings
             app_name = SystemSettings.get('app_name', 'BridgeWork')
             
+            # Build context and handle environments without SERVER_NAME or request context
+            try:
+                dashboard_url = url_for('main.dashboard', _external=True)
+            except Exception as e:
+                current_app.logger.debug(f"Could not build external dashboard URL using url_for: {e}")
+                # Fallback: try SERVER_NAME or BASE_URL from config
+                host = current_app.config.get('SERVER_NAME') or SystemSettings.get('base_url') or current_app.config.get('BASE_URL')
+                scheme = current_app.config.get('PREFERRED_URL_SCHEME', 'https')
+                if host:
+                    dashboard_url = f"{scheme}://{host}/"
+                else:
+                    dashboard_url = ''
+
             # Build context
             email_context = {
                 'user': user,
                 'subject': subject,
                 'app_name': app_name,
-                'dashboard_url': url_for('main.dashboard', _external=True),
+                'dashboard_url': dashboard_url,
                 **(context or {})
             }
             
-            # Render templates
+            # Render templates using Jinja environment directly to avoid request-only context processors
             try:
-                html_body = render_template(template_name, **email_context)
+                tmpl = current_app.jinja_env.get_or_select_template(template_name)
+                html_body = tmpl.render(**email_context)
             except Exception as e:
-                # Fallback to general template
-                current_app.logger.warning(
-                    f"Template {template_name} not found, using general: {e}"
-                )
-                html_body = render_template('notifications/general.html', **email_context)
-            
+                current_app.logger.warning(f"Template {template_name} render failed, using general: {e}")
+                try:
+                    tmpl = current_app.jinja_env.get_or_select_template('notifications/general.html')
+                    html_body = tmpl.render(**email_context)
+                except Exception as e2:
+                    current_app.logger.exception(f"Failed to render fallback email template: {e2}")
+                    html_body = f"{subject}\n\n{email_context.get('message','')}"
+
             # Create text version
             text_body = cls._html_to_text(html_body, subject, context)
-            
+
             # Send via provider
             provider = get_provider()
+            current_app.logger.info(f"Using email provider {type(provider).__name__} to send to {user.email}")
             success = provider.send_email(
                 recipient_id=user_id,
                 subject=f"[BridgeWork] {subject}",
@@ -255,15 +272,21 @@ class NotificationService:
         # Determine which user to notify
         if notify_client:
             user_id = task.assigned_client_id
+            current_app.logger.info(f"notify_task_assigned: notificando a CLIENTE id={user_id}")
         else:
             user_id = task.assigned_to_id
+            current_app.logger.info(f"notify_task_assigned: notificando a INTERNO id={user_id}")
             
         if not user_id:
+            current_app.logger.warning(f"notify_task_assigned: user_id es None, no se envía notificación")
             return None
             
         assignee = User.query.get(user_id)
         if not assignee:
+            current_app.logger.warning(f"notify_task_assigned: usuario {user_id} no encontrado")
             return None
+        
+        current_app.logger.info(f"notify_task_assigned: enviando a {assignee.email}, send_email={send_email}")
         
         project = Project.query.get(task.project_id) if task.project_id else None
         
@@ -273,7 +296,20 @@ class NotificationService:
             message += f" en el proyecto '{project.name}'"
         if assigned_by_user:
             message += f" por {assigned_by_user.name or assigned_by_user.username}"
-        
+
+        # Build task-specific external URL (safe outside request context)
+        try:
+            task_url = url_for('main.task_detail', task_id=task.id, _external=True)
+        except Exception as e:
+            current_app.logger.debug(f"Could not build task external URL via url_for: {e}")
+            host = current_app.config.get('SERVER_NAME') or Project and None
+            host = current_app.config.get('SERVER_NAME') or SystemSettings.get('base_url') if 'SystemSettings' in globals() else current_app.config.get('BASE_URL')
+            scheme = current_app.config.get('PREFERRED_URL_SCHEME', 'https')
+            if host:
+                task_url = f"{scheme}://{host.rstrip('/')}/task/{task.id}"
+            else:
+                task_url = f"/task/{task.id}"
+
         return cls.notify(
             user_id=user_id,
             title=title,
@@ -287,7 +323,8 @@ class NotificationService:
                 'project': project,
                 'assigned_by': assigned_by_user,
                 'message': message,
-                'title': title
+                'title': title,
+                'task_url': task_url
             }
         )
     
