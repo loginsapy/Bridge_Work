@@ -15,7 +15,7 @@ def test_check_failed_alerts_notifies_admins_when_threshold_exceeded(monkeypatch
     from app.models import AlertLog
     from datetime import datetime, timedelta
 
-    now = datetime.utcnow()
+    now = datetime.now()
 
     for i in range(6):
         al = AlertLog(task_id=100 + i, recipient_id=1, status='FAILED', created_at=(now - timedelta(minutes=10)))
@@ -42,7 +42,7 @@ def test_check_failed_alerts_does_not_notify_below_threshold(monkeypatch, app, d
     from app.models import AlertLog
     from datetime import datetime, timedelta
 
-    now = datetime.utcnow()
+    now = datetime.now()
     for i in range(3):
         al = AlertLog(task_id=200 + i, recipient_id=1, status='FAILED', created_at=(now - timedelta(minutes=10)))
         db.session.add(al)

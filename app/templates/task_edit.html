@@ -209,11 +209,11 @@
           </div>
 
           <div class="mb-3 form-check">
-            <input type="checkbox" class="form-check-input" name="is_external_visible" id="is_external_visible" {% if task.is_external_visible %}checked{% endif %}>
-            <label class="form-check-label" for="is_external_visible">
-              Visible para el cliente externo
+            <input type="checkbox" class="form-check-input" name="is_internal_only" id="is_internal_only" {% if task.is_internal_only %}checked{% endif %}>
+            <label class="form-check-label" for="is_internal_only">
+              <i class="fa-solid fa-lock me-1"></i>Solo Interno
             </label>
-            <small class="d-block text-muted mt-1">Si está marcada, la tarea aparecerá en el portal del cliente.</small>
+            <small class="d-block text-muted mt-1">Si está marcada, esta tarea solo será visible para usuarios PMP y Admin. Los clientes no podrán verla.</small>
           </div>
 
           <!-- New Attachments Section -->
@@ -229,8 +229,10 @@
           </div>
 
           <div class="d-flex gap-2 pt-3">
-            <button type="submit" class="btn btn-primary">
-              <i class="fa-solid fa-save me-2"></i> Guardar Cambios
+            <button type="submit" class="btn btn-primary" id="btnSaveTask">
+              <span class="spinner-border spinner-border-sm d-none me-1" role="status" aria-hidden="true" id="saveTaskSpinner"></span>
+              <i class="fa-solid fa-save me-2" id="saveTaskIcon"></i> 
+              <span id="saveTaskText">Guardar Cambios</span>
             </button>
             <a href="{{ url_for('main.project_detail', project_id=project.id) }}" class="btn btn-secondary">
               <i class="fa-solid fa-times me-2"></i> Cancelar
@@ -350,6 +352,18 @@ uploadZone.addEventListener('drop', (e) => {
     fileInput.files = files;
     showSelectedFiles(fileInput);
   }
+});
+
+// Show loading state when saving task
+document.querySelector('form')?.addEventListener('submit', function(e) {
+  const btn = document.getElementById('btnSaveTask');
+  const spinner = document.getElementById('saveTaskSpinner');
+  const icon = document.getElementById('saveTaskIcon');
+  const text = document.getElementById('saveTaskText');
+  btn.disabled = true;
+  spinner.classList.remove('d-none');
+  icon.classList.add('d-none');
+  text.textContent = 'Guardando y notificando...';
 });
 </script>
 {% endblock %}

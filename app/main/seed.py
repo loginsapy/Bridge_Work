@@ -46,7 +46,7 @@ def seed_database():
                 description=p_data['desc'],
                 budget_hours=p_data['budget'],
                 status=p_data['status'],
-                start_date=datetime.utcnow() - timedelta(days=random.randint(1, 60))
+                start_date=datetime.now() - timedelta(days=random.randint(1, 60))
             )
             db.session.add(p)
             projects.append(p)
@@ -64,7 +64,7 @@ def seed_database():
                     project_id=project.id,
                     assigned_to_id=random.choice(users).id,
                     status=random.choice(statuses) if project.status == 'ACTIVE' else 'COMPLETED' if project.status == 'COMPLETED' else 'BACKLOG',
-                    due_date=datetime.utcnow() + timedelta(days=random.randint(-5, 15))
+                    due_date=datetime.now() + timedelta(days=random.randint(-5, 15))
                 )
                 db.session.add(task)
                 tasks.append(task)
@@ -79,7 +79,7 @@ def seed_database():
                         project_id=task.project_id,
                         task_id=task.id,
                         hours=round(random.uniform(0.5, 4.0), 1),
-                        date=datetime.utcnow() - timedelta(days=random.randint(0, 30)),
+                        date=datetime.now() - timedelta(days=random.randint(0, 30)),
                         description=f'Trabajo en {task.title}'
                     )
                     db.session.add(entry)

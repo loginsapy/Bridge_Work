@@ -230,10 +230,21 @@
             <label class="form-label">Horas Estimadas</label>
             <input type="number" class="form-control" name="estimated_hours" step="0.5" placeholder="Ej. 8">
           </div>
+
+          <div class="mb-3 form-check">
+            <input type="checkbox" class="form-check-input" name="is_internal_only" id="is_internal_only">
+            <label class="form-check-label" for="is_internal_only">
+              <i class="fa-solid fa-lock me-1"></i>Solo Interno
+            </label>
+            <small class="d-block text-muted mt-1">Si está marcada, esta tarea solo será visible para usuarios PMP y Admin. Los clientes no podrán verla.</small>
+          </div>
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-          <button type="submit" class="btn btn-primary">Crear Tarea</button>
+          <button type="submit" class="btn btn-primary" id="btnCreateTask">
+            <span class="spinner-border spinner-border-sm d-none me-1" role="status" aria-hidden="true" id="createTaskSpinner"></span>
+            <span id="createTaskText">Crear Tarea</span>
+          </button>
         </div>
       </form>
     </div>
@@ -268,6 +279,16 @@ function kanbanDrop(evt, status){
     else r.json().then(j=>alert(j.error || 'Error'))
   })
 }
+
+// Show loading state when creating task
+document.querySelector('#createTaskModal form')?.addEventListener('submit', function(e) {
+  const btn = document.getElementById('btnCreateTask');
+  const spinner = document.getElementById('createTaskSpinner');
+  const text = document.getElementById('createTaskText');
+  btn.disabled = true;
+  spinner.classList.remove('d-none');
+  text.textContent = 'Creando y notificando...';
+});
 </script>
 {% endblock %}
 {% endblock %}

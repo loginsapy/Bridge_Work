@@ -88,7 +88,7 @@ def send_grouped_alerts(groups: Dict[int, List[int]], retries: int = 3, backoff_
                     )
                     if al:
                         al.status = 'FAILED'
-                        al.sent_at = datetime.utcnow()
+                        al.sent_at = datetime.now()
                 db.session.commit()
             except Exception:
                 db.session.rollback()

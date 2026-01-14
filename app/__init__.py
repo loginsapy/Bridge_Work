@@ -61,7 +61,8 @@ def create_app(config_object="config.DevConfig"):
     def load_user(user_id):
         try:
             uid = int(user_id)
-            user = User.query.get(uid)
+            # Use db.session.get() to get a session-bound instance
+            user = db.session.get(User, uid)
             print('DEBUG load_user: user_id=', user_id, 'found=', bool(user))
             return user
         except Exception as e:
@@ -148,7 +149,11 @@ def create_app(config_object="config.DevConfig"):
     @app.context_processor
     def inject_global_vars():
         from flask_login import current_user
+        from .auth.decorators import _get_user_from_session
+        # Prefer a DB-bound user object for templates to avoid accessing detached proxy attributes
+        user = _get_user_from_session() or current_user
         context = {
+            'current_user': user,
             'available_clients': [], 
             'unread_notifications_count': 0, 
             'pending_approvals_count': 0,
@@ -168,7 +173,6 @@ def create_app(config_object="config.DevConfig"):
             # General settings
             'sys_default_currency': SystemSettings.get('default_currency', 'USD'),
             'sys_language': SystemSettings.get('language', 'es'),
-            'sys_timezone': SystemSettings.get('timezone', 'America/Asuncion'),
         }
         
         if current_user.is_authenticated:

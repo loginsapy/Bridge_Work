@@ -19,6 +19,8 @@ class User(UserMixin, db.Model):
     role = db.relationship('Role', backref='users')
     first_name = db.Column(db.String(128))
     last_name = db.Column(db.String(128))
+    company = db.Column(db.String(255), nullable=True)  # For clients
+    phone = db.Column(db.String(50), nullable=True)  # Contact phone
 
     created_at = db.Column(db.DateTime, default=datetime.now)
 
@@ -108,6 +110,7 @@ class Task(db.Model):
     priority = db.Column(db.String(16), nullable=False, default='MEDIUM')
     due_date = db.Column(db.DateTime, nullable=True)
     is_external_visible = db.Column(db.Boolean, default=False, index=True)
+    is_internal_only = db.Column(db.Boolean, default=False, index=True)  # Solo visible para PMP/Admin
     estimated_hours = db.Column(db.Numeric, nullable=True)
     # Position within project for manual ordering
     position = db.Column(db.Integer, nullable=True, index=True)
@@ -181,6 +184,86 @@ class Task(db.Model):
         dfs(self)
         return result
 
+    def incomplete_predecessors(self):
+        """Return list of predecessor Task objects that are not completed.
+        
+        NOTE: In our tree model, predecessors are visual PARENTS, not blockers.
+        Children (successors) must be completed BEFORE the parent (predecessor) can be completed.
+        So this method returns an empty list - predecessors do NOT block completion.
+        """
+        # Predecessors do NOT block task completion in our tree model.
+        # The inverse is true: parents cannot close until children are done.
+        return []
+
+    def incomplete_successors(self):
+        """Return list of direct successor (child) tasks that are not completed.
+        
+        In our tree model, successors are visual CHILDREN. A parent task cannot be
+        completed until all its children (successors) are completed first.
+        """
+        return [s for s in getattr(self, 'successors', []) or [] if s.status not in ('DONE', 'COMPLETED')]
+
+    def incomplete_hierarchical_descendants(self):
+        """Return list of hierarchical descendant tasks (children recursively via parent_task_id) that are not completed."""
+        result = []
+        visited = set()
+
+        def dfs(node):
+            for c in getattr(node, 'children', []) or []:
+                if c.id in visited or c.id == self.id:
+                    continue
+                visited.add(c.id)
+                if c.status not in ('DONE', 'COMPLETED'):
+                    result.append(c)
+                dfs(c)
+
+        dfs(self)
+        return result
+
+    def incomplete_dependent_tasks(self):
+        """Return list of dependent tasks (successors recursively) that are not completed.
+        
+        These are the visual "children" in our tree - they must be completed before
+        this task (the parent) can be completed.
+        """
+        result = []
+        visited = set()
+
+        def dfs(node):
+            for s in getattr(node, 'successors', []) or []:
+                if s.id in visited or s.id == self.id:
+                    continue
+                visited.add(s.id)
+                if s.status not in ('DONE', 'COMPLETED'):
+                    result.append(s)
+                dfs(s)
+
+        dfs(self)
+        return result
+
+    def get_completion_blockers(self):
+        """Return dict with lists of incomplete tasks that block completion.
+        
+        In our tree model:
+        - incomplete_predecessors: EMPTY - predecessors do NOT block (children can close first)
+        - incomplete_children: successors (visual children) + hierarchical descendants that must be completed first
+        """
+        # Combine successors (tree children) and hierarchical children (parent_task_id)
+        all_incomplete_children = self.incomplete_successors() + self.incomplete_hierarchical_descendants()
+        # Deduplicate by id
+        seen = set()
+        unique_children = []
+        for c in all_incomplete_children:
+            if c.id not in seen:
+                seen.add(c.id)
+                unique_children.append(c)
+        
+        return {
+            'incomplete_predecessors': [],  # Predecessors do NOT block in tree model
+            'incomplete_children': [{'id': c.id, 'title': c.title} for c in unique_children]
+        }
+
+
     def validate_predecessor_ids(self, predecessor_ids):
         """Validate a list of predecessor IDs before assignment.
 
@@ -204,11 +287,20 @@ class Task(db.Model):
             if self.reachable_to(pred.id):
                 raise ValueError(f'Adding predecessor {pred.id} would create a cycle')
 
-            # Prevent predecessor being a hierarchical ancestor/descendant (keep hierarchy separate)
-            if any(n.id == self.id for n in pred.descendants()):
-                raise ValueError(f'Predecessor {pred.id} is an ancestor of this task in the hierarchy')
-            if any(n.id == pred.id for n in self.descendants()):
-                raise ValueError(f'Predecessor {pred.id} is a descendant of this task in the hierarchy')
+            # Only check hierarchy (parent/children) for ancestor/descendant; do not conflate with dependency edges.
+            # Check if pred is an ancestor of self by walking parent pointers up from self.
+            cur = getattr(self, 'parent', None)
+            while cur:
+                if cur.id == pred.id:
+                    raise ValueError(f'Predecessor {pred.id} is an ancestor of this task in the hierarchy')
+                cur = getattr(cur, 'parent', None)
+
+            # Check if pred is a descendant of self by walking up from pred and seeing if we reach self.
+            cur = getattr(pred, 'parent', None)
+            while cur:
+                if cur.id == self.id:
+                    raise ValueError(f'Predecessor {pred.id} is a descendant of this task in the hierarchy')
+                cur = getattr(cur, 'parent', None)
 
         return True
 

@@ -37,7 +37,7 @@
       <span>{{ _('time_entries') }}</span>
     </a>
     
-    {% if current_user.is_authenticated and current_user.is_internal and current_user.role and current_user.role.name == 'PMP' %}
+    {% if current_user.is_authenticated and current_user.is_internal and current_user.role and current_user.role.name in ('PMP', 'Admin') %}
     <div class="sidebar-divider"></div>
     
     <a href="/team" class="list-group-item list-group-item-action {{ 'active' if request.path.startswith('/team') }}">
@@ -73,9 +73,9 @@
     </a>
     {% endif %}
     
-    {% if current_user.is_authenticated and current_user.is_internal and current_user.role and current_user.role.name == 'PMP' %}
+    {% if current_user.is_authenticated and current_user.is_internal and current_user.role and current_user.role.name == 'Admin' %}
     <div class="sidebar-divider"></div>
-    <a href="{{ url_for('main.admin_dashboard') }}" class="list-group-item list-group-item-action {{ 'active' if request.path.startswith('/admin') }}">
+    <a href="{{ url_for('main.admin_settings_page') }}" class="list-group-item list-group-item-action {{ 'active' if request.path.startswith('/admin') }}">
       <i class="fa-solid fa-gear"></i>
       <span>{{ _('admin') }}</span>
     </a>

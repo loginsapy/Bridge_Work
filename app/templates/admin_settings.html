@@ -1,0 +1,1519 @@
+{% extends 'base.html' %}
+
+{% block title %}Administración del Sistema — {{ sys_app_name }}{% endblock %}
+
+{% block head %}
+<style>
+.admin-nav {
+  background: white;
+  border-radius: 12px;
+  padding: 8px;
+  margin-bottom: 24px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+}
+
+.admin-nav .nav-link {
+  color: var(--monday-dark);
+  padding: 12px 20px;
+  border-radius: 8px;
+  font-weight: 500;
+  transition: all 0.2s;
+}
+
+.admin-nav .nav-link:hover {
+  background: var(--monday-light-grey);
+}
+
+.admin-nav .nav-link.active {
+  background: var(--monday-blue);
+  color: white;
+}
+
+.admin-nav .nav-link i {
+  margin-right: 8px;
+  width: 20px;
+  text-align: center;
+}
+
+.settings-section {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+  margin-bottom: 24px;
+  overflow: hidden;
+}
+
+.settings-section-header {
+  background: var(--monday-light-grey);
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--monday-border);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.settings-section-header h5 {
+  margin: 0;
+  font-weight: 600;
+  color: var(--monday-dark);
+}
+
+.settings-section-header i {
+  color: var(--monday-blue);
+  font-size: 18px;
+}
+
+.settings-section-body {
+  padding: 24px;
+}
+
+.setting-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--monday-border);
+}
+
+.setting-row:last-child {
+  border-bottom: none;
+}
+
+.setting-info {
+  flex: 1;
+}
+
+.setting-label {
+  font-weight: 500;
+  color: var(--monday-dark);
+  margin-bottom: 4px;
+}
+
+.setting-description {
+  font-size: 13px;
+  color: var(--monday-grey);
+}
+
+.setting-control {
+  min-width: 200px;
+  text-align: right;
+}
+
+.user-table {
+  width: 100%;
+}
+
+.user-table th {
+  background: var(--monday-light-grey);
+  padding: 12px 16px;
+  text-align: left;
+  font-weight: 600;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--monday-grey);
+}
+
+.user-table td {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--monday-border);
+  vertical-align: middle;
+}
+
+.user-table tr:hover {
+  background: rgba(0, 115, 234, 0.04);
+}
+
+.user-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  color: white;
+  font-size: 14px;
+}
+
+.status-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.status-indicator.active {
+  background: rgba(0, 200, 117, 0.15);
+  color: #00c875;
+}
+
+.status-indicator.inactive {
+  background: rgba(226, 68, 92, 0.15);
+  color: #e2445c;
+}
+
+.status-indicator .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.role-badge {
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.role-badge.admin { background: #5559df; color: white; }
+.role-badge.pmp { background: var(--monday-blue); color: white; }
+.role-badge.participant { background: var(--monday-purple); color: white; }
+.role-badge.client { background: #c4c4c4; color: white; }
+
+.color-preview {
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  border: 2px solid var(--monday-border);
+  cursor: pointer;
+}
+
+.stat-card {
+  background: white;
+  border-radius: 12px;
+  padding: 20px;
+  text-align: center;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+}
+
+.stat-card .stat-value {
+  font-size: 32px;
+  font-weight: 700;
+  color: var(--monday-dark);
+}
+
+.stat-card .stat-label {
+  font-size: 13px;
+  color: var(--monday-grey);
+  margin-top: 4px;
+}
+
+.test-connection-btn {
+  position: relative;
+}
+
+.test-connection-btn .spinner-border {
+  display: none;
+}
+
+.test-connection-btn.loading .spinner-border {
+  display: inline-block;
+}
+
+.test-connection-btn.loading .btn-text {
+  display: none;
+}
+
+/* Modal styles */
+.modal-header {
+  background: var(--monday-light-grey);
+  border-bottom: 1px solid var(--monday-border);
+}
+
+.modal-title {
+  font-weight: 600;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="mb-4">
+  <h2 class="fw-bold text-primary">
+    <i class="fa-solid fa-cog me-2"></i>Administración del Sistema
+  </h2>
+  <p class="text-muted">Configura y personaliza tu plataforma de gestión de proyectos</p>
+</div>
+
+<!-- Navigation Tabs -->
+<nav class="admin-nav">
+  <ul class="nav nav-pills" id="adminTabs" role="tablist">
+    <li class="nav-item">
+      <button class="nav-link active" id="general-tab" data-bs-toggle="tab" data-bs-target="#general" type="button">
+        <i class="fa-solid fa-sliders"></i>General
+      </button>
+    </li>
+    <li class="nav-item">
+      <button class="nav-link" id="branding-tab" data-bs-toggle="tab" data-bs-target="#branding" type="button">
+        <i class="fa-solid fa-palette"></i>Personalización
+      </button>
+    </li>
+    <li class="nav-item">
+      <button class="nav-link" id="email-tab" data-bs-toggle="tab" data-bs-target="#email" type="button">
+        <i class="fa-solid fa-envelope"></i>Correo Electrónico
+      </button>
+    </li>
+    <li class="nav-item">
+      <button class="nav-link" id="users-tab" data-bs-toggle="tab" data-bs-target="#users" type="button">
+        <i class="fa-solid fa-users"></i>Usuarios
+      </button>
+    </li>
+    <li class="nav-item">
+      <button class="nav-link" id="projects-tab" data-bs-toggle="tab" data-bs-target="#projects" type="button">
+        <i class="fa-solid fa-diagram-project"></i>Proyectos
+      </button>
+    </li>
+    <li class="nav-item">
+      <button class="nav-link" id="notifications-tab" data-bs-toggle="tab" data-bs-target="#notifications" type="button">
+        <i class="fa-solid fa-bell"></i>Notificaciones
+      </button>
+    </li>
+    <li class="nav-item">
+      <button class="nav-link" id="security-tab" data-bs-toggle="tab" data-bs-target="#security" type="button">
+        <i class="fa-solid fa-shield-halved"></i>Seguridad
+      </button>
+    </li>
+  </ul>
+</nav>
+
+<!-- Tab Content -->
+<div class="tab-content" id="adminTabsContent">
+  
+  <!-- ==================== GENERAL TAB ==================== -->
+  <div class="tab-pane fade show active" id="general" role="tabpanel">
+    <!-- Stats Overview -->
+    <div class="row mb-4">
+      <div class="col-md-3">
+        <div class="stat-card">
+          <div class="stat-value">{{ stats.total_users }}</div>
+          <div class="stat-label">Usuarios Totales</div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="stat-card">
+          <div class="stat-value">{{ stats.total_projects }}</div>
+          <div class="stat-label">Proyectos</div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="stat-card">
+          <div class="stat-value">{{ stats.total_tasks }}</div>
+          <div class="stat-label">Tareas</div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="stat-card">
+          <div class="stat-value">{{ stats.active_users }}</div>
+          <div class="stat-label">Usuarios Activos</div>
+        </div>
+      </div>
+    </div>
+
+    <form method="POST" action="{{ url_for('main.admin_settings') }}">
+      <input type="hidden" name="section" value="general">
+      
+      <div class="settings-section">
+        <div class="settings-section-header">
+          <i class="fa-solid fa-building"></i>
+          <h5>Información de la Organización</h5>
+        </div>
+        <div class="settings-section-body">
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Nombre de la Organización</label>
+              <input type="text" name="org_name" class="form-control" 
+                value="{{ settings.org_name or 'BridgeWork' }}" placeholder="Mi Empresa">
+            </div>
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Sitio Web</label>
+              <input type="url" name="org_website" class="form-control" 
+                value="{{ settings.org_website or '' }}" placeholder="https://miempresa.com">
+            </div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Descripción</label>
+            <textarea name="org_description" class="form-control" rows="2" 
+              placeholder="Breve descripción de tu organización">{{ settings.org_description or '' }}</textarea>
+          </div>
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-section-header">
+          <i class="fa-solid fa-globe"></i>
+          <h5>Configuración Regional</h5>
+        </div>
+        <div class="settings-section-body">
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Idioma Predeterminado</label>
+              <select name="default_language" class="form-select">
+                <option value="es" {% if settings.default_language == 'es' %}selected{% endif %}>Español</option>
+                <option value="en" {% if settings.default_language == 'en' %}selected{% endif %}>English</option>
+                <option value="pt" {% if settings.default_language == 'pt' %}selected{% endif %}>Português</option>
+              </select>
+            </div>
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Formato de Fecha</label>
+              <select name="date_format" class="form-select">
+                <option value="DD/MM/YYYY" {% if settings.date_format == 'DD/MM/YYYY' %}selected{% endif %}>DD/MM/YYYY</option>
+                <option value="MM/DD/YYYY" {% if settings.date_format == 'MM/DD/YYYY' %}selected{% endif %}>MM/DD/YYYY</option>
+                <option value="YYYY-MM-DD" {% if settings.date_format == 'YYYY-MM-DD' %}selected{% endif %}>YYYY-MM-DD</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="d-flex justify-content-end">
+        <button type="submit" class="btn btn-primary">
+          <i class="fa-solid fa-save me-2"></i>Guardar Cambios
+        </button>
+      </div>
+    </form>
+  </div>
+
+  <!-- ==================== BRANDING TAB ==================== -->
+  <div class="tab-pane fade" id="branding" role="tabpanel">
+    <form method="POST" action="{{ url_for('main.admin_settings') }}" enctype="multipart/form-data">
+      <input type="hidden" name="section" value="branding">
+      
+      <div class="settings-section">
+        <div class="settings-section-header">
+          <i class="fa-solid fa-image"></i>
+          <h5>Logo e Identidad Visual</h5>
+        </div>
+        <div class="settings-section-body">
+          <div class="row align-items-center mb-4">
+            <div class="col-md-3">
+              <label class="form-label">Logo Actual</label>
+              <div class="border rounded p-3 text-center bg-light">
+                {% if settings.logo_url %}
+                  <img src="{{ settings.logo_url }}" alt="Logo" style="max-height: 60px;">
+                {% else %}
+                  <i class="fa-solid fa-image fa-3x text-muted"></i>
+                  <div class="small text-muted mt-2">Sin logo</div>
+                {% endif %}
+              </div>
+            </div>
+            <div class="col-md-9">
+              <label class="form-label">Subir Nuevo Logo</label>
+              <input type="file" name="logo" class="form-control" accept="image/*">
+              <div class="form-text">Recomendado: PNG o SVG, máximo 2MB, fondo transparente</div>
+            </div>
+          </div>
+          
+          <div class="mb-3">
+            <label class="form-label">Nombre de la Aplicación</label>
+            <input type="text" name="app_name" class="form-control" 
+              value="{{ settings.app_name or 'BridgeWork' }}" placeholder="Nombre de tu plataforma">
+            <div class="form-text">Este nombre aparecerá en el título de la página y en los correos</div>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label">Favicon URL</label>
+            <input type="url" name="favicon_url" class="form-control" 
+              value="{{ settings.favicon_url or '' }}" placeholder="https://...">
+          </div>
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-section-header">
+          <i class="fa-solid fa-droplet"></i>
+          <h5>Colores del Tema</h5>
+        </div>
+        <div class="settings-section-body">
+          <div class="row">
+            <div class="col-md-4 mb-3">
+              <label class="form-label">Color Primario</label>
+              <div class="input-group">
+                <input type="color" name="primary_color" class="form-control form-control-color" 
+                  value="{{ settings.primary_color or '#0073ea' }}" style="width: 60px;">
+                <input type="text" class="form-control" value="{{ settings.primary_color or '#0073ea' }}" 
+                  id="primaryColorText" readonly>
+              </div>
+            </div>
+            <div class="col-md-4 mb-3">
+              <label class="form-label">Color Secundario</label>
+              <div class="input-group">
+                <input type="color" name="secondary_color" class="form-control form-control-color" 
+                  value="{{ settings.secondary_color or '#5559df' }}" style="width: 60px;">
+                <input type="text" class="form-control" value="{{ settings.secondary_color or '#5559df' }}" 
+                  id="secondaryColorText" readonly>
+              </div>
+            </div>
+            <div class="col-md-4 mb-3">
+              <label class="form-label">Color de Acento</label>
+              <div class="input-group">
+                <input type="color" name="accent_color" class="form-control form-control-color" 
+                  value="{{ settings.accent_color or '#00c875' }}" style="width: 60px;">
+                <input type="text" class="form-control" value="{{ settings.accent_color or '#00c875' }}" 
+                  id="accentColorText" readonly>
+              </div>
+            </div>
+          </div>
+          
+          <div class="alert alert-info small mt-3">
+            <i class="fa-solid fa-info-circle me-2"></i>
+            Los cambios de color se aplicarán después de guardar y recargar la página.
+          </div>
+        </div>
+      </div>
+
+      <div class="d-flex justify-content-end">
+        <button type="submit" class="btn btn-primary">
+          <i class="fa-solid fa-save me-2"></i>Guardar Cambios
+        </button>
+      </div>
+    </form>
+  </div>
+
+  <!-- ==================== EMAIL TAB ==================== -->
+  <div class="tab-pane fade" id="email" role="tabpanel">
+    <form method="POST" action="{{ url_for('main.admin_settings') }}">
+      <input type="hidden" name="section" value="email">
+      
+      <div class="settings-section">
+        <div class="settings-section-header">
+          <i class="fa-solid fa-server"></i>
+          <h5>Configuración del Servidor SMTP</h5>
+        </div>
+        <div class="settings-section-body">
+          <div class="row">
+            <div class="col-md-8 mb-3">
+              <label class="form-label">Servidor SMTP</label>
+              <input type="text" name="smtp_host" class="form-control" 
+                value="{{ settings.smtp_host or '' }}" placeholder="smtp.gmail.com">
+            </div>
+            <div class="col-md-4 mb-3">
+              <label class="form-label">Puerto</label>
+              <select name="smtp_port" class="form-select">
+                <option value="587" {% if settings.smtp_port == '587' %}selected{% endif %}>587 (TLS)</option>
+                <option value="465" {% if settings.smtp_port == '465' %}selected{% endif %}>465 (SSL)</option>
+                <option value="25" {% if settings.smtp_port == '25' %}selected{% endif %}>25 (Sin cifrado)</option>
+              </select>
+            </div>
+          </div>
+          
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Usuario SMTP</label>
+              <input type="text" name="smtp_username" class="form-control" 
+                value="{{ settings.smtp_username or '' }}" placeholder="tu@email.com">
+            </div>
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Contraseña SMTP</label>
+              <input type="password" name="smtp_password" class="form-control" 
+                placeholder="{% if settings.smtp_password %}••••••••{% else %}Contraseña{% endif %}">
+              <div class="form-text">Deja en blanco para mantener la contraseña actual</div>
+            </div>
+          </div>
+          
+          <div class="form-check form-switch mb-3">
+            <input type="checkbox" name="smtp_use_tls" class="form-check-input" id="smtpTls"
+              {% if settings.smtp_use_tls != 'false' %}checked{% endif %}>
+            <label class="form-check-label" for="smtpTls">Usar TLS/SSL</label>
+          </div>
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-section-header">
+          <i class="fa-solid fa-at"></i>
+          <h5>Configuración de Remitente</h5>
+        </div>
+        <div class="settings-section-body">
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Email del Remitente</label>
+              <input type="email" name="email_from" class="form-control" 
+                value="{{ settings.email_from or '' }}" placeholder="noreply@tuempresa.com">
+            </div>
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Nombre del Remitente</label>
+              <input type="text" name="email_from_name" class="form-control" 
+                value="{{ settings.email_from_name or '' }}" placeholder="BridgeWork">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="d-flex justify-content-between">
+        <button type="button" class="btn btn-outline-secondary test-connection-btn" onclick="testEmailConnection()">
+          <span class="spinner-border spinner-border-sm" role="status"></span>
+          <span class="btn-text"><i class="fa-solid fa-plug me-2"></i>Probar Conexión</span>
+        </button>
+        <button type="submit" class="btn btn-primary">
+          <i class="fa-solid fa-save me-2"></i>Guardar Cambios
+        </button>
+      </div>
+    </form>
+  </div>
+
+  <!-- ==================== USERS TAB ==================== -->
+  <div class="tab-pane fade" id="users" role="tabpanel">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+      <div>
+        <h5 class="mb-1">Gestión de Usuarios</h5>
+        <p class="text-muted mb-0">Administra los usuarios de tu plataforma</p>
+      </div>
+      <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#newUserModal">
+        <i class="fa-solid fa-user-plus me-2"></i>Nuevo Usuario
+      </button>
+    </div>
+
+    <!-- Filtros y búsqueda -->
+    <div class="settings-section mb-3">
+      <div class="settings-section-body py-3">
+        <div class="row g-3 align-items-end">
+          <div class="col-md-4">
+            <label class="form-label small text-muted">Buscar</label>
+            <div class="input-group">
+              <span class="input-group-text"><i class="fa-solid fa-search"></i></span>
+              <input type="text" id="userSearch" class="form-control" placeholder="Nombre o email...">
+            </div>
+          </div>
+          <div class="col-md-2">
+            <label class="form-label small text-muted">Autenticación</label>
+            <select id="filterAuthType" class="form-select">
+              <option value="">Todos</option>
+              <option value="local">Local</option>
+              <option value="azure">Entra ID</option>
+            </select>
+          </div>
+          <div class="col-md-2">
+            <label class="form-label small text-muted">Tipo</label>
+            <select id="filterUserType" class="form-select">
+              <option value="">Todos</option>
+              <option value="internal">Interno</option>
+              <option value="external">Cliente</option>
+            </select>
+          </div>
+          <div class="col-md-2">
+            <label class="form-label small text-muted">Estado</label>
+            <select id="filterStatus" class="form-select">
+              <option value="">Todos</option>
+              <option value="active">Activo</option>
+              <option value="inactive">Inactivo</option>
+            </select>
+          </div>
+          <div class="col-md-2">
+            <label class="form-label small text-muted">Rol</label>
+            <select id="filterRole" class="form-select">
+              <option value="">Todos</option>
+              {% for role in roles %}
+              <option value="{{ role.id }}">{{ role.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="settings-section">
+      <div class="settings-section-body p-0">
+        <div class="table-responsive">
+          <table class="user-table" id="usersTable">
+            <thead>
+              <tr>
+                <th style="width: 50px;"></th>
+                <th class="sortable" data-sort="name">Usuario <i class="fa-solid fa-sort ms-1"></i></th>
+                <th class="sortable" data-sort="email">Email <i class="fa-solid fa-sort ms-1"></i></th>
+                <th>Autenticación</th>
+                <th>Rol</th>
+                <th>Tipo</th>
+                <th>Estado</th>
+                <th class="sortable" data-sort="created">Creado <i class="fa-solid fa-sort ms-1"></i></th>
+                <th style="width: 120px;">Acciones</th>
+              </tr>
+            </thead>
+            <tbody id="usersTableBody">
+              {% for user in users %}
+              <tr class="user-row" 
+                  data-name="{{ user.name|lower }}" 
+                  data-email="{{ user.email|lower }}"
+                  data-auth="{{ 'azure' if user.azure_oid else 'local' }}"
+                  data-type="{{ 'internal' if user.is_internal else 'external' }}"
+                  data-status="{{ 'active' if user.is_active else 'inactive' }}"
+                  data-role="{{ user.role_id or '' }}"
+                  data-created="{{ user.created_at.isoformat() if user.created_at else '' }}"
+                  data-azure-oid="{{ user.azure_oid or '' }}">
+                <td>
+                  <div class="user-avatar" style="background: {{ ['#0073ea', '#00c875', '#fdab3d', '#e2445c', '#a25ddc', '#579bfc'][loop.index0 % 6] }};">
+                    {{ (user.first_name or user.email)[:2]|upper }}
+                  </div>
+                </td>
+                <td>
+                  <strong>{{ user.name }}</strong>
+                </td>
+                <td>{{ user.email }}</td>
+                <td>
+                  {% if user.azure_oid %}
+                    <span class="badge bg-info"><i class="fa-brands fa-microsoft me-1"></i>Entra ID</span>
+                  {% else %}
+                    <span class="badge bg-secondary"><i class="fa-solid fa-key me-1"></i>Local</span>
+                  {% endif %}
+                </td>
+                <td>
+                  {% if user.role %}
+                    <span class="role-badge {{ user.role.name|lower }}">{{ user.role.name }}</span>
+                  {% else %}
+                    <span class="text-muted">Sin rol</span>
+                  {% endif %}
+                </td>
+                <td>
+                  {% if user.is_internal %}
+                    <span class="badge bg-primary">Interno</span>
+                  {% else %}
+                    <span class="badge bg-secondary">Cliente</span>
+                  {% endif %}
+                </td>
+                <td>
+                  {% if user.is_active %}
+                    <span class="status-indicator active"><span class="dot"></span>Activo</span>
+                  {% else %}
+                    <span class="status-indicator inactive"><span class="dot"></span>Inactivo</span>
+                  {% endif %}
+                </td>
+                <td>{{ user.created_at|sys_date if user.created_at else '-' }}</td>
+                <td>
+                  <div class="btn-group btn-group-sm">
+                    <button class="btn btn-outline-primary" onclick="editUser({{ user.id }})" title="Editar">
+                      <i class="fa-solid fa-pen"></i>
+                    </button>
+                    {% if user.id != current_user.id %}
+                    <button class="btn btn-outline-danger" onclick="toggleUserStatus({{ user.id }}, {{ 'true' if user.is_active else 'false' }})" title="{% if user.is_active %}Desactivar{% else %}Activar{% endif %}">
+                      <i class="fa-solid fa-{% if user.is_active %}ban{% else %}check{% endif %}"></i>
+                    </button>
+                    {% endif %}
+                  </div>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        
+        <!-- Paginación -->
+        <div class="d-flex justify-content-between align-items-center p-3 border-top">
+          <div class="text-muted small">
+            Mostrando <span id="showingStart">1</span>-<span id="showingEnd">10</span> de <span id="totalUsers">{{ users|length }}</span> usuarios
+          </div>
+          <nav>
+            <ul class="pagination pagination-sm mb-0" id="usersPagination">
+              <!-- Populated by JS -->
+            </ul>
+          </nav>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== PROJECTS TAB ==================== -->
+  <div class="tab-pane fade" id="projects" role="tabpanel">
+    <form method="POST" action="{{ url_for('main.admin_settings') }}">
+      <input type="hidden" name="section" value="projects">
+      
+      <div class="settings-section">
+        <div class="settings-section-header">
+          <i class="fa-solid fa-folder-tree"></i>
+          <h5>Configuración de Proyectos</h5>
+        </div>
+        <div class="settings-section-body">
+          <div class="setting-row">
+            <div class="setting-info">
+              <div class="setting-label">Estado Inicial de Proyectos</div>
+              <div class="setting-description">Estado por defecto al crear un nuevo proyecto</div>
+            </div>
+            <div class="setting-control">
+              <select name="default_project_status" class="form-select">
+                <option value="PLANNING" {% if settings.default_project_status == 'PLANNING' %}selected{% endif %}>Planificación</option>
+                <option value="ACTIVE" {% if settings.default_project_status == 'ACTIVE' %}selected{% endif %}>Activo</option>
+              </select>
+            </div>
+          </div>
+          
+          <div class="setting-row">
+            <div class="setting-info">
+              <div class="setting-label">Prefijo de Código de Proyecto</div>
+              <div class="setting-description">Prefijo para identificadores de proyecto (ej: PROJ-001)</div>
+            </div>
+            <div class="setting-control">
+              <input type="text" name="project_code_prefix" class="form-control" 
+                value="{{ settings.project_code_prefix or 'PROJ' }}" maxlength="10">
+            </div>
+          </div>
+          
+          <div class="setting-row">
+            <div class="setting-info">
+              <div class="setting-label">Permitir Proyectos sin Manager</div>
+              <div class="setting-description">Permite crear proyectos sin asignar un gestor</div>
+            </div>
+            <div class="setting-control">
+              <div class="form-check form-switch">
+                <input type="checkbox" name="allow_projects_without_manager" class="form-check-input" 
+                  {% if settings.allow_projects_without_manager != 'false' %}checked{% endif %}>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-section-header">
+          <i class="fa-solid fa-list-check"></i>
+          <h5>Configuración de Tareas</h5>
+        </div>
+        <div class="settings-section-body">
+          <div class="setting-row">
+            <div class="setting-info">
+              <div class="setting-label">Estado Inicial de Tareas</div>
+              <div class="setting-description">Estado por defecto al crear una nueva tarea</div>
+            </div>
+            <div class="setting-control">
+              <select name="default_task_status" class="form-select">
+                <option value="BACKLOG" {% if settings.default_task_status == 'BACKLOG' %}selected{% endif %}>Backlog</option>
+                <option value="TODO" {% if settings.default_task_status == 'TODO' %}selected{% endif %}>Por Hacer</option>
+                <option value="IN_PROGRESS" {% if settings.default_task_status == 'IN_PROGRESS' %}selected{% endif %}>En Progreso</option>
+              </select>
+            </div>
+          </div>
+          
+          <div class="setting-row">
+            <div class="setting-info">
+              <div class="setting-label">Prioridad Inicial de Tareas</div>
+              <div class="setting-description">Prioridad por defecto al crear una nueva tarea</div>
+            </div>
+            <div class="setting-control">
+              <select name="default_task_priority" class="form-select">
+                <option value="LOW" {% if settings.default_task_priority == 'LOW' %}selected{% endif %}>Baja</option>
+                <option value="MEDIUM" {% if settings.default_task_priority == 'MEDIUM' %}selected{% endif %}>Media</option>
+                <option value="HIGH" {% if settings.default_task_priority == 'HIGH' %}selected{% endif %}>Alta</option>
+              </select>
+            </div>
+          </div>
+          
+          <div class="setting-row">
+            <div class="setting-info">
+              <div class="setting-label">Requerir Estimación de Horas</div>
+              <div class="setting-description">Obliga a ingresar horas estimadas al crear tareas</div>
+            </div>
+            <div class="setting-control">
+              <div class="form-check form-switch">
+                <input type="checkbox" name="require_task_estimation" class="form-check-input" 
+                  {% if settings.require_task_estimation == 'true' %}checked{% endif %}>
+              </div>
+            </div>
+          </div>
+          
+          <div class="setting-row">
+            <div class="setting-info">
+              <div class="setting-label">Bloqueo por Subtareas</div>
+              <div class="setting-description">Impedir cerrar tareas padre si tienen subtareas incompletas</div>
+            </div>
+            <div class="setting-control">
+              <div class="form-check form-switch">
+                <input type="checkbox" name="block_parent_until_children_complete" class="form-check-input" 
+                  {% if settings.block_parent_until_children_complete != 'false' %}checked{% endif %}>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="d-flex justify-content-end">
+        <button type="submit" class="btn btn-primary">
+          <i class="fa-solid fa-save me-2"></i>Guardar Cambios
+        </button>
+      </div>
+    </form>
+  </div>
+
+  <!-- ==================== NOTIFICATIONS TAB ==================== -->
+  <div class="tab-pane fade" id="notifications" role="tabpanel">
+    <form method="POST" action="{{ url_for('main.admin_settings') }}">
+      <input type="hidden" name="section" value="notifications">
+      
+      <div class="settings-section">
+        <div class="settings-section-header">
+          <i class="fa-solid fa-bell"></i>
+          <h5>Notificaciones por Email</h5>
+        </div>
+        <div class="settings-section-body">
+          <div class="setting-row">
+            <div class="setting-info">
+              <div class="setting-label">Nueva Tarea Asignada</div>
+              <div class="setting-description">Notificar al usuario cuando se le asigna una tarea</div>
+            </div>
+            <div class="setting-control">
+              <div class="form-check form-switch">
+                <input type="checkbox" name="notify_task_assigned" class="form-check-input" 
+                  {% if settings.notify_task_assigned != 'false' %}checked{% endif %}>
+              </div>
+            </div>
+          </div>
+          
+          <div class="setting-row">
+            <div class="setting-info">
+              <div class="setting-label">Tarea Completada</div>
+              <div class="setting-description">Notificar al manager cuando se completa una tarea</div>
+            </div>
+            <div class="setting-control">
+              <div class="form-check form-switch">
+                <input type="checkbox" name="notify_task_completed" class="form-check-input" 
+                  {% if settings.notify_task_completed != 'false' %}checked{% endif %}>
+              </div>
+            </div>
+          </div>
+          
+          <div class="setting-row">
+            <div class="setting-info">
+              <div class="setting-label">Comentario en Tarea</div>
+              <div class="setting-description">Notificar cuando alguien comenta en una tarea asignada</div>
+            </div>
+            <div class="setting-control">
+              <div class="form-check form-switch">
+                <input type="checkbox" name="notify_task_comment" class="form-check-input" 
+                  {% if settings.notify_task_comment != 'false' %}checked{% endif %}>
+              </div>
+            </div>
+          </div>
+          
+          <div class="setting-row">
+            <div class="setting-info">
+              <div class="setting-label">Aprobación de Tareas</div>
+              <div class="setting-description">Notificar cuando una tarea es aprobada por el cliente</div>
+            </div>
+            <div class="setting-control">
+              <div class="form-check form-switch">
+                <input type="checkbox" name="notify_task_approved" class="form-check-input" 
+                  {% if settings.notify_task_approved != 'false' %}checked{% endif %}>
+              </div>
+            </div>
+          </div>
+          
+          <div class="setting-row">
+            <div class="setting-info">
+              <div class="setting-label">Rechazo de Tareas</div>
+              <div class="setting-description">Notificar cuando una tarea es rechazada por el cliente</div>
+            </div>
+            <div class="setting-control">
+              <div class="form-check form-switch">
+                <input type="checkbox" name="notify_task_rejected" class="form-check-input" 
+                  {% if settings.notify_task_rejected != 'false' %}checked{% endif %}>
+              </div>
+            </div>
+          </div>
+          
+          <div class="setting-row">
+            <div class="setting-info">
+              <div class="setting-label">Tareas Próximas a Vencer</div>
+              <div class="setting-description">Enviar recordatorio de tareas con fecha límite próxima</div>
+            </div>
+            <div class="setting-control">
+              <div class="form-check form-switch">
+                <input type="checkbox" name="notify_due_date_reminder" class="form-check-input" 
+                  {% if settings.notify_due_date_reminder != 'false' %}checked{% endif %}>
+              </div>
+            </div>
+          </div>
+          
+          <div class="setting-row">
+            <div class="setting-info">
+              <div class="setting-label">Días de Anticipación</div>
+              <div class="setting-description">Días antes del vencimiento para enviar recordatorio</div>
+            </div>
+            <div class="setting-control">
+              <select name="due_date_reminder_days" class="form-select">
+                <option value="1" {% if settings.due_date_reminder_days == '1' %}selected{% endif %}>1 día</option>
+                <option value="2" {% if settings.due_date_reminder_days == '2' %}selected{% endif %}>2 días</option>
+                <option value="3" {% if settings.due_date_reminder_days == '3' %}selected{% endif %}>3 días</option>
+                <option value="7" {% if settings.due_date_reminder_days == '7' %}selected{% endif %}>1 semana</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-section-header">
+          <i class="fa-solid fa-desktop"></i>
+          <h5>Notificaciones en la Aplicación</h5>
+        </div>
+        <div class="settings-section-body">
+          <div class="setting-row">
+            <div class="setting-info">
+              <div class="setting-label">Mostrar Centro de Notificaciones</div>
+              <div class="setting-description">Mostrar el icono de campana con notificaciones en tiempo real</div>
+            </div>
+            <div class="setting-control">
+              <div class="form-check form-switch">
+                <input type="checkbox" name="show_notification_center" class="form-check-input" 
+                  {% if settings.show_notification_center != 'false' %}checked{% endif %}>
+              </div>
+            </div>
+          </div>
+          
+          <div class="setting-row">
+            <div class="setting-info">
+              <div class="setting-label">Notificaciones Push</div>
+              <div class="setting-description">Habilitar notificaciones push en el navegador (requiere HTTPS)</div>
+            </div>
+            <div class="setting-control">
+              <div class="form-check form-switch">
+                <input type="checkbox" name="enable_push_notifications" class="form-check-input" 
+                  {% if settings.enable_push_notifications == 'true' %}checked{% endif %}>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="d-flex justify-content-end">
+        <button type="submit" class="btn btn-primary">
+          <i class="fa-solid fa-save me-2"></i>Guardar Cambios
+        </button>
+      </div>
+    </form>
+  </div>
+
+  <!-- ==================== SECURITY TAB ==================== -->
+  <div class="tab-pane fade" id="security" role="tabpanel">
+    <form method="POST" action="{{ url_for('main.admin_settings') }}">
+      <input type="hidden" name="section" value="security">
+      
+      <div class="settings-section">
+        <div class="settings-section-header">
+          <i class="fa-solid fa-key"></i>
+          <h5>Autenticación</h5>
+        </div>
+        <div class="settings-section-body">
+          <div class="setting-row">
+            <div class="setting-info">
+              <div class="setting-label">Autenticación con Azure Entra ID</div>
+              <div class="setting-description">Permitir inicio de sesión con cuentas de Microsoft/Azure</div>
+            </div>
+            <div class="setting-control">
+              <div class="form-check form-switch">
+                <input type="checkbox" name="enable_azure_auth" class="form-check-input" 
+                  {% if settings.enable_azure_auth != 'false' %}checked{% endif %}>
+              </div>
+            </div>
+          </div>
+          
+          <div class="setting-row">
+            <div class="setting-info">
+              <div class="setting-label">Autenticación Local (Email/Contraseña)</div>
+              <div class="setting-description">Permitir inicio de sesión con email y contraseña</div>
+            </div>
+            <div class="setting-control">
+              <div class="form-check form-switch">
+                <input type="checkbox" name="enable_local_auth" class="form-check-input" 
+                  {% if settings.enable_local_auth != 'false' %}checked{% endif %}>
+              </div>
+            </div>
+          </div>
+          
+          <div class="setting-row">
+            <div class="setting-info">
+              <div class="setting-label">Registro Público</div>
+              <div class="setting-description">Permitir que nuevos usuarios se registren por su cuenta</div>
+            </div>
+            <div class="setting-control">
+              <div class="form-check form-switch">
+                <input type="checkbox" name="allow_public_registration" class="form-check-input" 
+                  {% if settings.allow_public_registration == 'true' %}checked{% endif %}>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-section-header">
+          <i class="fa-solid fa-lock"></i>
+          <h5>Políticas de Contraseña</h5>
+        </div>
+        <div class="settings-section-body">
+          <div class="setting-row">
+            <div class="setting-info">
+              <div class="setting-label">Longitud Mínima de Contraseña</div>
+              <div class="setting-description">Número mínimo de caracteres requeridos</div>
+            </div>
+            <div class="setting-control">
+              <select name="min_password_length" class="form-select">
+                <option value="6" {% if settings.min_password_length == '6' %}selected{% endif %}>6 caracteres</option>
+                <option value="8" {% if settings.min_password_length == '8' or not settings.min_password_length %}selected{% endif %}>8 caracteres</option>
+                <option value="10" {% if settings.min_password_length == '10' %}selected{% endif %}>10 caracteres</option>
+                <option value="12" {% if settings.min_password_length == '12' %}selected{% endif %}>12 caracteres</option>
+              </select>
+            </div>
+          </div>
+          
+          <div class="setting-row">
+            <div class="setting-info">
+              <div class="setting-label">Requerir Mayúsculas y Números</div>
+              <div class="setting-description">La contraseña debe incluir al menos una mayúscula y un número</div>
+            </div>
+            <div class="setting-control">
+              <div class="form-check form-switch">
+                <input type="checkbox" name="password_require_complexity" class="form-check-input" 
+                  {% if settings.password_require_complexity == 'true' %}checked{% endif %}>
+              </div>
+            </div>
+          </div>
+          
+          <div class="setting-row">
+            <div class="setting-info">
+              <div class="setting-label">Expiración de Sesión</div>
+              <div class="setting-description">Tiempo de inactividad antes de cerrar sesión automáticamente</div>
+            </div>
+            <div class="setting-control">
+              <select name="session_timeout" class="form-select">
+                <option value="30" {% if settings.session_timeout == '30' %}selected{% endif %}>30 minutos</option>
+                <option value="60" {% if settings.session_timeout == '60' %}selected{% endif %}>1 hora</option>
+                <option value="240" {% if settings.session_timeout == '240' %}selected{% endif %}>4 horas</option>
+                <option value="480" {% if settings.session_timeout == '480' or not settings.session_timeout %}selected{% endif %}>8 horas</option>
+                <option value="0" {% if settings.session_timeout == '0' %}selected{% endif %}>Nunca</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="d-flex justify-content-end">
+        <button type="submit" class="btn btn-primary">
+          <i class="fa-solid fa-save me-2"></i>Guardar Cambios
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal: Nuevo Usuario -->
+<div class="modal fade" id="newUserModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fa-solid fa-user-plus me-2"></i>Nuevo Usuario</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <form method="POST" action="{{ url_for('main.admin_settings_create_user') }}">
+        <div class="modal-body">
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Nombre</label>
+              <input type="text" name="first_name" class="form-control" required>
+            </div>
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Apellido</label>
+              <input type="text" name="last_name" class="form-control" required>
+            </div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Email</label>
+            <input type="email" name="email" class="form-control" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Contraseña</label>
+            <input type="password" name="password" class="form-control" minlength="8" required>
+          </div>
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Rol</label>
+              <select name="role_id" class="form-select">
+                {% for role in roles %}
+                <option value="{{ role.id }}">{{ role.name }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Tipo</label>
+              <select name="is_internal" class="form-select">
+                <option value="1">Usuario Interno</option>
+                <option value="0">Cliente Externo</option>
+              </select>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn btn-primary">
+            <i class="fa-solid fa-check me-2"></i>Crear Usuario
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Editar Usuario -->
+<div class="modal fade" id="editUserModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fa-solid fa-user-pen me-2"></i>Editar Usuario</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <form method="POST" action="{{ url_for('main.admin_settings_update_user') }}" id="editUserForm">
+        <input type="hidden" name="user_id" id="editUserId">
+        <input type="hidden" name="is_azure" id="editIsAzure" value="0">
+        <div class="modal-body">
+          <!-- Aviso para usuarios de Entra ID -->
+          <div class="alert alert-info small d-none" id="azureUserAlert">
+            <i class="fa-brands fa-microsoft me-2"></i>
+            <strong>Usuario de Azure Entra ID:</strong> Solo puedes modificar el rol de este usuario. Los demás campos están gestionados por el directorio de Azure.
+          </div>
+          
+          <div class="row" id="editNameFields">
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Nombre</label>
+              <input type="text" name="first_name" id="editFirstName" class="form-control">
+            </div>
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Apellido</label>
+              <input type="text" name="last_name" id="editLastName" class="form-control">
+            </div>
+          </div>
+          <div class="mb-3" id="editEmailField">
+            <label class="form-label">Email</label>
+            <input type="email" name="email" id="editEmail" class="form-control">
+          </div>
+          <div class="mb-3" id="editPasswordField">
+            <label class="form-label">Nueva Contraseña <small class="text-muted">(dejar vacío para mantener)</small></label>
+            <input type="password" name="password" class="form-control" minlength="8">
+          </div>
+          <div class="row">
+            <div class="col-md-6 mb-3" id="editRoleField">
+              <label class="form-label">Rol</label>
+              <select name="role_id" id="editRoleId" class="form-select">
+                {% for role in roles %}
+                <option value="{{ role.id }}" data-internal="{{ 'true' if role.name != 'Cliente' else 'false' }}">{{ role.name }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-md-6 mb-3" id="editTypeField">
+              <label class="form-label">Tipo</label>
+              <select name="is_internal" id="editIsInternal" class="form-select">
+                <option value="1">Usuario Interno</option>
+                <option value="0">Cliente Externo</option>
+              </select>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn btn-primary">
+            <i class="fa-solid fa-save me-2"></i>Guardar Cambios
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+// ==================== USERS TABLE MANAGEMENT ====================
+const USERS_PER_PAGE = 10;
+let currentPage = 1;
+let currentSort = { field: 'name', direction: 'asc' };
+let filteredRows = [];
+
+function initUsersTable() {
+  const allRows = Array.from(document.querySelectorAll('.user-row'));
+  filteredRows = allRows;
+  
+  // Event listeners for filters
+  document.getElementById('userSearch').addEventListener('input', applyFilters);
+  document.getElementById('filterAuthType').addEventListener('change', applyFilters);
+  document.getElementById('filterUserType').addEventListener('change', applyFilters);
+  document.getElementById('filterStatus').addEventListener('change', applyFilters);
+  document.getElementById('filterRole').addEventListener('change', applyFilters);
+  
+  // Event listeners for sorting
+  document.querySelectorAll('.sortable').forEach(th => {
+    th.style.cursor = 'pointer';
+    th.addEventListener('click', () => {
+      const field = th.dataset.sort;
+      if (currentSort.field === field) {
+        currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
+      } else {
+        currentSort.field = field;
+        currentSort.direction = 'asc';
+      }
+      applyFilters();
+    });
+  });
+  
+  applyFilters();
+}
+
+function applyFilters() {
+  const search = document.getElementById('userSearch').value.toLowerCase();
+  const authType = document.getElementById('filterAuthType').value;
+  const userType = document.getElementById('filterUserType').value;
+  const status = document.getElementById('filterStatus').value;
+  const role = document.getElementById('filterRole').value;
+  
+  const allRows = Array.from(document.querySelectorAll('.user-row'));
+  
+  filteredRows = allRows.filter(row => {
+    const name = row.dataset.name;
+    const email = row.dataset.email;
+    const auth = row.dataset.auth;
+    const type = row.dataset.type;
+    const rowStatus = row.dataset.status;
+    const rowRole = row.dataset.role;
+    
+    if (search && !name.includes(search) && !email.includes(search)) return false;
+    if (authType && auth !== authType) return false;
+    if (userType && type !== userType) return false;
+    if (status && rowStatus !== status) return false;
+    if (role && rowRole !== role) return false;
+    
+    return true;
+  });
+  
+  // Sort
+  filteredRows.sort((a, b) => {
+    let valA, valB;
+    switch (currentSort.field) {
+      case 'name':
+        valA = a.dataset.name;
+        valB = b.dataset.name;
+        break;
+      case 'email':
+        valA = a.dataset.email;
+        valB = b.dataset.email;
+        break;
+      case 'created':
+        valA = a.dataset.created || '0';
+        valB = b.dataset.created || '0';
+        break;
+      default:
+        valA = a.dataset.name;
+        valB = b.dataset.name;
+    }
+    
+    const cmp = valA.localeCompare(valB);
+    return currentSort.direction === 'asc' ? cmp : -cmp;
+  });
+  
+  currentPage = 1;
+  renderTable();
+}
+
+function renderTable() {
+  const tbody = document.getElementById('usersTableBody');
+  const total = filteredRows.length;
+  const totalPages = Math.ceil(total / USERS_PER_PAGE);
+  const start = (currentPage - 1) * USERS_PER_PAGE;
+  const end = Math.min(start + USERS_PER_PAGE, total);
+  
+  // Hide all rows first
+  document.querySelectorAll('.user-row').forEach(row => row.style.display = 'none');
+  
+  // Show only rows for current page
+  for (let i = start; i < end; i++) {
+    filteredRows[i].style.display = '';
+  }
+  
+  // Update showing info
+  document.getElementById('showingStart').textContent = total > 0 ? start + 1 : 0;
+  document.getElementById('showingEnd').textContent = end;
+  document.getElementById('totalUsers').textContent = total;
+  
+  // Render pagination
+  const pagination = document.getElementById('usersPagination');
+  pagination.innerHTML = '';
+  
+  if (totalPages > 1) {
+    // Previous
+    const prevLi = document.createElement('li');
+    prevLi.className = `page-item ${currentPage === 1 ? 'disabled' : ''}`;
+    prevLi.innerHTML = `<a class="page-link" href="#" onclick="goToPage(${currentPage - 1}); return false;">«</a>`;
+    pagination.appendChild(prevLi);
+    
+    // Page numbers
+    for (let i = 1; i <= totalPages; i++) {
+      if (i === 1 || i === totalPages || (i >= currentPage - 1 && i <= currentPage + 1)) {
+        const li = document.createElement('li');
+        li.className = `page-item ${i === currentPage ? 'active' : ''}`;
+        li.innerHTML = `<a class="page-link" href="#" onclick="goToPage(${i}); return false;">${i}</a>`;
+        pagination.appendChild(li);
+      } else if (i === currentPage - 2 || i === currentPage + 2) {
+        const li = document.createElement('li');
+        li.className = 'page-item disabled';
+        li.innerHTML = '<span class="page-link">...</span>';
+        pagination.appendChild(li);
+      }
+    }
+    
+    // Next
+    const nextLi = document.createElement('li');
+    nextLi.className = `page-item ${currentPage === totalPages ? 'disabled' : ''}`;
+    nextLi.innerHTML = `<a class="page-link" href="#" onclick="goToPage(${currentPage + 1}); return false;">»</a>`;
+    pagination.appendChild(nextLi);
+  }
+  
+  // Update sort indicators
+  document.querySelectorAll('.sortable i').forEach(icon => {
+    icon.className = 'fa-solid fa-sort ms-1';
+  });
+  const activeHeader = document.querySelector(`.sortable[data-sort="${currentSort.field}"] i`);
+  if (activeHeader) {
+    activeHeader.className = `fa-solid fa-sort-${currentSort.direction === 'asc' ? 'up' : 'down'} ms-1`;
+  }
+}
+
+function goToPage(page) {
+  const totalPages = Math.ceil(filteredRows.length / USERS_PER_PAGE);
+  if (page < 1 || page > totalPages) return;
+  currentPage = page;
+  renderTable();
+}
+
+// Initialize on tab shown
+document.getElementById('users-tab').addEventListener('shown.bs.tab', initUsersTable);
+// Also initialize if users tab is active on load
+if (document.getElementById('users').classList.contains('active')) {
+  document.addEventListener('DOMContentLoaded', initUsersTable);
+}
+
+// ==================== EMAIL TEST ====================
+function testEmailConnection() {
+  const btn = document.querySelector('.test-connection-btn');
+  btn.classList.add('loading');
+  
+  fetch('{{ url_for("main.admin_test_email") }}', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'}
+  })
+  .then(r => r.json())
+  .then(data => {
+    btn.classList.remove('loading');
+    if (data.success) {
+      alert('✅ Conexión exitosa! Se envió un email de prueba.');
+    } else {
+      alert('❌ Error: ' + data.error);
+    }
+  })
+  .catch(err => {
+    btn.classList.remove('loading');
+    alert('❌ Error de conexión');
+  });
+}
+
+// ==================== EDIT USER ====================
+function editUser(userId) {
+  fetch(`/api/users/${userId}`)
+    .then(r => r.json())
+    .then(user => {
+      const isAzure = user.is_azure;
+      const isInternal = user.is_internal;
+      
+      document.getElementById('editUserId').value = user.id;
+      document.getElementById('editIsAzure').value = isAzure ? '1' : '0';
+      document.getElementById('editFirstName').value = user.first_name || '';
+      document.getElementById('editLastName').value = user.last_name || '';
+      document.getElementById('editEmail').value = user.email;
+      document.getElementById('editIsInternal').value = user.is_internal ? '1' : '0';
+      
+      // Filter roles based on user type and set the correct value
+      const roleSelect = document.getElementById('editRoleId');
+      const roleField = document.getElementById('editRoleField');
+      
+      // Show/hide role options based on user type
+      Array.from(roleSelect.options).forEach(opt => {
+        const isRoleInternal = opt.dataset.internal === 'true';
+        if (isInternal) {
+          // Internal users can only have Admin, PMP, Participante
+          opt.style.display = isRoleInternal ? '' : 'none';
+        } else {
+          // Clients can only have Cliente role
+          opt.style.display = !isRoleInternal ? '' : 'none';
+        }
+      });
+      
+      // Set the current role
+      roleSelect.value = user.role_id || '';
+      
+      // For clients, hide role selector (they always have Cliente role)
+      if (!isInternal) {
+        roleField.style.display = 'none';
+      } else {
+        roleField.style.display = '';
+      }
+      
+      // Show/hide fields based on auth type
+      const azureAlert = document.getElementById('azureUserAlert');
+      const nameFields = document.getElementById('editNameFields');
+      const emailField = document.getElementById('editEmailField');
+      const passwordField = document.getElementById('editPasswordField');
+      const typeField = document.getElementById('editTypeField');
+      
+      if (isAzure) {
+        azureAlert.classList.remove('d-none');
+        nameFields.querySelectorAll('input').forEach(i => i.disabled = true);
+        emailField.querySelector('input').disabled = true;
+        passwordField.style.display = 'none';
+        typeField.querySelector('select').disabled = true;
+      } else {
+        azureAlert.classList.add('d-none');
+        nameFields.querySelectorAll('input').forEach(i => i.disabled = false);
+        emailField.querySelector('input').disabled = false;
+        passwordField.style.display = '';
+        typeField.querySelector('select').disabled = false;
+      }
+      
+      new bootstrap.Modal(document.getElementById('editUserModal')).show();
+    })
+    .catch(err => {
+      alert('Error al cargar usuario');
+    });
+}
+
+// ==================== TOGGLE USER STATUS ====================
+function toggleUserStatus(userId, isActive) {
+  const action = isActive ? 'desactivar' : 'activar';
+  if (!confirm(`¿Estás seguro de que deseas ${action} este usuario?`)) return;
+  
+  fetch(`/api/users/${userId}/toggle-status`, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'}
+  })
+  .then(r => r.json())
+  .then(data => {
+    if (data.success) {
+      location.reload();
+    } else {
+      alert('Error: ' + data.error);
+    }
+  })
+  .catch(err => {
+    alert('Error al actualizar estado');
+  });
+}
+
+// ==================== COLOR PICKER SYNC ====================
+document.querySelectorAll('input[type="color"]').forEach(picker => {
+  picker.addEventListener('input', function() {
+    this.nextElementSibling.value = this.value;
+  });
+});
+
+// Initialize users table on page load if users tab is in URL hash
+document.addEventListener('DOMContentLoaded', function() {
+  if (window.location.hash === '#users') {
+    const tab = new bootstrap.Tab(document.getElementById('users-tab'));
+    tab.show();
+    setTimeout(initUsersTable, 100);
+  }
+});
+</script>
+{% endblock %}

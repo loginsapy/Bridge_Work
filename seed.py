@@ -1,6 +1,6 @@
 from app import create_app, db
 from app.models import User, Project, Task, TimeEntry, Role
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 import random
 
 app = create_app()
@@ -40,8 +40,8 @@ def seed_database():
 
         print("🌱 Generando datos de prueba...")
 
-        # Crear Roles
-        roles = ['Participante', 'PMP', 'Cliente']
+        # Crear Roles (orden de privilegios: Admin > PMP > Participante > Cliente)
+        roles = ['Admin', 'PMP', 'Participante', 'Cliente']
         for r in roles:
             if not Role.query.filter_by(name=r).first():
                 db.session.add(Role(name=r))
@@ -50,7 +50,7 @@ def seed_database():
         # 1. Usuarios
         admin = User(email='admin@bridgework.com', first_name='Admin', last_name='System', is_internal=True)
         admin.set_password('admin123')
-        admin.role = Role.query.filter_by(name='PMP').first()
+        admin.role = Role.query.filter_by(name='Admin').first()
         
         dev1 = User(email='ana@bridgework.com', first_name='Ana', last_name='García', is_internal=True)
         dev1.set_password('password')
@@ -83,7 +83,7 @@ def seed_database():
                 description=p_data['desc'],
                 budget_hours=p_data['budget'],
                 status=p_data['status'],
-                start_date=datetime.now(timezone.utc) - timedelta(days=random.randint(1, 60))
+                start_date=datetime.now() - timedelta(days=random.randint(1, 60))
             )
             db.session.add(p)
             projects.append(p)
@@ -101,7 +101,7 @@ def seed_database():
                     project_id=project.id,
                     assigned_to_id=random.choice(users).id,
                     status=random.choice(statuses) if project.status == 'ACTIVE' else 'COMPLETED' if project.status == 'COMPLETED' else 'BACKLOG',
-                    due_date=datetime.now(timezone.utc) + timedelta(days=random.randint(-5, 15))
+                    due_date=datetime.now() + timedelta(days=random.randint(-5, 15))
                 )
                 db.session.add(task)
                 tasks.append(task)
@@ -115,7 +115,7 @@ def seed_database():
                         user_id=task.assigned_to_id,
                         task_id=task.id,
                         hours=round(random.uniform(0.5, 4.0), 1),
-                        date=datetime.now(timezone.utc) - timedelta(days=random.randint(0, 30)),
+                        date=datetime.now() - timedelta(days=random.randint(0, 30)),
                         description=f'Trabajo en {task.title}'
                     )
                     db.session.add(entry)

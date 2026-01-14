@@ -285,18 +285,16 @@ def update_task(task_id):
     data = request.get_json() or {}
     # Validate status transition wrt predecessors
     if 'status' in data and data['status'] in ('DONE', 'COMPLETED'):
-        incomplete = [p for p in t.predecessors if p.status not in ('DONE', 'COMPLETED')]
-        if incomplete:
+        blockers = t.get_completion_blockers()
+        if blockers['incomplete_predecessors']:
             return jsonify({
                 'error': 'Cannot complete task while predecessors are incomplete',
-                'incomplete_predecessors': [{'id': p.id, 'title': p.title} for p in incomplete]
+                'incomplete_predecessors': blockers['incomplete_predecessors']
             }), 400
-        # Also prevent completing if any hierarchical child is incomplete
-        incomplete_children = [c for c in t.children if c.status not in ('DONE', 'COMPLETED')]
-        if incomplete_children:
+        if blockers['incomplete_children']:
             return jsonify({
                 'error': 'Cannot complete task while child tasks are incomplete',
-                'incomplete_children': [{'id': c.id, 'title': c.title} for c in incomplete_children]
+                'incomplete_children': blockers['incomplete_children']
             }), 400
 
     for field in ["project_id", "parent_task_id", "title", "description", "assigned_to_id", "assigned_client_id", "status", "priority", "due_date", "is_external_visible", "estimated_hours"]:
@@ -414,3 +412,36 @@ def delete_time_entry(entry_id):
         db.session.rollback()
         abort(500, description=str(e))
     return jsonify({"deleted": entry_id}), 200
+
+
+# User endpoints (for admin)
+from ..models import User
+
+def user_to_dict(u: User):
+    return {
+        "id": u.id,
+        "email": u.email,
+        "first_name": u.first_name,
+        "last_name": u.last_name,
+        "name": u.name,
+        "role_id": u.role_id,
+        "is_internal": u.is_internal,
+        "is_active": u.is_active,
+        "is_azure": bool(u.azure_oid),
+        "azure_oid": u.azure_oid,
+        "company": u.company,
+        "phone": u.phone,
+        "created_at": u.created_at.isoformat() if u.created_at else None,
+    }
+
+
+@api_bp.route("/users/<int:user_id>", methods=["GET"])
+def get_user(user_id):
+    """Get user details for admin editing"""
+    if not current_user.is_authenticated:
+        abort(401)
+    if not current_user.role or current_user.role.name not in ('Admin', 'PMP'):
+        abort(403)
+    
+    user = User.query.get_or_404(user_id)
+    return jsonify(user_to_dict(user))

@@ -26,6 +26,75 @@ class StubProvider(NotificationProvider):
         return subject, text, html
 
 
+class SMTPProvider(NotificationProvider):
+    """SMTP Provider using settings from SystemSettings (admin/settings)"""
+    
+    def send_email(self, recipient_id: int, subject: str, body: str, html: str = None) -> bool:
+        import smtplib
+        from email.mime.text import MIMEText
+        from email.mime.multipart import MIMEMultipart
+        from app.models import User, SystemSettings
+        
+        try:
+            user = User.query.get(recipient_id)
+            if not user or not user.email:
+                current_app.logger.warning('SMTPProvider: no email for recipient %s', recipient_id)
+                return False
+            
+            # Get SMTP settings from SystemSettings
+            host = SystemSettings.get('smtp_host', '')
+            port = int(SystemSettings.get('smtp_port', '587'))
+            username = SystemSettings.get('smtp_username', '')
+            password = SystemSettings.get('smtp_password', '')
+            use_tls = SystemSettings.get('smtp_use_tls', 'true') == 'true'
+            from_email = SystemSettings.get('email_from', username)
+            from_name = SystemSettings.get('app_name', 'BridgeWork')
+            
+            if not host or not username:
+                current_app.logger.warning('SMTPProvider: SMTP not configured')
+                return False
+            
+            # Build message
+            if html:
+                msg = MIMEMultipart('alternative')
+                msg.attach(MIMEText(body, 'plain', 'utf-8'))
+                msg.attach(MIMEText(html, 'html', 'utf-8'))
+            else:
+                msg = MIMEText(body, 'plain', 'utf-8')
+            
+            msg['Subject'] = subject
+            msg['From'] = f'{from_name} <{from_email}>'
+            msg['To'] = user.email
+            
+            # Send email
+            if port == 465:
+                server = smtplib.SMTP_SSL(host, port, timeout=10)
+            else:
+                server = smtplib.SMTP(host, port, timeout=10)
+                if use_tls:
+                    server.starttls()
+            
+            if password:
+                server.login(username, password)
+            
+            server.sendmail(from_email, [user.email], msg.as_string())
+            server.quit()
+            
+            current_app.logger.info('SMTPProvider: Email sent to %s (%s)', recipient_id, user.email)
+            return True
+            
+        except Exception as e:
+            current_app.logger.exception('SMTPProvider exception: %s', e)
+            return False
+
+    def render_alert(self, recipient_id: int, task_ids: list) -> tuple:
+        from flask import render_template
+        subject = f"{len(task_ids)} pending tasks due soon"
+        text = render_template('notifications/alert_email.txt', count=len(task_ids), tasks=task_ids)
+        html = render_template('notifications/alert_email.html', count=len(task_ids), tasks=task_ids)
+        return subject, text, html
+
+
 class SendGridProvider(NotificationProvider):
     def __init__(self, api_key: str, from_email: str):
         self.api_key = api_key
@@ -70,6 +139,15 @@ class SendGridProvider(NotificationProvider):
 
 
 def get_provider(app=None) -> NotificationProvider:
+    """Get email provider - uses SMTP settings from SystemSettings by default"""
+    from app.models import SystemSettings
+    
+    # Check if SMTP is configured in SystemSettings
+    smtp_host = SystemSettings.get('smtp_host', '')
+    if smtp_host:
+        return SMTPProvider()
+    
+    # Fallback to config-based providers
     from flask import current_app as _cap
     cfg = (app.config if app else _cap.config)
     provider_name = cfg.get('EMAIL_PROVIDER', 'stub')
@@ -77,4 +155,5 @@ def get_provider(app=None) -> NotificationProvider:
         api_key = cfg.get('SENDGRID_API_KEY')
         from_email = cfg.get('EMAIL_FROM', 'noreply@example.com')
         return SendGridProvider(api_key, from_email)
+    
     return StubProvider()

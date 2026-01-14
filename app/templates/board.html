@@ -121,7 +121,7 @@
 .status-IN_PROGRESS { background: var(--monday-blue) !important; color: white !important; }
 .status-IN_REVIEW { background: var(--monday-purple) !important; color: white !important; }
 .status-QA { background: #ff7b00 !important; color: white !important; }
-.status-COMPLETED { background: var(--monday-green) !important; color: white !important; }
+.status-COMPLETED, .status-DONE { background: var(--monday-green) !important; color: white !important; }
 
 /* Priority colors */
 .priority-LOW { background: #579bfc; }
@@ -637,6 +637,9 @@ tr:hover .task-actions {
                 <input type="text" value="{{ task.title }}" onblur="updateTask({{ task.id }}, 'title', this.value)" onkeypress="if(event.key==='Enter')this.blur()">
                 {% else %}
                 <span class="fw-medium">{{ task.title }}</span>
+                {% endif %}
+                {% if task.is_internal_only %}
+                <span class="badge bg-secondary ms-2" title="Solo visible para PMP/Admin"><i class="fa-solid fa-lock fa-xs"></i></span>
                 {% endif %}
               </div>
             </td>

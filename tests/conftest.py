@@ -39,6 +39,25 @@ def create_user(db):
         u = User(email=email, **kwargs)
         db.session.add(u)
         db.session.commit()
+        # Assign default internal role for internal users if none provided
+        from app.models import Role
+        if getattr(u, 'is_internal', False) and not getattr(u, 'role', None):
+            role = Role.query.filter_by(name='PMP').first()
+            if not role:
+                role = Role(name='PMP')
+                db.session.add(role)
+                db.session.commit()
+            u.role = role
+            db.session.commit()
+        # Assign default client role for external users if none provided
+        if not getattr(u, 'is_internal', True) and not getattr(u, 'role', None):
+            role = Role.query.filter_by(name='Cliente').first()
+            if not role:
+                role = Role(name='Cliente')
+                db.session.add(role)
+                db.session.commit()
+            u.role = role
+            db.session.commit()
         return u
 
     return _create_user

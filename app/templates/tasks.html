@@ -88,7 +88,19 @@
 
 .filter-chip:hover {
   border-color: var(--monday-blue);
-  color: var(--monday-blue);
+}
+
+/* ensure selects inherit the chip styling and remain readable */
+.filter-chip select {
+  color: inherit;
+  background: transparent;
+  border: none;
+}
+.filter-chip select:focus {
+  outline: none;
+}
+.filter-chip select option {
+  color: var(--monday-dark);
 }
 
 .filter-chip.active {
@@ -235,7 +247,7 @@
 .monday-status.backlog { background: #c4c4c4; }
 .monday-status.in-progress { background: var(--monday-blue); }
 .monday-status.in-review { background: var(--monday-purple); }
-.monday-status.completed { background: var(--monday-green); }
+.monday-status.completed, .monday-status.done { background: var(--monday-green); }
 
 /* Monday Priority Cell */
 .priority-cell {
@@ -444,7 +456,7 @@
   </div>
   <div class="stat-item">
     <span class="dot" style="background: var(--monday-green);"></span>
-    <span class="count">{{ tasks|selectattr('status', 'equalto', 'COMPLETED')|list|length }}</span>
+    <span class="count">{{ (tasks|selectattr('status', 'equalto', 'COMPLETED')|list|length) + (tasks|selectattr('status', 'equalto', 'DONE')|list|length) }}</span>
     {{ _('completed') }}
   </div>
   <div class="stat-item">
@@ -526,7 +538,7 @@
       </div>
       <div class="status-cell">
         <span class="monday-status {{ task.status|lower|replace('_', '-') }}">
-          {{ {'BACKLOG': _('backlog'), 'IN_PROGRESS': _('in_progress'), 'IN_REVIEW': _('in_review'), 'COMPLETED': _('completed')}.get(task.status, task.status) }}
+          {{ {'BACKLOG': _('backlog'), 'IN_PROGRESS': _('in_progress'), 'IN_REVIEW': _('in_review'), 'COMPLETED': _('completed'), 'DONE': _('completed')}.get(task.status, task.status) }}
         </span>
       </div>
       <div class="priority-cell">

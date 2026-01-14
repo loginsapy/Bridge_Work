@@ -243,12 +243,25 @@ class NotificationService:
     
     @classmethod
     def notify_task_assigned(cls, task: Task, assigned_by_user: User = None, 
-                            send_email: bool = True) -> SystemNotification:
-        """Notify user when a task is assigned to them."""
-        if not task.assigned_to_id:
+                            send_email: bool = True, notify_client: bool = False) -> SystemNotification:
+        """Notify user when a task is assigned to them.
+        
+        Args:
+            task: The task that was assigned
+            assigned_by_user: The user who made the assignment
+            send_email: Whether to send email notification
+            notify_client: If True, notify assigned_client_id instead of assigned_to_id
+        """
+        # Determine which user to notify
+        if notify_client:
+            user_id = task.assigned_client_id
+        else:
+            user_id = task.assigned_to_id
+            
+        if not user_id:
             return None
             
-        assignee = User.query.get(task.assigned_to_id)
+        assignee = User.query.get(user_id)
         if not assignee:
             return None
         
@@ -262,7 +275,7 @@ class NotificationService:
             message += f" por {assigned_by_user.name or assigned_by_user.username}"
         
         return cls.notify(
-            user_id=task.assigned_to_id,
+            user_id=user_id,
             title=title,
             message=message,
             notification_type=cls.TASK_ASSIGNED,
