@@ -18,7 +18,7 @@
     {% if current_user.role and current_user.role.name in ['PMP', 'Admin'] %}
       <a href="{{ url_for('main.edit_project', project_id=project.id) }}" class="btn btn-outline-secondary me-2 text-dark"><i class="fa-solid fa-pen me-2"></i>Editar</a>
     {% endif %}
-    {% if current_user.is_internal %}
+    {% if current_user.is_internal and not (current_user.role and current_user.role.name == 'Participante') %}
       <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createTaskModal"><i class="fa-solid fa-plus me-2"></i>Nueva Tarea</button>
     {% endif %}
   </div>
@@ -209,7 +209,7 @@
 </div>
 
 <!-- Modal Nueva Tarea -->
-{% if current_user.is_internal %}
+{% if current_user.is_internal and not (current_user.role and current_user.role.name == 'Participante') %}
 <div class="modal fade" id="createTaskModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog">
     <div class="modal-content">

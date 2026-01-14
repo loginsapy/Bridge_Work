@@ -27,12 +27,14 @@ def test_client_sees_only_client_assigned_tasks(client, db, create_user, create_
     rv = client.get(f"/task/{t1['id']}")
     assert rv.status_code == 200
     html = rv.get_data(as_text=True)
-    assert 'Aceptar y Marcar como Completado' in html  # assigned to client -> button visible
+    assert 'Marcar como Completado' in html  # assigned to client -> button visible
+    assert 'Guardar' in html  # client should see visible save/upload control
 
     rv = client.get(f"/task/{t3['id']}")
     assert rv.status_code == 200
     html = rv.get_data(as_text=True)
-    assert 'Aceptar y Marcar como Completado' not in html  # public but not assigned -> no button
+    assert 'Marcar como Completado' not in html  # public but not assigned -> no button
+    assert 'Guardar' not in html  # not assigned client should not see upload control
 
     # Private task not assigned to client should be forbidden
     rv = client.get(f"/task/{t2['id']}")
@@ -55,3 +57,30 @@ def test_client_sees_only_client_assigned_tasks(client, db, create_user, create_
     # ensure status didn't change for the public task
     t_public = Task.query.get(t3['id'])
     assert t_public.status != 'COMPLETED'
+
+
+def test_client_can_upload_attachment(client, db, create_user, create_project, create_task, login):
+    from io import BytesIO
+    from app.models import Project, TaskAttachment, db as _db
+
+    # Setup client user and project
+    client_user = create_user(email='uploadclient@example.com', is_internal=False)
+    login(client_user)
+
+    p = create_project(name='P-upload')
+    proj = Project.query.get(p['id'])
+    proj.clients.append(client_user)
+    _db.session.commit()
+
+    t = create_task(project_id=p['id'], title='UploadTest')
+
+    data = {
+        'file': (BytesIO(b'hello world'), 'hello.txt')
+    }
+
+    rv = client.post(f"/task/{t['id']}/upload", data=data, content_type='multipart/form-data', follow_redirects=True)
+    assert rv.status_code == 200
+
+    att = TaskAttachment.query.filter_by(task_id=t['id']).first()
+    assert att is not None
+    assert att.filename == 'hello.txt'

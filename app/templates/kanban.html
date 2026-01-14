@@ -266,7 +266,7 @@
       </div>
       {% endfor %}
     </div>
-    {% if current_user.is_internal %}
+    {% if current_user.is_internal and not (current_user.role and current_user.role.name == 'Participante') %}
     <div class="add-card-btn" onclick="addTask('BACKLOG')">
       <i class="fa-solid fa-plus"></i> Añadir tarea
     </div>
@@ -310,7 +310,7 @@
       </div>
       {% endfor %}
     </div>
-    {% if current_user.is_internal %}
+    {% if current_user.is_internal and not (current_user.role and current_user.role.name == 'Participante') %}
     <div class="add-card-btn" onclick="addTask('IN_PROGRESS')">
       <i class="fa-solid fa-plus"></i> Añadir tarea
     </div>
@@ -354,7 +354,7 @@
       </div>
       {% endfor %}
     </div>
-    {% if current_user.is_internal %}
+    {% if current_user.is_internal and not (current_user.role and current_user.role.name == 'Participante') %}
     <div class="add-card-btn" onclick="addTask('IN_REVIEW')">
       <i class="fa-solid fa-plus"></i> Añadir tarea
     </div>

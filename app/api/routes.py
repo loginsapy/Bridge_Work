@@ -107,6 +107,11 @@ def get_project(project_id):
 @api_bp.route("/projects", methods=["POST"])
 @internal_required
 def create_project():
+    from flask_login import current_user
+    # Prevent participants from creating projects via API
+    if current_user.role and current_user.role.name == 'Participante':
+        return jsonify({"error": "No tienes permiso para crear proyectos."}), 403
+
     data = request.get_json() or {}
     schema = ProjectSchema()
     try:
@@ -251,6 +256,11 @@ def get_task(task_id):
 @api_bp.route("/tasks", methods=["POST"])
 @internal_required
 def create_task():
+    from flask_login import current_user
+    # Prevent participants from creating tasks via API
+    if current_user.role and current_user.role.name == 'Participante':
+        return jsonify({"error": "No tienes permiso para crear tareas."}), 403
+
     data = request.get_json() or {}
     schema = TaskSchema()
     try:

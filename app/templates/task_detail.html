@@ -336,7 +336,7 @@
         {% if task.status != 'COMPLETED' %}
         <form method="POST" action="{{ url_for('main.client_accept_task', task_id=task.id) }}" style="display:inline;">
           <button type="submit" class="action-btn btn-accept">
-            <i class="fa-solid fa-check me-2"></i>Aceptar y Marcar como Completado
+            <i class="fa-solid fa-check me-2"></i>Marcar como Completado
           </button>
         </form>
         {% endif %}
@@ -513,6 +513,7 @@
       {% endif %}
 
       <!-- Upload Form -->
+      {% if current_user.is_internal or (task.project.client_id and task.project.client_id == current_user.id) or (current_user in task.project.clients) %}
       <form action="{{ url_for('main.upload_attachment', task_id=task.id) }}" method="POST" enctype="multipart/form-data" id="uploadForm">
         <div class="upload-zone" id="uploadZone" onclick="document.getElementById('fileInput').click();">
           <i class="fa-solid fa-cloud-upload-alt d-block"></i>
@@ -520,7 +521,13 @@
           <small class="text-muted mt-2 d-block">Máx 16MB • PDF, imágenes, documentos, hojas de cálculo</small>
           <input type="file" name="file" id="fileInput" style="display:none;" onchange="handleFileSelect(this)">
         </div>
+        <div class="d-flex justify-content-end mt-2">
+          <button type="submit" id="uploadBtn" class="action-btn btn-edit" disabled>Guardar</button>
+        </div>
       </form>
+      {% else %}
+      <div class="text-muted small mt-2">No puedes adjuntar archivos a esta tarea.</div>
+      {% endif %}
     </div>
   </div>
 
@@ -595,19 +602,30 @@ document.addEventListener('DOMContentLoaded', function(){
 });
 
 // File upload handling
+const allowAutoSubmit = {{ 'true' if current_user.is_internal else 'false' }};
 function handleFileSelect(input) {
   if (input.files && input.files[0]) {
     const file = input.files[0];
     const maxSize = 16 * 1024 * 1024; // 16MB
     
+    const uploadBtn = document.getElementById('uploadBtn');
     if (file.size > maxSize) {
       alert('El archivo es demasiado grande. Máximo 16MB.');
       input.value = '';
+      if (uploadBtn) { uploadBtn.disabled = true; }
       return;
     }
     
-    // Auto submit the form
-    document.getElementById('uploadForm').submit();
+    // Enable the visible save/upload button for clients
+    if (uploadBtn) {
+      uploadBtn.disabled = false;
+      uploadBtn.style.display = 'inline-flex';
+    }
+    
+    // Auto submit only for internal users
+    if (allowAutoSubmit) {
+      document.getElementById('uploadForm').submit();
+    }
   }
 }
 

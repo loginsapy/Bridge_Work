@@ -680,8 +680,8 @@ def create_task():
     project_id = request.form.get('project_id')
     project = Project.query.get_or_404(project_id)
 
-    # Solo usuarios internos pueden crear tareas
-    if not current_user.is_internal:
+    # Only internal users with appropriate roles can create tasks
+    if (not current_user.is_internal) or (current_user.role and current_user.role.name == 'Participante'):
         flash('No tienes permiso para crear tareas en este proyecto.', 'danger')
         return redirect(url_for('main.project_detail', project_id=project_id))
 
@@ -1493,6 +1493,11 @@ def create_project():
     
     if not name:
         flash('El nombre del proyecto es un campo obligatorio.', 'danger')
+        return redirect(url_for('main.projects'))
+
+    # Only internal users with appropriate roles can create projects
+    if not current_user.is_internal or (current_user.role and current_user.role.name in ['Participante', 'Cliente']):
+        flash('No tienes permiso para crear proyectos.', 'danger')
         return redirect(url_for('main.projects'))
     
     try:
@@ -2618,8 +2623,9 @@ def upload_attachment(task_id):
     task = Task.query.get_or_404(task_id)
     project = task.project
     
-    # Check permissions - internal users or project client
-    can_upload = current_user.is_internal or project.client_id == current_user.id
+    # Check permissions - internal users or a client associated with the project
+    # Note: projects can have multiple clients via project.clients association
+    can_upload = current_user.is_internal or (current_user in project.clients)
     if not can_upload:
         flash('No tienes permiso para subir archivos a esta tarea.', 'danger')
         return redirect(url_for('main.task_detail', task_id=task_id))

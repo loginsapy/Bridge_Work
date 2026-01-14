@@ -436,10 +436,12 @@
     <i class="fa-solid fa-circle-check"></i>
     {{ _('tasks_header') }}
   </h1>
+  {% if current_user.is_authenticated and current_user.is_internal and not (current_user.role and current_user.role.name in ['Participante','Cliente']) %}
   <a href="{{ url_for('main.projects') }}" class="monday-btn monday-btn-primary">
     <i class="fa-solid fa-plus"></i>
     {{ _('new_from_project') }}
   </a>
+  {% endif %}
 </div>
 
 <!-- Stats Bar -->

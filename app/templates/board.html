@@ -586,7 +586,7 @@ tr:hover .task-actions {
     <div class="d-flex align-items-center gap-3">
       <h5 class="mb-0">{{ project.name }}</h5>
       <span class="badge bg-light text-dark">{{ tasks|length }} tareas</span>
-      {% if current_user.is_internal %}
+      {% if current_user.is_internal and not (current_user.role and current_user.role.name == 'Participante') %}
       <button class="btn btn-light btn-sm" onclick="openNewTaskModal()">
         <i class="fa-solid fa-plus me-1"></i>Nueva Tarea
       </button>
@@ -723,7 +723,7 @@ tr:hover .task-actions {
     </table>
   </div>
 
-  {% if current_user.is_internal %}
+  {% if current_user.is_internal and not (current_user.role and current_user.role.name == 'Participante') %}
   <div class="add-row" onclick="addNewTask()">
     <i class="fa-solid fa-plus"></i>
     <span>Añadir tarea</span>
@@ -762,6 +762,7 @@ tr:hover .task-actions {
 </div>
 
 <!-- Modal Nueva Tarea -->
+{% if current_user.is_internal and not (current_user.role and current_user.role.name == 'Participante') %}
 <div class="modal fade" id="newTaskModal" tabindex="-1">
   <div class="modal-dialog">
     <div class="modal-content">
@@ -853,6 +854,7 @@ tr:hover .task-actions {
     </div>
   </div>
 </div>
+{% endif %}
 
 {% endblock %}
 

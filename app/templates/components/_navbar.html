@@ -35,10 +35,12 @@
       </div>
 
       <!-- Quick Actions -->
+      {% if current_user.is_authenticated and current_user.is_internal and not (current_user.role and current_user.role.name in ['Participante','Cliente']) %}
       <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#createProjectModal">
         <i class="fa-solid fa-plus me-1"></i>
         <span class="d-none d-lg-inline">Nuevo Proyecto</span>
       </button>
+      {% endif %}
 
       <!-- Notifications -->
       <div class="position-relative dropdown" id="notificationDropdown">
@@ -97,7 +99,6 @@
           </button>
           <ul class="dropdown-menu dropdown-menu-end shadow">
             <li><a class="dropdown-item" href="{{ url_for('main.profile') }}"><i class="fa-solid fa-user me-2"></i> Mi Perfil</a></li>
-            <li><a class="dropdown-item" href="{{ url_for('main.settings') }}"><i class="fa-solid fa-gear me-2"></i> Configuración</a></li>
             <li><hr class="dropdown-divider"></li>
             <li><a class="dropdown-item text-danger" href="{{ url_for('auth.logout') }}"><i class="fa-solid fa-right-from-bracket me-2"></i> Cerrar Sesión</a></li>
           </ul>
@@ -112,6 +113,7 @@
 </nav>
 
 <!-- Modal Nuevo Proyecto (Global) -->
+{% if current_user.is_authenticated and current_user.is_internal and not (current_user.role and current_user.role.name in ['Participante','Cliente']) %}
 <div class="modal fade" id="createProjectModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog">
     <div class="modal-content">
@@ -169,6 +171,7 @@
     </div>
   </div>
 </div>
+{% endif %}
 
 <!-- Notification Scripts -->
 <script>

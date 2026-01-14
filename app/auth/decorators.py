@@ -9,7 +9,11 @@ def _get_user_from_session():
         from .. import db
     except Exception:
         return None
-    uid = session.get('_user_id')
+    try:
+        uid = session.get('_user_id')
+    except RuntimeError:
+        # No request/session context available
+        return None
     if not uid:
         return None
     try:

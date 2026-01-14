@@ -150,13 +150,15 @@ def create_app(config_object="config.DevConfig"):
     def inject_global_vars():
         from flask_login import current_user
         from .auth.decorators import _get_user_from_session
+        from flask import url_for
+        from werkzeug.routing import BuildError
         # Prefer a DB-bound user object for templates to avoid accessing detached proxy attributes
         user = _get_user_from_session() or current_user
         context = {
             'current_user': user,
             'available_clients': [], 
             'unread_notifications_count': 0, 
-            'pending_approvals_count': 0,
+            'pending_approvals_count': 0, 
             # System settings (branding)
             'sys_app_name': SystemSettings.get('app_name', 'BridgeWork'),
             'sys_app_subtitle': SystemSettings.get('app_subtitle', 'Project Manager'),
@@ -173,11 +175,17 @@ def create_app(config_object="config.DevConfig"):
             # General settings
             'sys_default_currency': SystemSettings.get('default_currency', 'USD'),
             'sys_language': SystemSettings.get('language', 'es'),
+            # Utility: safe url_for that returns '#' if endpoint can't be built (prevents BuildError in templates)
+            'safe_url_for': lambda endpoint, **kwargs: _safe_url_for(endpoint, **kwargs)
         }
-        
-        if current_user.is_authenticated:
+
+        def _safe_url_for(endpoint, **kwargs):
             try:
-                # Notificaciones no leídas
+                return url_for(endpoint, **kwargs)
+            except Exception as e:
+                # Catch BuildError and other url_for related RuntimeErrors (e.g., no SERVER_NAME in non-request contexts)
+                app.logger.warning('safe_url_for: could not build endpoint %s: %s', endpoint, e)
+                return '#'
                 context['unread_notifications_count'] = SystemNotification.query.filter_by(
                     user_id=current_user.id, 
                     is_read=False
