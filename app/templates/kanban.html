@@ -250,8 +250,12 @@
             <span>{{ task.assigned_to.first_name or task.assigned_to.email.split('@')[0] }}</span>
             {% else %}
             <span class="text-muted">Sin asignar</span>
-            {% endif %}
-          </div>
+            {% endif %}            {% if task.assigned_client %}
+            <div class="d-flex align-items-center ms-2">
+              <div class="mini-avatar" style="background:#e6f9ec;color:#138a3a;">{{ (task.assigned_client.first_name or task.assigned_client.email)[0]|upper }}</div>
+              <span class="text-muted ms-1 small">{{ task.assigned_client.first_name or task.assigned_client.email.split('@')[0] }}</span>
+            </div>
+            {% endif %}          </div>
           {% if task.due_date %}
           <div class="card-due {% if task.due_date.date() < now.date() %}overdue{% endif %}">
             <i class="fa-regular fa-calendar"></i>
@@ -288,6 +292,12 @@
             <span>{{ task.assigned_to.first_name or task.assigned_to.email.split('@')[0] }}</span>
             {% else %}
             <span class="text-muted">Sin asignar</span>
+            {% endif %}
+            {% if task.assigned_client %}
+            <div class="d-flex align-items-center ms-2">
+              <div class="mini-avatar" style="background:#e6f9ec;color:#138a3a;">{{ (task.assigned_client.first_name or task.assigned_client.email)[0]|upper }}</div>
+              <span class="text-muted ms-1 small">{{ task.assigned_client.first_name or task.assigned_client.email.split('@')[0] }}</span>
+            </div>
             {% endif %}
           </div>
           {% if task.due_date %}
@@ -327,6 +337,12 @@
             {% else %}
             <span class="text-muted">Sin asignar</span>
             {% endif %}
+            {% if task.assigned_client %}
+            <div class="d-flex align-items-center ms-2">
+              <div class="mini-avatar" style="background:#e6f9ec;color:#138a3a;">{{ (task.assigned_client.first_name or task.assigned_client.email)[0]|upper }}</div>
+              <span class="text-muted ms-1 small">{{ task.assigned_client.first_name or task.assigned_client.email.split('@')[0] }}</span>
+            </div>
+            {% endif %}
           </div>
           {% if task.due_date %}
           <div class="card-due {% if task.due_date.date() < now.date() %}overdue{% endif %}">
@@ -364,6 +380,12 @@
             <span>{{ task.assigned_to.first_name or task.assigned_to.email.split('@')[0] }}</span>
             {% else %}
             <span class="text-muted">Sin asignar</span>
+            {% endif %}
+            {% if task.assigned_client %}
+            <div class="d-flex align-items-center ms-2">
+              <div class="mini-avatar" style="background:#e6f9ec;color:#138a3a;">{{ (task.assigned_client.first_name or task.assigned_client.email)[0]|upper }}</div>
+              <span class="text-muted ms-1 small">{{ task.assigned_client.first_name or task.assigned_client.email.split('@')[0] }}</span>
+            </div>
             {% endif %}
           </div>
           {% if task.due_date %}

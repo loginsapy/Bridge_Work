@@ -5,14 +5,23 @@ from sqlalchemy import event
 
 class TestConfig:
     TESTING = True
+    SECRET_KEY = 'test-secret'
     SQLALCHEMY_DATABASE_URI = 'sqlite:///:memory:'
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
 
 @pytest.fixture(scope='session')
 def app():
-    app = create_app('config.DevConfig')
-    app.config.from_object(TestConfig)
+    # Create the Flask app using the TestConfig class so DB bindings are created
+    # with the in-memory sqlite URI instead of the default Dev/Prod config.
+    app = create_app(TestConfig)
+
+    # Extra safety: ensure TESTING is enabled and the DB URI is local (sqlite or localhost)
+    uri = app.config.get('SQLALCHEMY_DATABASE_URI', '') or ''
+    testing_ok = app.config.get('TESTING', False)
+    if not testing_ok or not (uri.startswith('sqlite') or 'localhost' in uri or '127.0.0.1' in uri):
+        raise RuntimeError(f"Unsafe test DB URI detected: {uri!r}. Aborting tests to avoid data loss.")
+
     with app.app_context():
         yield app
 
@@ -22,6 +31,12 @@ def db(app):
     _db.create_all()
     yield _db
     _db.session.remove()
+
+    # Guard: refuse to drop tables on a non-testing or remote DB
+    uri = app.config.get('SQLALCHEMY_DATABASE_URI', '') or ''
+    if not app.config.get('TESTING', False) or not (uri.startswith('sqlite') or 'localhost' in uri or '127.0.0.1' in uri):
+        raise RuntimeError(f"Refusing to drop DB for unsafe URI: {uri!r}")
+
     _db.drop_all()
 
 

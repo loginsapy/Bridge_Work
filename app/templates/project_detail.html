@@ -99,6 +99,7 @@
         <tr>
           <th class="ps-4">Tarea</th>
           <th>Asignado</th>
+          <th>Cliente</th>
           <th>Estado</th>
           <th>Vencimiento</th>
           <th class="text-end pe-4">Acciones</th>
@@ -127,7 +128,7 @@
                 {% if task.assigned_client %}
                   <div class="d-flex align-items-center mt-1">
                     <div class="rounded-circle bg-light text-success d-flex align-items-center justify-content-center me-2" style="width: 24px; height: 24px; font-size: 10px;">
-                      {{ task.assigned_client.first_name[0] if task.assigned_client.first_name else 'C' }}
+                      {{ task.assigned_client.first_name[0] if task.assigned_client.first_name else (task.assigned_client.email[0] if task.assigned_client.email else 'C') }}
                     </div>
                     <small class="text-muted">Cliente: {{ task.assigned_client.first_name or task.assigned_client.email }}</small>
                   </div>
@@ -137,6 +138,19 @@
                   <span class="text-muted small">Sin asignar</span>
                 {% endif %}
               </div>
+            </td>
+
+            <td>
+              {% if task.assigned_client %}
+                <div class="d-flex align-items-center">
+                  <div class="rounded-circle bg-light text-success d-flex align-items-center justify-content-center me-2" style="width: 24px; height: 24px; font-size: 10px;">
+                    {{ task.assigned_client.first_name[0] if task.assigned_client.first_name else (task.assigned_client.email[0] if task.assigned_client.email else 'C') }}
+                  </div>
+                  <small>{{ task.assigned_client.first_name or task.assigned_client.email }}</small>
+                </div>
+              {% else %}
+                <span class="text-muted">—</span>
+              {% endif %}
             </td>
             <td><span class="badge bg-{{ status_colors.get(task.status, 'secondary') }}">{{ task.status.replace('_', ' ')|title }}</span></td>
             <td><small class="text-muted">{{ task.due_date.strftime('%d %b %Y') if task.due_date else '-' }}</small></td>

@@ -12,6 +12,11 @@ def test_project_detail_shows_client_assignment(client, db, create_project, crea
     # create a task assigned to client
     rv = client.post('/task', data={'project_id': p['id'], 'title': 'T-show', 'assigned_client_id': str(client_user.id)}, follow_redirects=True)
     assert rv.status_code == 200
-    data = rv.get_data(as_text=True)
+    # Explicitly load the project page (table view) and assert there the assigned client is shown
+    rv2 = client.get(f"/project/{p['id']}")
+    assert rv2.status_code == 200
+    data = rv2.get_data(as_text=True)
     # Ensure client's name/email appears in task list
     assert 'ClienteX' in data or 'show_client@example.com' in data
+    # Ensure column 'Asignado' or Kanban view render client assignment
+    assert 'Cliente: ClienteX' in data or 'Cliente: show_client@example.com' in data

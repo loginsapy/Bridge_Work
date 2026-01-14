@@ -15,6 +15,13 @@ import sqlalchemy as sa
 DATABASE_URL = os.environ.get('DATABASE_URL') or 'postgresql://evaluser:Killthenet22@evalserv.postgres.database.azure.com:5432/BridgeWork'
 REPORT_PATH = 'migration_parent_conversion_report.csv'
 
+# Safety: require explicit confirmation to run on a remote DB
+from app.utils.safety import is_safe_db_uri, require_confirmation
+if not is_safe_db_uri(DATABASE_URL):
+    if not require_confirmation('CONFIRM_PARENT_CONVERSION'):
+        print("Refusing to run parent conversion on remote DB. Set CONFIRM_PARENT_CONVERSION=YES to proceed.")
+        raise SystemExit(1)
+
 engine = sa.create_engine(DATABASE_URL)
 
 with engine.begin() as conn:

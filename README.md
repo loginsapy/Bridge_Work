@@ -12,4 +12,4 @@ Rápido inicio (dev):
   - `pip install -r requirements.txt`
 - `docker-compose up --build` (levanta web, postgres y redis)
 - `flask db init && flask db migrate && flask db upgrade` para crear las tablas
-- `pytest` para ejecutar tests
+- `pytest` para ejecutar tests (¡cuidado! Revisa la sección de seguridad de base de datos en `docs/DB-SAFETY.md` antes de ejecutar tests en entornos con DB remota).

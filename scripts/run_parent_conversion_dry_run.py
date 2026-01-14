@@ -9,6 +9,12 @@ import sqlalchemy as sa
 DATABASE_URL = os.environ.get('DATABASE_URL') or 'postgresql://evaluser:Killthenet22@evalserv.postgres.database.azure.com:5432/BridgeWork'
 REPORT_PATH = 'migration_parent_conversion_report.csv'
 
+# Safety: refuse to run dry-run on a remote DB unless explicitly allowed
+from app.utils.safety import is_safe_db_uri, require_confirmation
+if not is_safe_db_uri(DATABASE_URL) and not require_confirmation('ALLOW_REMOTE_DRY_RUN'):
+    print('Refusing dry-run on remote DB. Set ALLOW_REMOTE_DRY_RUN=YES to proceed.')
+    raise SystemExit(1)
+
 engine = sa.create_engine(DATABASE_URL)
 with engine.connect() as conn:
     converted = []

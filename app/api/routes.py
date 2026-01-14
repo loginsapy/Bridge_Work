@@ -297,6 +297,10 @@ def update_task(task_id):
                 'incomplete_children': blockers['incomplete_children']
             }), 400
 
+    # Capture old assignment values to detect changes
+    old_assigned_to = t.assigned_to_id
+    old_assigned_client = t.assigned_client_id
+
     for field in ["project_id", "parent_task_id", "title", "description", "assigned_to_id", "assigned_client_id", "status", "priority", "due_date", "is_external_visible", "estimated_hours"]:
         if field in data:
             if field == "due_date":
@@ -308,6 +312,29 @@ def update_task(task_id):
     except SQLAlchemyError as e:
         db.session.rollback()
         abort(500, description=str(e))
+
+    # After commit: notify on assignment changes (for API updates which previously didn't notify)
+    try:
+        from flask_login import current_user
+        from app.services.notifications import NotificationService
+        from app.models import SystemSettings
+
+        send_email_setting = SystemSettings.get('notify_task_assigned', 'true')
+        send_email = send_email_setting == 'true' or send_email_setting == True
+
+        # assigned_to change
+        new_assigned_to = t.assigned_to_id
+        if 'assigned_to_id' in data and new_assigned_to and new_assigned_to != old_assigned_to and new_assigned_to != getattr(current_user, 'id', None):
+            NotificationService.notify_task_assigned(task=t, assigned_by_user=current_user if getattr(current_user, 'is_authenticated', False) else None, send_email=send_email, notify_client=False)
+
+        # assigned_client change
+        new_assigned_client = t.assigned_client_id
+        if 'assigned_client_id' in data and new_assigned_client and new_assigned_client != old_assigned_client and new_assigned_client != getattr(current_user, 'id', None):
+            NotificationService.notify_task_assigned(task=t, assigned_by_user=current_user if getattr(current_user, 'is_authenticated', False) else None, send_email=send_email, notify_client=True)
+    except Exception as e:
+        # Log and ignore notification errors to keep API update successful
+        current_app.logger.exception('Error while sending assignment notifications: %s', e)
+
     return jsonify(task_to_dict(t))
 
 

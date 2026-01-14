@@ -68,7 +68,9 @@ class NotificationService:
     def create(cls, user_id: int, title: str, message: str, 
                notification_type: str = 'general',
                related_entity_type: str = None,
-               related_entity_id: int = None) -> SystemNotification:
+               related_entity_id: int = None,
+               send_email: bool = None,
+               email_context: dict = None) -> SystemNotification:
         """
         Create a system notification in the database.
         
@@ -100,6 +102,23 @@ class NotificationService:
             f"Notification created: {title} for user {user_id} (type: {notification_type})"
         )
         
+        # Decide if we should send an email for this notification
+        try:
+            from ..models import SystemSettings
+            # If caller explicitly requests send_email=True, honor it. Otherwise, for task assignment
+            # notifications, respect the global setting 'notify_task_assigned'. For other types default to False.
+            should_send = False
+            if send_email is True:
+                should_send = True
+            elif send_email is None and notification_type == cls.TASK_ASSIGNED:
+                # Only auto-send for TASK_ASSIGNED when caller didn't explicitly pass send_email
+                should_send = SystemSettings.get('notify_task_assigned', 'true') in (True, 'true')
+
+            if should_send:
+                cls.send_email(user_id=user_id, subject=title, notification_type=notification_type, context=email_context or {'message': message, 'title': title})
+        except Exception as e:
+            current_app.logger.exception(f"Error deciding/sending notification email: {e}")
+
         return notification
     
     @classmethod
@@ -125,17 +144,19 @@ class NotificationService:
         Returns:
             Created SystemNotification object
         """
-        # Create in-app notification
+        # Create in-app notification (do NOT auto-send here; notify will handle sending to avoid duplicates)
         notification = cls.create(
             user_id=user_id,
             title=title,
             message=message,
             notification_type=notification_type,
             related_entity_type=related_entity_type,
-            related_entity_id=related_entity_id
+            related_entity_id=related_entity_id,
+            send_email=False,
+            email_context=email_context
         )
         
-        # Send email if requested
+        # Send email if requested by caller
         if send_email:
             cls.send_email(
                 user_id=user_id,
@@ -302,13 +323,22 @@ class NotificationService:
             task_url = url_for('main.task_detail', task_id=task.id, _external=True)
         except Exception as e:
             current_app.logger.debug(f"Could not build task external URL via url_for: {e}")
-            host = current_app.config.get('SERVER_NAME') or Project and None
-            host = current_app.config.get('SERVER_NAME') or SystemSettings.get('base_url') if 'SystemSettings' in globals() else current_app.config.get('BASE_URL')
-            scheme = current_app.config.get('PREFERRED_URL_SCHEME', 'https')
-            if host:
-                task_url = f"{scheme}://{host.rstrip('/')}/task/{task.id}"
+            # Prefer explicit base URL from SystemSettings, else fall back to SERVER_NAME or BASE_URL in config
+            base = None
+            try:
+                from ..models import SystemSettings
+                base = SystemSettings.get('base_url')
+            except Exception:
+                base = None
+            if not base:
+                base = current_app.config.get('SERVER_NAME') or current_app.config.get('BASE_URL')
+            if base:
+                base = base.rstrip('/')
+                task_url = f"{base}/task/{task.id}"
             else:
+                # Last resort: relative path (will be rendered as-is in email)
                 task_url = f"/task/{task.id}"
+            current_app.logger.debug(f"build task_url fallback -> {task_url}")
 
         return cls.notify(
             user_id=user_id,

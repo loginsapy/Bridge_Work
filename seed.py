@@ -17,6 +17,12 @@ def seed_database():
             print("⚠️  ALLOW_DB_RESET != '1' -> Aborting DB reset to avoid accidental data loss.")
             return
 
+        # Additional safety: if the DB URI points to a remote Postgres, require an extra confirmation
+        if (uri.startswith('postgres') or uri.startswith('postgresql')) and not ('localhost' in uri or '127.0.0.1' in uri):
+            if os.environ.get('CONFIRM_REMOTE_DB_RESET') != 'YES':
+                print("⚠️ Remote Postgres detected. To reset a REMOTE DB set CONFIRM_REMOTE_DB_RESET=YES in addition to ALLOW_DB_RESET=1.")
+                return
+
         if uri.startswith('postgres') or uri.startswith('postgresql'):
             from sqlalchemy import text
             try:

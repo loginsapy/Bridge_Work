@@ -1370,11 +1370,22 @@ def admin_notifications():
         return redirect(url_for('main.index'))
     
     if request.method == 'POST':
+        # Validate base_url first (if provided)
+        base_url = (request.form.get('base_url') or '').strip()
+        if base_url and not base_url.lower().startswith(('http://', 'https://')):
+            flash('La Base URL debe comenzar con http:// o https://', 'danger')
+            return redirect(url_for('main.admin_notifications'))
+
         try:
             SystemSettings.set('email_provider', request.form.get('email_provider', 'stub'), 'notifications', 'Proveedor de email', user_id=current_user.id)
             SystemSettings.set('sendgrid_api_key', request.form.get('sendgrid_api_key', ''), 'notifications', 'API Key de SendGrid', user_id=current_user.id)
             SystemSettings.set('email_from', request.form.get('email_from', ''), 'notifications', 'Email remitente', user_id=current_user.id)
             SystemSettings.set('email_from_name', request.form.get('email_from_name', 'BridgeWork'), 'notifications', 'Nombre remitente', user_id=current_user.id)
+            # Normalize and save base_url (remove trailing slash)
+            if base_url:
+                base_url = base_url.rstrip('/')
+            SystemSettings.set('base_url', base_url, 'notifications', 'Base URL para enlaces en emails', user_id=current_user.id)
+
             SystemSettings.set('notify_task_assigned', request.form.get('notify_task_assigned', 'true'), 'notifications', 'Notificar asignación', 'boolean', user_id=current_user.id)
             SystemSettings.set('notify_task_completed', request.form.get('notify_task_completed', 'true'), 'notifications', 'Notificar completado', 'boolean', user_id=current_user.id)
             SystemSettings.set('notify_task_approved', request.form.get('notify_task_approved', 'true'), 'notifications', 'Notificar aprobación', 'boolean', user_id=current_user.id)

@@ -665,6 +665,13 @@ tr:hover .task-actions {
                 {% else %}
                 <span class="text-muted">{% if current_user.is_internal %}+ Asignar{% else %}—{% endif %}</span>
                 {% endif %}
+
+                {% if task.assigned_client %}
+                <div class="d-flex align-items-center mt-1">
+                  <div class="person-avatar" style="background:#e6f9ec;color:#138a3a;">{{ (task.assigned_client.first_name or task.assigned_client.email)[0]|upper }}</div>
+                  <span class="person-name text-muted small">Cliente: {{ task.assigned_client.first_name or task.assigned_client.email }}</span>
+                </div>
+                {% endif %}
               </div>
             </td>
             <td>
