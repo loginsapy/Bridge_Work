@@ -16,7 +16,7 @@ TRANSLATIONS = {
         'reports': 'Reportes',
         'notifications': 'Notificaciones',
         'settings': 'Configuración',
-        'admin': 'Administración',
+        'admin': 'Configuración',
         'profile': 'Mi Perfil',
         'logout': 'Cerrar Sesión',
         'approvals': 'Aprobaciones',
@@ -231,7 +231,7 @@ TRANSLATIONS = {
         'notifications_config': 'Notificaciones',
         'audit_log': 'Auditoría',
         'maintenance': 'Mantenimiento',
-        'admin_panel': 'Panel de Administración',
+        'admin_panel': 'Panel de Configuración',
         'system_config': 'Configura el sistema según tus necesidades',
         
         # Messages
@@ -334,8 +334,8 @@ TRANSLATIONS = {
         'information': 'Información',
         
         # Admin Module
-        'admin_panel': 'Panel de Administración',
-        'admin_subtitle': 'Configura y administra todos los aspectos del sistema',
+        'admin_panel': 'Panel de Configuración',
+        'admin_subtitle': 'Configura los ajustes del sistema',
         'total_users': 'Usuarios Totales',
         'active_users': 'Usuarios Activos',
         'manage_accounts': 'Gestionar cuentas de usuario',
@@ -395,7 +395,7 @@ TRANSLATIONS = {
         'user_type': 'Tipo de usuario',
         
         # Admin Index - Additional
-        'administration': 'Administración',
+        'administration': 'Configuración',
         'logged_hours': 'Horas Registradas',
         'users_description': 'Crear, editar y eliminar usuarios. Asignar roles y permisos.',
         'access_control': 'Control de acceso',
@@ -650,7 +650,7 @@ TRANSLATIONS = {
         'reports': 'Reports',
         'notifications': 'Notifications',
         'settings': 'Settings',
-        'admin': 'Administration',
+        'admin': 'Settings',
         'profile': 'My Profile',
         'logout': 'Sign Out',
         'approvals': 'Approvals',
@@ -1029,7 +1029,7 @@ TRANSLATIONS = {
         'hours_12': '12 hours',
         
         # Admin Index - Additional
-        'administration': 'Administration',
+        'administration': 'Settings',
         'logged_hours': 'Logged Hours',
         'users_description': 'Create, edit and delete users. Assign roles and permissions.',
         'access_control': 'Access control',

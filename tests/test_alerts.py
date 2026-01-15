@@ -45,3 +45,37 @@ def test_generate_alerts_groups_by_recipient(client, db, create_project, create_
     groups = res['groups']
     assert u.id in groups
     assert set(groups[u.id]) == {t1['id'], t2['id']}
+
+
+def test_generate_alerts_disabled_via_settings(client, db, create_project, create_user, create_task):
+    from app.models import SystemSettings
+
+    # Ensure setting is explicitly disabled (saved as string 'false')
+    SystemSettings.set('notify_due_date_reminder', 'false', category='notifications')
+    db.session.commit()
+
+    p = create_project(name='A4')
+    u = create_user(email='disabled@example.com')
+    tomorrow = (datetime.now() + timedelta(days=1))
+    create_task(project_id=p['id'], title='disabled', is_external_visible=False, due_date=tomorrow, assigned_to_id=u.id)
+
+    res = generate_alerts(cutoff_days=2)
+    assert len(res['created']) == 0
+
+
+def test_generate_alerts_respects_setting_days(client, db, create_project, create_user, create_task):
+    from app.models import SystemSettings
+
+    # Enable reminders and set cutoff to 1 day
+    SystemSettings.set('notify_due_date_reminder', 'true', category='notifications')
+    SystemSettings.set('due_date_reminder_days', '1', category='notifications')
+    db.session.commit()
+
+    p = create_project(name='A5')
+    u = create_user(email='days@example.com')
+    in_three_days = (datetime.now() + timedelta(days=3))
+    create_task(project_id=p['id'], title='far', is_external_visible=False, due_date=in_three_days, assigned_to_id=u.id)
+
+    # With cutoff 1 day, task due in 3 days should not trigger
+    res = generate_alerts()
+    assert len(res['created']) == 0

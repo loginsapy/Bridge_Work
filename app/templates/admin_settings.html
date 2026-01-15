@@ -1,6 +1,6 @@
 {% extends 'base.html' %}
 
-{% block title %}Administración del Sistema — {{ sys_app_name }}{% endblock %}
+{% block title %}Configuración del Sistema — {{ sys_app_name }}{% endblock %}
 
 {% block head %}
 <style>
@@ -234,9 +234,13 @@
 {% block content %}
 <div class="mb-4">
   <h2 class="fw-bold text-primary">
-    <i class="fa-solid fa-cog me-2"></i>Administración del Sistema
+    <i class="fa-solid fa-cog me-2"></i>Configuración del Sistema
   </h2>
   <p class="text-muted">Configura y personaliza tu plataforma de gestión de proyectos</p>
+</div>
+
+<div class="alert alert-warning">
+  <strong>Nota:</strong> Las opciones marcadas como <span class="badge bg-secondary">Experimental</span> están guardadas pero actualmente <strong>no tienen efecto</strong> o todavía no están implementadas.
 </div>
 
 <!-- Navigation Tabs -->
@@ -751,8 +755,9 @@
           
           <div class="setting-row">
             <div class="setting-info">
-              <div class="setting-label">Permitir Proyectos sin Manager</div>
+              <div class="setting-label">Permitir Proyectos sin Manager <span class="badge bg-secondary ms-2">Experimental</span></div>
               <div class="setting-description">Permite crear proyectos sin asignar un gestor</div>
+              <small class="text-muted d-block">Experimental: actualmente esta opción se guarda pero no se aplica automáticamente al crear proyectos.</small>
             </div>
             <div class="setting-control">
               <div class="form-check form-switch">
@@ -800,8 +805,9 @@
           
           <div class="setting-row">
             <div class="setting-info">
-              <div class="setting-label">Requerir Estimación de Horas</div>
+              <div class="setting-label">Requerir Estimación de Horas <span class="badge bg-secondary ms-2">Experimental</span></div>
               <div class="setting-description">Obliga a ingresar horas estimadas al crear tareas</div>
+              <small class="text-muted d-block">Experimental: actualmente esta opción se guarda pero no se valida en el formulario de creación de tareas.</small>
             </div>
             <div class="setting-control">
               <div class="form-check form-switch">
@@ -853,7 +859,7 @@
             <div class="setting-control">
               <div class="form-check form-switch">
                 <input type="checkbox" name="notify_task_assigned" class="form-check-input" 
-                  {% if settings.notify_task_assigned != 'false' %}checked{% endif %}>
+                  {{ 'checked' if settings.notify_task_assigned else '' }}>
               </div>
             </div>
           </div>
@@ -866,7 +872,7 @@
             <div class="setting-control">
               <div class="form-check form-switch">
                 <input type="checkbox" name="notify_task_completed" class="form-check-input" 
-                  {% if settings.notify_task_completed != 'false' %}checked{% endif %}>
+                  {{ 'checked' if settings.notify_task_completed else '' }}>
               </div>
             </div>
           </div>
@@ -879,7 +885,7 @@
             <div class="setting-control">
               <div class="form-check form-switch">
                 <input type="checkbox" name="notify_task_comment" class="form-check-input" 
-                  {% if settings.notify_task_comment != 'false' %}checked{% endif %}>
+                  {{ 'checked' if settings.notify_task_comment else '' }}>
               </div>
             </div>
           </div>
@@ -892,7 +898,7 @@
             <div class="setting-control">
               <div class="form-check form-switch">
                 <input type="checkbox" name="notify_task_approved" class="form-check-input" 
-                  {% if settings.notify_task_approved != 'false' %}checked{% endif %}>
+                  {{ 'checked' if settings.notify_task_approved else '' }}>
               </div>
             </div>
           </div>
@@ -905,20 +911,21 @@
             <div class="setting-control">
               <div class="form-check form-switch">
                 <input type="checkbox" name="notify_task_rejected" class="form-check-input" 
-                  {% if settings.notify_task_rejected != 'false' %}checked{% endif %}>
+                  {{ 'checked' if settings.notify_task_rejected else '' }}>
               </div>
             </div>
           </div>
           
           <div class="setting-row">
             <div class="setting-info">
-              <div class="setting-label">Tareas Próximas a Vencer</div>
+              <div class="setting-label">Tareas Próximas a Vencer <span class="badge bg-secondary ms-2">Experimental</span></div>
               <div class="setting-description">Enviar recordatorio de tareas con fecha límite próxima</div>
+              <small class="text-muted d-block">Experimental: la generación y envío de recordatorios existe como tarea, pero su ejecución no está ligada automáticamente a esta configuración en todos los despliegues.</small>
             </div>
             <div class="setting-control">
               <div class="form-check form-switch">
                 <input type="checkbox" name="notify_due_date_reminder" class="form-check-input" 
-                  {% if settings.notify_due_date_reminder != 'false' %}checked{% endif %}>
+                  {{ 'checked' if settings.notify_due_date_reminder else '' }}>
               </div>
             </div>
           </div>
@@ -935,7 +942,19 @@
                 <option value="3" {% if settings.due_date_reminder_days == '3' %}selected{% endif %}>3 días</option>
                 <option value="7" {% if settings.due_date_reminder_days == '7' %}selected{% endif %}>1 semana</option>
               </select>
+              <div class="mt-2 text-muted small" id="dueReminderStatus">
+                Última ejecución: <span id="lastDueRun">{{ settings.last_due_reminder_run or 'Nunca' }}</span>
+                &nbsp;•&nbsp; Creó: <strong id="lastDueCreated">{{ settings.last_due_reminder_created or '0' }}</strong>
+              </div>
             </div>
+          </div>
+
+          <div class="d-flex justify-content-between mt-3">
+            <button type="button" class="btn btn-outline-secondary test-connection-btn" id="runRemindersBtn" onclick="runDueReminders()">
+              <span class="spinner-border spinner-border-sm" role="status"></span>
+              <span class="btn-text"><i class="fa-solid fa-bell me-2"></i>Generar Recordatorios</span>
+            </button>
+            <div id="runRemindersResult" class="text-muted"></div>
           </div>
         </div>
       </div>
@@ -948,39 +967,91 @@
         <div class="settings-section-body">
           <div class="setting-row">
             <div class="setting-info">
-              <div class="setting-label">Mostrar Centro de Notificaciones</div>
+              <div class="setting-label">Mostrar Centro de Notificaciones <span class="badge bg-secondary ms-2">Experimental</span></div>
               <div class="setting-description">Mostrar el icono de campana con notificaciones en tiempo real</div>
+              <small class="text-muted d-block">Experimental: la visibilidad del centro no está controlada por esta opción en todos los entornos.</small>
             </div>
             <div class="setting-control">
               <div class="form-check form-switch">
                 <input type="checkbox" name="show_notification_center" class="form-check-input" 
-                  {% if settings.show_notification_center != 'false' %}checked{% endif %}>
+                  {{ 'checked' if settings.show_notification_center else '' }}>
               </div>
             </div>
           </div>
           
           <div class="setting-row">
             <div class="setting-info">
-              <div class="setting-label">Notificaciones Push</div>
+              <div class="setting-label">Notificaciones Push <span class="badge bg-secondary ms-2">Experimental</span></div>
               <div class="setting-description">Habilitar notificaciones push en el navegador (requiere HTTPS)</div>
+              <small class="text-muted d-block">Experimental: el backend/integración de push no está implementada en este despliegue.</small>
             </div>
             <div class="setting-control">
               <div class="form-check form-switch">
                 <input type="checkbox" name="enable_push_notifications" class="form-check-input" 
-                  {% if settings.enable_push_notifications == 'true' %}checked{% endif %}>
+                  {{ 'checked' if settings.enable_push_notifications else '' }}>
               </div>
             </div>
           </div>
         </div>
       </div>
 
-      <div class="d-flex justify-content-end">
-        <button type="submit" class="btn btn-primary">
-          <i class="fa-solid fa-save me-2"></i>Guardar Cambios
-        </button>
+      <div class="d-flex justify-content-between">
+        <div>
+          <button type="button" class="btn btn-outline-success" id="enableAllBtn" onclick="enableAllNotifications();">
+            <i class="fa-solid fa-bell me-2"></i>Activar todas las notificaciones
+          </button>
+        </div>
+        <div class="d-flex gap-2">
+          <button type="button" class="btn btn-outline-secondary" id="sendTestBtn" onclick="sendTestNotification()">Enviar notificación de prueba</button>
+          <button type="submit" class="btn btn-primary">
+            <i class="fa-solid fa-save me-2"></i>Guardar Cambios
+          </button>
+        </div>
       </div>
     </form>
   </div>
+
+  <script>
+  function enableAllNotifications() {
+    if (!confirm('¿Estás seguro de que quieres activar todas las notificaciones por email?')) return;
+    const btn = document.getElementById('enableAllBtn');
+    btn.disabled = true;
+    fetch('{{ url_for("main.admin_enable_all_notifications") }}', {method: 'POST', headers: {'Content-Type': 'application/json'}})
+      .then(r => r.json())
+      .then(data => {
+        btn.disabled = false;
+        if (data.success) {
+          alert('✅ Todas las notificaciones han sido activadas.');
+          location.reload();
+        } else {
+          alert('❌ Error: ' + (data.error || 'Desconocido'));
+        }
+      })
+      .catch(err => {
+        btn.disabled = false;
+        alert('❌ Error al activar notificaciones');
+      });
+  }
+
+  function sendTestNotification() {
+    const btn = document.getElementById('sendTestBtn');
+    btn.disabled = true;
+    fetch('{{ url_for("main.admin_send_test_notification") }}', {method: 'POST', headers: {'Content-Type': 'application/json'}})
+      .then(r => r.json())
+      .then(data => {
+        btn.disabled = false;
+        if (data.success) {
+          alert('✅ Notificación creada (id=' + data.notification_id + '), email_sent=' + data.email_sent);
+        } else {
+          alert('❌ Error: ' + (data.error || 'Desconocido'));
+        }
+      })
+      .catch(err => {
+        btn.disabled = false;
+        alert('❌ Error al enviar notificación de prueba');
+      });
+  }
+  </script>
 
   <!-- ==================== SECURITY TAB ==================== -->
   <div class="tab-pane fade" id="security" role="tabpanel">
@@ -1406,6 +1477,36 @@ function testEmailConnection() {
   .catch(err => {
     btn.classList.remove('loading');
     alert('❌ Error de conexión');
+  });
+}
+
+function runDueReminders() {
+  const btn = document.getElementById('runRemindersBtn');
+  btn.classList.add('loading');
+  const resultEl = document.getElementById('runRemindersResult');
+  resultEl.textContent = '';
+
+  fetch('{{ url_for("main.admin_run_due_reminders") }}', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'}
+  })
+  .then(r => r.json())
+  .then(data => {
+    btn.classList.remove('loading');
+    if (data.success) {
+      const groups = data.groups || 0;
+      const created = data.created || 0;
+      alert('✅ Recordatorios generados: ' + groups + ' grupos, ' + created + ' recordatorios');
+      resultEl.textContent = `Generados ${created} recordatorios en ${groups} grupos.`;
+    } else {
+      alert('❌ Error: ' + data.error);
+      resultEl.textContent = 'Error: ' + (data.error || 'Desconocido');
+    }
+  })
+  .catch(err => {
+    btn.classList.remove('loading');
+    alert('❌ Error al generar recordatorios');
+    resultEl.textContent = 'Error al generar recordatorios';
   });
 }
 

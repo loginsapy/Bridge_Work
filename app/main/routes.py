@@ -3063,7 +3063,7 @@ def admin_settings_page():
     # Get all roles
     roles = Role.query.all()
     
-    # Get all settings as dict
+    # Get all settings as dict (raw DB values)
     all_settings = SystemSettings.query.all()
     settings = {s.key: s.value for s in all_settings}
     
@@ -3079,6 +3079,19 @@ def admin_settings_page():
     }
     for k, v in defaults.items():
         settings.setdefault(k, v)
+
+    # Normalize boolean-like options so templates can rely on Python booleans
+    notify_keys = [
+        'notify_task_assigned', 'notify_task_completed', 'notify_task_approved',
+        'notify_task_rejected', 'notify_task_comment', 'notify_due_date_reminder',
+        'show_notification_center', 'enable_push_notifications'
+    ]
+    for k in notify_keys:
+        raw = settings.get(k, defaults.get(k, 'true'))
+        if isinstance(raw, str):
+            settings[k] = raw.lower() not in ('false', '0', 'no')
+        else:
+            settings[k] = bool(raw)
     
     # Get system stats
     stats = {
@@ -3128,13 +3141,16 @@ def admin_settings():
     if 'smtp_password' in fields_to_save and not fields_to_save['smtp_password']:
         del fields_to_save['smtp_password']
     
-    # Save each setting
+    # Save each setting; for checkbox fields, save as boolean value_type
     for key, value in fields_to_save.items():
         if value is not None and value != '':
+            value_type = 'boolean' if key in checkbox_fields else 'string'
             SystemSettings.set(
                 key=key,
                 value=str(value),
                 category=section,
+                description=None,
+                value_type=value_type,
                 user_id=current_user.id
             )
     
@@ -3238,7 +3254,7 @@ def admin_test_email():
     from app.models import SystemSettings
     import smtplib
     from email.mime.text import MIMEText
-    
+
     try:
         # Get email settings
         host = SystemSettings.get('smtp_host', '')
@@ -3248,17 +3264,17 @@ def admin_test_email():
         use_tls = SystemSettings.get('smtp_use_tls', 'true') == 'true'
         from_email = SystemSettings.get('email_from', username)
         from_name = SystemSettings.get('email_from_name', 'BridgeWork')
-        
+
         if not host or not username:
             return jsonify({'success': False, 'error': 'Configura el servidor SMTP primero'}), 400
-        
+
         # Create test message
         msg = MIMEText(f'Este es un correo de prueba desde {from_name}.\n\nSi recibes este mensaje, la configuración SMTP es correcta.')
         msg['Subject'] = f'[{from_name}] Prueba de conexión SMTP'
         msg['From'] = f'{from_name} <{from_email}>'
         msg['To'] = current_user.email
-        
-        # Send email
+
+        # Connect and send
         if use_tls and port == 587:
             server = smtplib.SMTP(host, port)
             server.starttls()
@@ -3266,13 +3282,85 @@ def admin_test_email():
             server = smtplib.SMTP_SSL(host, port)
         else:
             server = smtplib.SMTP(host, port)
-        
+
         if username and password:
             server.login(username, password)
-        
+
         server.sendmail(from_email, [current_user.email], msg.as_string())
         server.quit()
-        
+
         return jsonify({'success': True})
     except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@main_bp.route('/admin/run-due-reminders', methods=['POST'])
+@login_required
+@admin_required
+def admin_run_due_reminders():
+    """Trigger generation of due date reminders manually (admin-only)."""
+    from app.tasks.alerts import generate_alerts
+
+    try:
+        res = generate_alerts()
+        created = res.get('created', [])
+        groups = res.get('groups', {})
+        # Ensure keys are JSON-serializable (strings)
+        simple_groups = {str(k): len(v) for k, v in groups.items()}
+        return jsonify({'success': True, 'created': len(created), 'groups': simple_groups})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@main_bp.route('/admin/enable-all-notifications', methods=['POST'])
+@login_required
+@admin_required
+def admin_enable_all_notifications():
+    """Enable all email notification toggles (admin-only convenience endpoint)."""
+    from app.models import SystemSettings, AuditLog
+
+    keys = [
+        'notify_task_assigned', 'notify_task_completed', 'notify_task_approved',
+        'notify_task_rejected', 'notify_task_comment', 'notify_due_date_reminder',
+        'show_notification_center', 'enable_push_notifications'
+    ]
+    try:
+        for k in keys:
+            SystemSettings.set(k, 'true', category='notifications', value_type='boolean', user_id=current_user.id)
+        # Audit log
+        audit = AuditLog(
+            entity_type='SystemSettings',
+            entity_id=0,
+            action='UPDATE',
+            user_id=current_user.id,
+            changes={'enabled_all_notifications': True}
+        )
+        db.session.add(audit)
+        db.session.commit()
+        return jsonify({'success': True, 'enabled': keys})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@main_bp.route('/admin/send-test-notification', methods=['POST'])
+@login_required
+@admin_required
+def admin_send_test_notification():
+    """Create a test notification for the current admin user and attempt send (admin-only)."""
+    from app.services.notifications import NotificationService
+
+    try:
+        # Create an in-app notification
+        note = NotificationService.create(
+            user_id=current_user.id,
+            title='Prueba de Notificación',
+            message='Este es un mensaje de prueba generado desde la configuración de administrador',
+            notification_type=NotificationService.GENERAL
+        )
+        # Attempt to send email for this notification
+        sent = NotificationService.send_email(user_id=current_user.id, subject=note.title, notification_type=note.notification_type, context={'message': note.message, 'title': note.title})
+        return jsonify({'success': True, 'notification_id': note.id, 'email_sent': bool(sent)})
+    except Exception as e:
+        current_app.logger.exception('Error sending test notification: %s', e)
         return jsonify({'success': False, 'error': str(e)}), 500

@@ -105,17 +105,35 @@ class NotificationService:
         # Decide if we should send an email for this notification
         try:
             from ..models import SystemSettings
-            # If caller explicitly requests send_email=True, honor it. Otherwise, for task assignment
-            # notifications, respect the global setting 'notify_task_assigned'. For other types default to False.
+
+            def _setting_enabled(key, default=True):
+                v = SystemSettings.get(key, default)
+                if isinstance(v, str):
+                    return v.lower() in ('true', '1', 'yes')
+                return bool(v)
+
+            # Map notification_type -> system setting key
+            nt_to_setting = {
+                cls.TASK_ASSIGNED: 'notify_task_assigned',
+                cls.TASK_COMPLETED: 'notify_task_completed',
+                cls.TASK_APPROVED: 'notify_task_approved',
+                cls.TASK_REJECTED: 'notify_task_rejected',
+                cls.TASK_COMMENT: 'notify_task_comment',
+                cls.TASK_DUE_SOON: 'notify_due_date_reminder'
+            }
+
             should_send = False
             if send_email is True:
                 should_send = True
-            elif send_email is None and notification_type == cls.TASK_ASSIGNED:
-                # Only auto-send for TASK_ASSIGNED when caller didn't explicitly pass send_email
-                should_send = SystemSettings.get('notify_task_assigned', 'true') in (True, 'true')
-
-            if should_send:
-                cls.send_email(user_id=user_id, subject=title, notification_type=notification_type, context=email_context or {'message': message, 'title': title})
+            elif send_email is False:
+                should_send = False
+            else:
+                # send_email is None: consult system settings mapping; default to True for notification keys
+                key = nt_to_setting.get(notification_type)
+                if key:
+                    should_send = _setting_enabled(key, True)
+                else:
+                    should_send = False
         except Exception as e:
             current_app.logger.exception(f"Error deciding/sending notification email: {e}")
 
