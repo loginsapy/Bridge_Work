@@ -23,6 +23,11 @@ def create_app(config_object="config.DevConfig"):
     static_folder_path = package_static if os.path.isdir(package_static) else os.path.join(project_root, 'static')
 
     app = Flask(__name__, static_folder=static_folder_path)
+    # Load base defaults first so lightweight test configs inherit essentials like ALLOWED_EXTENSIONS
+    try:
+        app.config.from_object('config.Config')
+    except Exception:
+        pass
     app.config.from_object(config_object)
 
     # Initialize extensions

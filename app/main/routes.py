@@ -747,6 +747,10 @@ def create_task():
         if assigned_client_id and assigned_client_id.strip():
             task.assigned_client_id = int(assigned_client_id)
 
+        start_date_str = request.form.get('start_date')
+        if start_date_str:
+            task.start_date = datetime.fromisoformat(start_date_str)
+
         due_date_str = request.form.get('due_date')
         if due_date_str:
             task.due_date = datetime.fromisoformat(due_date_str)
@@ -1996,6 +2000,15 @@ def create_time_entry():
             task_id = request.form.get('task_id')
             task = Task.query.get_or_404(task_id)
             
+            # Validar que no hay predecesoras incompletas
+            incomplete_preds = task.incomplete_predecessors()
+            if incomplete_preds:
+                pred_names = ', '.join([p.title for p in incomplete_preds[:3]])
+                if len(incomplete_preds) > 3:
+                    pred_names += f' y {len(incomplete_preds) - 3} más'
+                flash(f'No se puede registrar tiempo en esta tarea. Primero deben completarse las tareas predecesoras: {pred_names}', 'warning')
+                return redirect(url_for('main.create_time_entry', task_id=task_id))
+            
             date_str = request.form.get('date')
             hours = float(request.form.get('hours'))
             description = request.form.get('description')
@@ -2037,6 +2050,10 @@ def create_time_entry():
         tasks = Task.query.order_by(Task.title).all()
     else:
         tasks = Task.query.filter_by(assigned_to_id=user.id if user else -1).order_by(Task.title).all()
+    
+    # Marcar tareas bloqueadas por predecesoras
+    for t in tasks:
+        t.has_incomplete_predecessors = len(t.incomplete_predecessors()) > 0
 
     selected_task_id = request.args.get('task_id', type=int)
     return render_template('time_entry_edit.html', tasks=tasks, now=datetime.now(), selected_task_id=selected_task_id)
@@ -2145,20 +2162,14 @@ def update_task_status(task_id):
     
     try:
         new_status = request.form.get('status')
-        # If trying to mark as completed, ensure predecessors are completed
-        if new_status in ('DONE', 'COMPLETED'):
-            incomplete = [p for p in task.predecessors if p.status not in ('DONE', 'COMPLETED')]
-            if incomplete:
+        
+        # Validate if task can advance to new status
+        if new_status:
+            can_advance, error_msg, blockers = task.can_advance_status(new_status)
+            if not can_advance:
                 return jsonify({
-                    'error': 'No se puede completar la tarea mientras existan predecesoras incompletas',
-                    'incomplete_predecessors': [{'id': p.id, 'title': p.title} for p in incomplete]
-                }), 400
-            # Also prevent completing if any hierarchical child is incomplete
-            incomplete_children = [c for c in task.children if c.status not in ('DONE', 'COMPLETED')]
-            if incomplete_children:
-                return jsonify({
-                    'error': 'No se puede completar la tarea mientras existan subtareas incompletas',
-                    'incomplete_children': [{'id': c.id, 'title': c.title} for c in incomplete_children]
+                    'error': error_msg,
+                    **(blockers or {})
                 }), 400
 
         task.status = new_status
@@ -2227,21 +2238,13 @@ def move_task(task_id):
     if not new_status or new_status not in VALID_STATUSES:
         return jsonify({'error': 'Estado inválido.'}), 400
 
-    # Validate completion conditions
-    if new_status in ('DONE', 'COMPLETED'):
-        blockers = task.get_completion_blockers()
-        if blockers['incomplete_predecessors']:
-            pred_titles = ', '.join([p['title'] for p in blockers['incomplete_predecessors'][:3]])
-            return jsonify({
-                'error': f'No se puede completar: tiene predecesoras incompletas ({pred_titles})',
-                'incomplete_predecessors': blockers['incomplete_predecessors']
-            }), 400
-        if blockers['incomplete_children']:
-            child_titles = ', '.join([c['title'] for c in blockers['incomplete_children'][:3]])
-            return jsonify({
-                'error': f'No se puede completar: tiene subtareas incompletas ({child_titles})',
-                'incomplete_children': blockers['incomplete_children']
-            }), 400
+    # Validate if task can advance to new status (blocked by predecessors or children)
+    can_advance, error_msg, blockers = task.can_advance_status(new_status)
+    if not can_advance:
+        return jsonify({
+            'error': error_msg,
+            **(blockers or {})
+        }), 400
 
     try:
         task.status = new_status
@@ -2341,15 +2344,21 @@ def edit_task(task_id):
             task.description = request.form.get('description')
             # Validate status change before assignment
             new_status_from_form = request.form.get('status') or task.status
-            if new_status_from_form in ('DONE', 'COMPLETED'):
-                blockers = task.get_completion_blockers()
-                if blockers['incomplete_predecessors']:
-                    raise ValueError('No se puede completar la tarea mientras existan predecesoras incompletas')
-                if blockers['incomplete_children']:
-                    raise ValueError('No se puede completar la tarea mientras existan subtareas incompletas')
+            # Validate status change using can_advance_status
+            new_status_from_form = request.form.get('status')
+            if new_status_from_form and new_status_from_form != task.status:
+                can_advance, error_msg, blockers = task.can_advance_status(new_status_from_form)
+                if not can_advance:
+                    raise ValueError(error_msg)
             task.status = new_status_from_form
             task.priority = request.form.get('priority') or task.priority
             task.is_internal_only = request.form.get('is_internal_only') == 'on'
+
+            start_date_str = request.form.get('start_date')
+            if start_date_str:
+                task.start_date = datetime.fromisoformat(start_date_str)
+            else:
+                task.start_date = None
 
             due_date_str = request.form.get('due_date')
             if due_date_str:
@@ -2408,11 +2417,10 @@ def edit_task(task_id):
             for file in files:
                 if file and file.filename and allowed_file(file.filename):
                     filename = secure_filename(file.filename)
-                    stored_filename = get_unique_filename(task.id, filename)
+                    # get_unique_filename returns (stored_filename, task_folder)
+                    stored_filename, task_folder = get_unique_filename(task.id, filename)
                     
-                    task_folder = os.path.join(current_app.config['UPLOAD_FOLDER'], f'task_{task.id}')
-                    os.makedirs(task_folder, exist_ok=True)
-                    
+                    # task_folder is already created inside get_unique_filename
                     file_path = os.path.join(task_folder, stored_filename)
                     file.save(file_path)
                     
@@ -2710,12 +2718,16 @@ def upload_attachment(task_id):
         return redirect(url_for('main.task_detail', task_id=task_id))
     
     file = request.files['file']
+    current_app.logger.info(f"upload_attachment called by user={getattr(current_user, 'id', None)}, filename={file.filename}")
     
     if file.filename == '':
+        print("DEBUG: No filename provided")
         flash('No se seleccionó ningún archivo.', 'warning')
         return redirect(url_for('main.task_detail', task_id=task_id))
     
     if not allowed_file(file.filename):
+        allowed = current_app.config.get('ALLOWED_EXTENSIONS', None)
+        print(f"DEBUG: File not allowed: {file.filename}; ALLOWED_EXTENSIONS={allowed} (type={type(allowed)})")
         flash('Tipo de archivo no permitido.', 'danger')
         return redirect(url_for('main.task_detail', task_id=task_id))
     
@@ -2725,7 +2737,9 @@ def upload_attachment(task_id):
         filepath = os.path.join(task_folder, stored_filename)
         
         # Save the file
+        current_app.logger.info(f"Saving attachment to {filepath}")
         file.save(filepath)
+        current_app.logger.info(f"Saved attachment to {filepath}")
         
         # Get file info
         file_size = os.path.getsize(filepath)
@@ -2742,10 +2756,12 @@ def upload_attachment(task_id):
         )
         db.session.add(attachment)
         db.session.commit()
+        current_app.logger.debug(f"Attachment DB id after commit: {attachment.id}")
         
         flash(f'Archivo "{file.filename}" subido correctamente.', 'success')
     except Exception as e:
         db.session.rollback()
+        current_app.logger.exception(f"Error uploading attachment for task {task_id}: {e}")
         flash(f'Error al subir el archivo: {str(e)}', 'danger')
     
     return redirect(url_for('main.task_detail', task_id=task_id))

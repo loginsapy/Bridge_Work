@@ -426,7 +426,7 @@ tr:hover .actions-cell {
         <i class="fa-solid fa-grid-2 me-1"></i> {{ _('cards') if sys_language == 'en' else 'Tarjetas' }}
       </button>
     </div>
-    {% if current_user.is_internal %}
+    {% if current_user_role_name in ['PMP', 'Admin'] %}
     <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createProjectModal">
       <i class="fa-solid fa-plus me-1"></i>{{ _('new_project') }}
     </button>

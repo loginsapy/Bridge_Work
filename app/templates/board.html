@@ -281,6 +281,148 @@
   color: var(--monday-blue);
 }
 
+/* Inline Task Form */
+.inline-task-form {
+  background: linear-gradient(180deg, #f0f7ff 0%, #fff 100%);
+  border: 2px solid var(--app-primary);
+  border-radius: 8px;
+  margin: 8px 0;
+  animation: slideDown 0.2s ease-out;
+}
+
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.inline-form-container {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  flex-wrap: wrap;
+}
+
+.inline-form-main {
+  flex: 1;
+  min-width: 200px;
+}
+
+.inline-title-input {
+  width: 100%;
+  border: none;
+  background: transparent;
+  font-size: 1rem;
+  font-weight: 500;
+  padding: 8px 0;
+  outline: none;
+}
+
+.inline-title-input::placeholder {
+  color: #9ca3af;
+}
+
+.inline-form-fields {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.inline-field {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  padding: 4px 8px;
+}
+
+.inline-field label {
+  color: var(--app-primary);
+  font-size: 0.75rem;
+  margin: 0;
+}
+
+.inline-select {
+  border: none;
+  background: transparent;
+  font-size: 0.8rem;
+  padding: 4px;
+  cursor: pointer;
+  outline: none;
+  min-width: 80px;
+}
+
+.inline-date {
+  border: none;
+  background: transparent;
+  font-size: 0.8rem;
+  padding: 4px;
+  cursor: pointer;
+  outline: none;
+  width: 110px;
+}
+
+.inline-form-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.inline-btn-cancel,
+.inline-btn-save,
+.inline-btn-expand {
+  border: none;
+  border-radius: 6px;
+  padding: 8px 12px;
+  cursor: pointer;
+  transition: all 0.15s;
+  font-size: 0.85rem;
+}
+
+.inline-btn-cancel {
+  background: #f3f4f6;
+  color: #6b7280;
+}
+
+.inline-btn-cancel:hover {
+  background: #e5e7eb;
+}
+
+.inline-btn-save {
+  background: var(--app-primary);
+  color: white;
+}
+
+.inline-btn-save:hover {
+  background: #d55a28;
+  transform: scale(1.05);
+}
+
+.inline-btn-expand {
+  background: #e0e7ff;
+  color: #4f46e5;
+}
+
+.inline-btn-expand:hover {
+  background: #c7d2fe;
+}
+
+.inline-form-hint {
+  padding: 6px 16px 10px;
+  font-size: 0.7rem;
+  color: #9ca3af;
+  border-top: 1px solid #f0f0f0;
+}
+
+.inline-form-hint kbd {
+  background: #e5e7eb;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.65rem;
+}
+
 /* Status dropdown */
 .status-dropdown {
   position: absolute;
@@ -464,6 +606,16 @@ tr.table-warning:hover {
   letter-spacing: 0.02em;
 }
 
+/* Blocked status cell styling */
+.status-blocked {
+  cursor: not-allowed !important;
+  opacity: 0.85;
+  position: relative;
+}
+.status-blocked .status-pill {
+  position: relative;
+}
+
 /* Progress bar in header */
 .project-progress {
   display: flex;
@@ -624,7 +776,8 @@ tr.table-warning:hover {
           <th style="min-width:130px">Estado</th>
           <th style="min-width:130px">Prioridad</th>
           <th style="min-width:160px">Asignado</th>
-          <th style="min-width:120px">Vencimiento</th>
+          <th style="min-width:110px">Inicio</th>
+          <th style="min-width:110px">Vencimiento</th>
           <th style="min-width:80px">Horas Est.</th>
           <th style="width:120px; text-align:center">Acciones</th>
         </tr>
@@ -672,14 +825,22 @@ tr.table-warning:hover {
               </div>
             </td>
             <td>
-              <div class="cell status-cell" {% if current_user.is_internal %}onclick="showStatusDropdown(event, {{ task.id }})"{% endif %}>
+              {% set is_blocked = task.is_blocked() %}
+              <div class="cell status-cell {% if is_blocked %}status-blocked{% endif %}" 
+                   {% if current_user.is_internal %}onclick="showStatusDropdown(event, {{ task.id }}, {{ 'true' if is_blocked else 'false' }})"{% endif %}
+                   {% if is_blocked %}title="⚠️ Bloqueada: debe completar las predecesoras primero"{% endif %}>
                 <span class="status-pill status-{{ task.status }}">
                   {{ {'BACKLOG':'Backlog','IN_PROGRESS':'En Progreso','IN_REVIEW':'En Revisión','COMPLETED':'Completado'}.get(task.status, task.status) }}
                 </span>
-                {% set blockers = task.get_completion_blockers() %}
-                {% if blockers.incomplete_predecessors or blockers.incomplete_children %}
-                  <span class="badge bg-warning text-dark ms-1" title="{% if blockers.incomplete_predecessors %}Predecesoras: {{ blockers.incomplete_predecessors|map(attribute='title')|join(', ') }}{% endif %}{% if blockers.incomplete_children %} Subtareas: {{ blockers.incomplete_children|map(attribute='title')|join(', ') }}{% endif %}" style="font-size: 0.65rem;">
-                    <i class="fa-solid fa-lock"></i>
+                {% if is_blocked %}
+                  <span class="badge bg-warning text-dark ms-1" style="font-size: 0.65rem;" 
+                        title="Predecesoras pendientes: {% for p in task.incomplete_predecessors()[:5] %}{{ p.title }}{% if not loop.last %}, {% endif %}{% endfor %}">
+                    <i class="fa-solid fa-lock"></i> Bloqueada
+                  </span>
+                {% elif task.has_incomplete_subtasks() %}
+                  <span class="badge bg-info text-white ms-1" style="font-size: 0.65rem;" 
+                        title="Tiene subtareas incompletas (no puede completarse)">
+                    <i class="fa-solid fa-sitemap"></i>
                   </span>
                 {% endif %}
               </div>
@@ -705,6 +866,16 @@ tr.table-warning:hover {
                   <div class="person-avatar" style="background:#e6f9ec;color:#138a3a;">{{ (task.assigned_client.first_name or task.assigned_client.email)[0]|upper }}</div>
                   <span class="person-name text-muted small">Cliente: {{ task.assigned_client.first_name or task.assigned_client.email }}</span>
                 </div>
+                {% endif %}
+              </div>
+            </td>
+            <td>
+              <div class="cell date-cell">
+                {% if current_user.is_internal %}
+                <input type="date" value="{{ task.start_date.strftime('%Y-%m-%d') if task.start_date else '' }}" 
+                       onchange="updateTask({{ task.id }}, 'start_date', this.value)">
+                {% else %}
+                <span>{{ task.start_date.strftime('%d/%m/%Y') if task.start_date else '—' }}</span>
                 {% endif %}
               </div>
             </td>
@@ -751,16 +922,76 @@ tr.table-warning:hover {
             {{ render_node(node) }}
           {% endfor %}
         {% else %}
-          <tr><td colspan="9" class="text-muted p-4 text-center">Sin tareas</td></tr>
+          <tr><td colspan="10" class="text-muted p-4 text-center">Sin tareas</td></tr>
         {% endif %}
       </tbody>
     </table>
   </div>
 
   {% if current_user.is_internal and not (current_user.role and current_user.role.name == 'Participante') %}
-  <div class="add-row" onclick="addNewTask()">
+  <div class="add-row" id="addTaskRow" onclick="showInlineTaskForm()">
     <i class="fa-solid fa-plus"></i>
     <span>Añadir tarea</span>
+  </div>
+  
+  <!-- Inline Task Creation Form -->
+  <div class="inline-task-form" id="inlineTaskForm" style="display: none;">
+    <div class="inline-form-container">
+      <div class="inline-form-main">
+        <input type="text" id="inlineTaskTitle" class="inline-title-input" 
+               placeholder="¿Qué necesitas hacer?" autocomplete="off">
+      </div>
+      <div class="inline-form-fields">
+        <div class="inline-field">
+          <label><i class="fa-solid fa-circle-dot"></i></label>
+          <select id="inlineTaskStatus" class="inline-select">
+            <option value="BACKLOG">Backlog</option>
+            <option value="IN_PROGRESS">En Progreso</option>
+            <option value="IN_REVIEW">En Revisión</option>
+          </select>
+        </div>
+        <div class="inline-field">
+          <label><i class="fa-solid fa-flag"></i></label>
+          <select id="inlineTaskPriority" class="inline-select">
+            <option value="LOW">Baja</option>
+            <option value="MEDIUM" selected>Media</option>
+            <option value="HIGH">Alta</option>
+            <option value="CRITICAL">Crítica</option>
+          </select>
+        </div>
+        <div class="inline-field">
+          <label><i class="fa-solid fa-user"></i></label>
+          <select id="inlineTaskAssignee" class="inline-select">
+            <option value="">Sin asignar</option>
+            {% for u in users %}
+            <option value="{{ u.id }}">{{ u.first_name or u.email }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="inline-field">
+          <label><i class="fa-solid fa-play"></i></label>
+          <input type="date" id="inlineTaskStartDate" class="inline-date" title="Fecha inicio">
+        </div>
+        <div class="inline-field">
+          <label><i class="fa-solid fa-flag-checkered"></i></label>
+          <input type="date" id="inlineTaskDueDate" class="inline-date" title="Fecha vencimiento">
+        </div>
+      </div>
+      <div class="inline-form-actions">
+        <button type="button" class="inline-btn-cancel" onclick="hideInlineTaskForm()">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+        <button type="button" class="inline-btn-save" onclick="saveInlineTask()">
+          <i class="fa-solid fa-check"></i>
+        </button>
+        <button type="button" class="inline-btn-expand" onclick="openNewTaskModal()" title="Más opciones">
+          <i class="fa-solid fa-expand"></i>
+        </button>
+      </div>
+    </div>
+    <div class="inline-form-hint">
+      <kbd>Enter</kbd> para guardar • <kbd>Esc</kbd> para cancelar • <i class="fa-solid fa-expand"></i> para más opciones
+    </div>
   </div>
   {% endif %}
 </div>
@@ -795,112 +1026,543 @@ tr.table-warning:hover {
   {% endfor %}
 </div>
 
-<!-- Modal Nueva Tarea -->
+<!-- Modal Nueva Tarea - World Class Design -->
 {% if current_user.is_internal and not (current_user.role and current_user.role.name == 'Participante') %}
-<div class="modal fade" id="newTaskModal" tabindex="-1">
-  <div class="modal-dialog">
+<style>
+/* World Class Task Modal Styles */
+.task-modal .modal-dialog {
+  max-width: 720px;
+}
+.task-modal .modal-content {
+  border: none;
+  border-radius: 16px;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+  overflow: hidden;
+}
+.task-modal .modal-header {
+  background: linear-gradient(135deg, var(--app-primary) 0%, var(--app-sidebar) 100%);
+  border: none;
+  padding: 1.25rem 1.5rem;
+}
+.task-modal .modal-header .modal-title {
+  font-weight: 600;
+  font-size: 1.1rem;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.task-modal .modal-header .project-badge {
+  background: rgba(255,255,255,0.2);
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+.task-modal .modal-body {
+  padding: 0;
+  max-height: 70vh;
+  overflow-y: auto;
+}
+.task-modal .form-section {
+  padding: 1.25rem 1.5rem;
+  border-bottom: 1px solid #f0f0f0;
+}
+.task-modal .form-section:last-child {
+  border-bottom: none;
+}
+.task-modal .form-section-title {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #6b7280;
+  font-weight: 600;
+  margin-bottom: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.task-modal .form-section-title i {
+  font-size: 0.85rem;
+  color: var(--app-primary);
+}
+.task-modal .title-input {
+  font-size: 1.25rem;
+  font-weight: 600;
+  border: none;
+  padding: 0;
+  background: transparent;
+  width: 100%;
+}
+.task-modal .title-input:focus {
+  outline: none;
+  box-shadow: none;
+}
+.task-modal .title-input::placeholder {
+  color: #c4c4c4;
+  font-weight: 400;
+}
+.task-modal .description-input {
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 12px;
+  min-height: 80px;
+  resize: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.task-modal .description-input:focus {
+  border-color: var(--app-primary);
+  box-shadow: 0 0 0 3px rgba(232, 106, 51, 0.1);
+}
+.task-modal .property-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1rem;
+}
+@media (max-width: 576px) {
+  .task-modal .property-grid {
+    grid-template-columns: 1fr;
+  }
+}
+.task-modal .property-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.task-modal .property-label {
+  font-size: 0.8rem;
+  color: #6b7280;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.task-modal .property-label i {
+  font-size: 0.75rem;
+  width: 16px;
+  text-align: center;
+  color: var(--app-primary);
+}
+.task-modal .form-select, 
+.task-modal .form-control {
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 0.9rem;
+  transition: all 0.2s;
+}
+.task-modal .form-select:focus, 
+.task-modal .form-control:focus {
+  border-color: var(--app-primary);
+  box-shadow: 0 0 0 3px rgba(232, 106, 51, 0.1);
+}
+.task-modal .status-select {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+  background-position: right 10px center;
+  background-repeat: no-repeat;
+  background-size: 16px;
+  padding-right: 36px;
+}
+/* Status colors in select */
+.task-modal .status-option-backlog { color: #6b7280; }
+.task-modal .status-option-progress { color: var(--app-primary); }
+.task-modal .status-option-review { color: #a25ddc; }
+.task-modal .status-option-completed { color: #00c875; }
+
+/* Priority visual indicator */
+.task-modal .priority-select option[value="LOW"] { color: #3b82f6; }
+.task-modal .priority-select option[value="MEDIUM"] { color: #f59e0b; }
+.task-modal .priority-select option[value="HIGH"] { color: #ef4444; }
+.task-modal .priority-select option[value="CRITICAL"] { color: #dc2626; font-weight: 600; }
+
+.task-modal .date-inputs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+.task-modal .hierarchy-section {
+  background: #f9fafb;
+  border-radius: 10px;
+  padding: 1rem;
+}
+.task-modal .hierarchy-section .property-grid {
+  gap: 0.75rem;
+}
+.task-modal .hierarchy-help {
+  font-size: 0.75rem;
+  color: #9ca3af;
+  margin-top: 4px;
+}
+.task-modal .attachments-zone {
+  border: 2px dashed #e5e7eb;
+  border-radius: 10px;
+  padding: 1.5rem;
+  text-align: center;
+  transition: all 0.2s;
+  cursor: pointer;
+  position: relative;
+}
+.task-modal .attachments-zone:hover {
+  border-color: var(--app-primary);
+  background: rgba(232, 106, 51, 0.02);
+}
+.task-modal .attachments-zone.dragover {
+  border-color: var(--app-primary);
+  background: rgba(232, 106, 51, 0.05);
+}
+.task-modal .attachments-zone input[type="file"] {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.task-modal .attachments-icon {
+  font-size: 2rem;
+  color: #d1d5db;
+  margin-bottom: 0.5rem;
+}
+.task-modal .attachments-text {
+  font-size: 0.85rem;
+  color: #6b7280;
+}
+.task-modal .attachments-text strong {
+  color: var(--app-primary);
+}
+.task-modal .attachments-hint {
+  font-size: 0.75rem;
+  color: #9ca3af;
+  margin-top: 0.25rem;
+}
+.task-modal .modal-footer {
+  background: #f9fafb;
+  border-top: 1px solid #f0f0f0;
+  padding: 1rem 1.5rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.task-modal .footer-hint {
+  font-size: 0.75rem;
+  color: #9ca3af;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.task-modal .footer-hint kbd {
+  background: #e5e7eb;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.7rem;
+}
+.task-modal .btn-cancel {
+  background: white;
+  border: 1px solid #e5e7eb;
+  color: #6b7280;
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-weight: 500;
+  transition: all 0.2s;
+}
+.task-modal .btn-cancel:hover {
+  background: #f9fafb;
+  border-color: #d1d5db;
+}
+.task-modal .btn-create {
+  background: linear-gradient(135deg, var(--app-primary) 0%, #d55a28 100%);
+  border: none;
+  color: white;
+  padding: 10px 24px;
+  border-radius: 8px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.2s;
+  box-shadow: 0 4px 12px rgba(232, 106, 51, 0.3);
+}
+.task-modal .btn-create:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(232, 106, 51, 0.4);
+}
+.task-modal .btn-create:active {
+  transform: translateY(0);
+}
+/* Multi-select styling */
+.task-modal select[multiple] {
+  min-height: 100px;
+}
+.task-modal select[multiple] option {
+  padding: 8px 10px;
+  border-radius: 4px;
+  margin-bottom: 2px;
+}
+.task-modal select[multiple] option:checked {
+  background: linear-gradient(135deg, var(--app-primary) 0%, #d55a28 100%);
+  color: white;
+}
+</style>
+
+<div class="modal fade task-modal" id="newTaskModal" tabindex="-1" aria-labelledby="newTaskModalLabel">
+  <div class="modal-dialog modal-dialog-centered">
     <div class="modal-content">
-      <div class="modal-header" style="background: var(--monday-blue); color: white;">
-        <h5 class="modal-title"><i class="fa-solid fa-plus me-2"></i>Nueva Tarea</h5>
-        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      <div class="modal-header text-white">
+        <h5 class="modal-title" id="newTaskModalLabel">
+          <i class="fa-solid fa-sparkles"></i>
+          Nueva Tarea
+          <span class="project-badge">{{ project.name }}</span>
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
       </div>
-      <form action="{{ url_for('main.create_task') }}" method="POST" enctype="multipart/form-data">
+      
+      <form action="{{ url_for('main.create_task') }}" method="POST" enctype="multipart/form-data" id="newTaskForm">
         <input type="hidden" name="project_id" value="{{ project.id }}">
+        
         <div class="modal-body">
-          <div class="mb-3">
-            <label class="form-label">Título *</label>
-            <input type="text" name="title" class="form-control" required placeholder="Nombre de la tarea">
-          </div>
-          <div class="mb-3">
-            <label class="form-label">Descripción</label>
-            <textarea name="description" class="form-control" rows="3" placeholder="Descripción opcional"></textarea>
-          </div>
-          <div class="row">
-            <div class="col-md-6 mb-3">
-              <label class="form-label">Estado</label>
-              <select name="status" class="form-select">
-                <option value="BACKLOG">Backlog</option>
-                <option value="IN_PROGRESS">En Progreso</option>
-                <option value="IN_REVIEW">En Revisión</option>
-                <option value="COMPLETED">Completado</option>
-              </select>
-            </div>
-            <div class="col-md-6 mb-3">
-              <label class="form-label">Prioridad</label>
-              <select name="priority" class="form-select">
-                <option value="MEDIUM">Media</option>
-                <option value="LOW">Baja</option>
-                <option value="HIGH">Alta</option>
-                <option value="CRITICAL">Crítica</option>
-              </select>
+          <!-- Section: Basic Info -->
+          <div class="form-section">
+            <input type="text" name="title" class="title-input" required 
+                   placeholder="¿Qué necesitas hacer?" autocomplete="off">
+            <div class="mt-3">
+              <textarea name="description" class="form-control description-input" 
+                        placeholder="Añade una descripción detallada..." rows="3"></textarea>
             </div>
           </div>
-          <div class="row">
-            <div class="col-md-6 mb-3">
-              <label class="form-label">Asignar a (Internos)</label>
-              <select name="assigned_to_id" class="form-select">
-                <option value="">Sin asignar</option>
-                {% for u in users %}
-                <option value="{{ u.id }}">{{ u.first_name or u.email }}</option>
-                {% endfor %}
-              </select>
+          
+          <!-- Section: Properties -->
+          <div class="form-section">
+            <div class="form-section-title">
+              <i class="fa-solid fa-sliders"></i>
+              Propiedades
             </div>
-            <div class="col-md-6 mb-3">
-              <label class="form-label">Asignar a (Cliente)</label>
-              <select name="assigned_client_id" class="form-select">
-                <option value="">Sin asignar</option>
-                {% for c in project.clients %}
-                <option value="{{ c.id }}">{{ c.first_name or c.email }}</option>
-                {% endfor %}
-              </select>
-            </div>
-            <div class="col-md-6 mb-3">
-              <label class="form-label">Fecha límite</label>
-              <input type="date" name="due_date" class="form-control">
+            <div class="property-grid">
+              <div class="property-item">
+                <label class="property-label">
+                  <i class="fa-solid fa-circle-dot"></i>
+                  Estado
+                </label>
+                <select name="status" class="form-select status-select">
+                  <option value="BACKLOG" class="status-option-backlog">📋 Backlog</option>
+                  <option value="IN_PROGRESS" class="status-option-progress">🔄 En Progreso</option>
+                  <option value="IN_REVIEW" class="status-option-review">👀 En Revisión</option>
+                  <option value="COMPLETED" class="status-option-completed">✅ Completado</option>
+                </select>
+              </div>
+              
+              <div class="property-item">
+                <label class="property-label">
+                  <i class="fa-solid fa-flag"></i>
+                  Prioridad
+                </label>
+                <select name="priority" class="form-select priority-select">
+                  <option value="LOW">🔵 Baja</option>
+                  <option value="MEDIUM" selected>🟡 Media</option>
+                  <option value="HIGH">🟠 Alta</option>
+                  <option value="CRITICAL">🔴 Crítica</option>
+                </select>
+              </div>
+              
+              <div class="property-item">
+                <label class="property-label">
+                  <i class="fa-solid fa-user"></i>
+                  Asignado (Interno)
+                </label>
+                <select name="assigned_to_id" class="form-select">
+                  <option value="">👤 Sin asignar</option>
+                  {% for u in users %}
+                  <option value="{{ u.id }}">{{ u.first_name or u.email }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+              
+              <div class="property-item">
+                <label class="property-label">
+                  <i class="fa-solid fa-building"></i>
+                  Asignado (Cliente)
+                </label>
+                <select name="assigned_client_id" class="form-select">
+                  <option value="">👤 Sin asignar</option>
+                  {% for c in project.clients %}
+                  <option value="{{ c.id }}">{{ c.first_name or c.email }}</option>
+                  {% endfor %}
+                </select>
+              </div>
             </div>
           </div>
-          <div class="mb-3">
-            <label class="form-label">Horas estimadas</label>
-            <input type="number" name="estimated_hours" class="form-control" step="0.5" min="0" placeholder="0">
-          </div>
-
-          <div class="row">
-            <div class="col-md-6 mb-3">
-              <label class="form-label">Tarea Padre</label>
-              <select name="parent_task_id" class="form-select">
-                <option value="">-- Sin tarea padre --</option>
-                {% for t in candidate_predecessors %}
-                  <option value="{{ t.id }}">{{ t.title }} (#{{ t.id }})</option>
-                {% endfor %}
-              </select>
-              <small class="text-muted d-block">Crear como subtarea (jerarquía WBS).</small>
+          
+          <!-- Section: Dates & Time -->
+          <div class="form-section">
+            <div class="form-section-title">
+              <i class="fa-solid fa-calendar"></i>
+              Fechas y Tiempo
             </div>
-
-            <div class="col-md-6 mb-3">
-              <label class="form-label">Predecesoras</label>
-              <select name="predecessor_ids" class="form-select" multiple size="4">
-                {% for t in candidate_predecessors %}
-                  <option value="{{ t.id }}">{{ t.title }} (#{{ t.id }}) {% if t.status in ['DONE', 'COMPLETED'] %}✓{% endif %}</option>
-                {% endfor %}
-              </select>
-              <small class="text-muted d-block">Dependencias (bloquean completar).</small>
+            <div class="property-grid">
+              <div class="property-item">
+                <label class="property-label">
+                  <i class="fa-solid fa-play"></i>
+                  Fecha de Inicio
+                </label>
+                <input type="date" name="start_date" class="form-control">
+              </div>
+              
+              <div class="property-item">
+                <label class="property-label">
+                  <i class="fa-solid fa-flag-checkered"></i>
+                  Fecha de Vencimiento
+                </label>
+                <input type="date" name="due_date" class="form-control">
+              </div>
+              
+              <div class="property-item">
+                <label class="property-label">
+                  <i class="fa-solid fa-clock"></i>
+                  Horas Estimadas
+                </label>
+                <input type="number" name="estimated_hours" class="form-control" 
+                       step="0.5" min="0" placeholder="0">
+              </div>
             </div>
           </div>
-
-          <div class="mb-3">
-            <label class="form-label">Archivos adjuntos</label>
-            <input type="file" name="attachments" class="form-control" multiple>
-            <small class="text-muted">Puedes seleccionar múltiples archivos. Máx 16MB cada uno.</small>
+          
+          <!-- Section: Hierarchy & Dependencies -->
+          <div class="form-section">
+            <div class="form-section-title">
+              <i class="fa-solid fa-diagram-project"></i>
+              Jerarquía y Dependencias
+            </div>
+            <div class="hierarchy-section">
+              <div class="property-grid">
+                <div class="property-item">
+                  <label class="property-label">
+                    <i class="fa-solid fa-sitemap"></i>
+                    Tarea Padre (WBS)
+                  </label>
+                  <select name="parent_task_id" class="form-select">
+                    <option value="">Sin tarea padre</option>
+                    {% for t in candidate_predecessors %}
+                    <option value="{{ t.id }}">#{{ t.id }} — {{ t.title }}</option>
+                    {% endfor %}
+                  </select>
+                  <span class="hierarchy-help">Crea esta tarea como subtarea</span>
+                </div>
+                
+                <div class="property-item">
+                  <label class="property-label">
+                    <i class="fa-solid fa-link"></i>
+                    Predecesoras
+                  </label>
+                  <select name="predecessor_ids" class="form-select" multiple size="4">
+                    {% for t in candidate_predecessors %}
+                    <option value="{{ t.id }}">#{{ t.id }} — {{ t.title }} {% if t.status in ['DONE', 'COMPLETED'] %}✓{% endif %}</option>
+                    {% endfor %}
+                  </select>
+                  <span class="hierarchy-help">Debe completarse antes de esta tarea</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Section: Attachments -->
+          <div class="form-section">
+            <div class="form-section-title">
+              <i class="fa-solid fa-paperclip"></i>
+              Archivos Adjuntos
+            </div>
+            <div class="attachments-zone" id="dropZone">
+              <input type="file" name="attachments" multiple id="fileInput">
+              <div class="attachments-icon">
+                <i class="fa-solid fa-cloud-arrow-up"></i>
+              </div>
+              <div class="attachments-text">
+                <strong>Arrastra archivos aquí</strong> o haz clic para seleccionar
+              </div>
+              <div class="attachments-hint">
+                Máximo 16MB por archivo • PDF, DOC, XLS, IMG
+              </div>
+            </div>
+            <div id="fileList" class="mt-2"></div>
           </div>
         </div>
+        
         <div class="modal-footer">
-          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-          <button type="submit" class="btn btn-primary"><i class="fa-solid fa-check me-1"></i>Crear Tarea</button>
+          <div class="footer-hint">
+            <kbd>Enter</kbd> para crear rápido
+          </div>
+          <div class="d-flex gap-2">
+            <button type="button" class="btn btn-cancel" data-bs-dismiss="modal">
+              Cancelar
+            </button>
+            <button type="submit" class="btn btn-create">
+              <i class="fa-solid fa-plus"></i>
+              Crear Tarea
+            </button>
+          </div>
         </div>
       </form>
     </div>
   </div>
 </div>
+
+<script>
+// Drag & Drop for attachments
+const dropZone = document.getElementById('dropZone');
+const fileInput = document.getElementById('fileInput');
+const fileList = document.getElementById('fileList');
+
+if (dropZone) {
+  ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+    dropZone.addEventListener(eventName, preventDefaults, false);
+  });
+
+  function preventDefaults(e) {
+    e.preventDefault();
+    e.stopPropagation();
+  }
+
+  ['dragenter', 'dragover'].forEach(eventName => {
+    dropZone.addEventListener(eventName, () => dropZone.classList.add('dragover'), false);
+  });
+
+  ['dragleave', 'drop'].forEach(eventName => {
+    dropZone.addEventListener(eventName, () => dropZone.classList.remove('dragover'), false);
+  });
+
+  dropZone.addEventListener('drop', handleDrop, false);
+
+  function handleDrop(e) {
+    const dt = e.dataTransfer;
+    const files = dt.files;
+    fileInput.files = files;
+    updateFileList(files);
+  }
+
+  fileInput.addEventListener('change', (e) => {
+    updateFileList(e.target.files);
+  });
+
+  function updateFileList(files) {
+    fileList.innerHTML = '';
+    if (files.length > 0) {
+      const list = document.createElement('div');
+      list.className = 'd-flex flex-wrap gap-2';
+      Array.from(files).forEach(file => {
+        const badge = document.createElement('span');
+        badge.className = 'badge bg-light text-dark border px-3 py-2';
+        badge.innerHTML = `<i class="fa-solid fa-file me-1"></i>${file.name}`;
+        list.appendChild(badge);
+      });
+      fileList.appendChild(list);
+    }
+  }
+}
+
+// Quick create with Enter on title
+document.querySelector('.task-modal .title-input')?.addEventListener('keydown', function(e) {
+  if (e.key === 'Enter' && !e.shiftKey && this.value.trim()) {
+    e.preventDefault();
+    document.getElementById('newTaskForm').submit();
+  }
+});
+</script>
 {% endif %}
 
 {% endblock %}
@@ -925,15 +1587,41 @@ document.addEventListener('click', (e) => {
   }
 });
 
-function showStatusDropdown(e, taskId) {
+function showStatusDropdown(e, taskId, isBlocked = false) {
   e.stopPropagation();
   currentTaskId = taskId;
   const dd = document.getElementById('statusDropdown');
+  
+  // If task is blocked, show info message instead of dropdown
+  if (isBlocked) {
+    showBlockedTaskAlert(taskId);
+    return;
+  }
+  
   dd.style.display = 'block';
   dd.style.left = e.pageX + 'px';
   dd.style.top = e.pageY + 'px';
   document.getElementById('priorityDropdown').style.display = 'none';
   document.getElementById('personDropdown').style.display = 'none';
+}
+
+// Show alert for blocked tasks
+function showBlockedTaskAlert(taskId) {
+  const modal = document.getElementById('predecessorModal');
+  const titleEl = document.getElementById('predecessorModalLabel');
+  const listEl = document.getElementById('predecessorList');
+  
+  titleEl.innerHTML = '<i class="fa-solid fa-lock text-warning me-2"></i>Tarea Bloqueada';
+  listEl.innerHTML = `
+    <div class="alert alert-warning mb-3">
+      <i class="fa-solid fa-exclamation-triangle me-2"></i>
+      <strong>Esta tarea no puede avanzar de estado</strong>
+    </div>
+    <p>Para poder mover esta tarea a "En Progreso", "En Revisión" o "Completado", primero debes completar todas sus tareas predecesoras.</p>
+    <p class="mb-0">Ve a la tarea predecesora y márcala como completada, luego podrás avanzar con esta tarea.</p>
+  `;
+  
+  new bootstrap.Modal(modal).show();
 }
 
 function showPriorityDropdown(e, taskId) {
@@ -1071,9 +1759,134 @@ window.toggleNode = function(taskId) {
   }
 };
 
+// Inline Task Form Functions
+function showInlineTaskForm() {
+  const addRow = document.getElementById('addTaskRow');
+  const inlineForm = document.getElementById('inlineTaskForm');
+  
+  if (addRow) addRow.style.display = 'none';
+  if (inlineForm) {
+    inlineForm.style.display = 'block';
+    // Focus on title input
+    setTimeout(() => {
+      const titleInput = document.getElementById('inlineTaskTitle');
+      if (titleInput) titleInput.focus();
+    }, 100);
+  }
+}
+
+function hideInlineTaskForm() {
+  const addRow = document.getElementById('addTaskRow');
+  const inlineForm = document.getElementById('inlineTaskForm');
+  
+  if (addRow) addRow.style.display = 'flex';
+  if (inlineForm) inlineForm.style.display = 'none';
+  
+  // Clear form
+  clearInlineForm();
+}
+
+function clearInlineForm() {
+  const titleInput = document.getElementById('inlineTaskTitle');
+  const statusSelect = document.getElementById('inlineTaskStatus');
+  const prioritySelect = document.getElementById('inlineTaskPriority');
+  const assigneeSelect = document.getElementById('inlineTaskAssignee');
+  const startDateInput = document.getElementById('inlineTaskStartDate');
+  const dueDateInput = document.getElementById('inlineTaskDueDate');
+  
+  if (titleInput) titleInput.value = '';
+  if (statusSelect) statusSelect.value = 'BACKLOG';
+  if (prioritySelect) prioritySelect.value = 'MEDIUM';
+  if (assigneeSelect) assigneeSelect.value = '';
+  if (startDateInput) startDateInput.value = '';
+  if (dueDateInput) dueDateInput.value = '';
+}
+
+function saveInlineTask() {
+  const titleInput = document.getElementById('inlineTaskTitle');
+  const title = titleInput ? titleInput.value.trim() : '';
+  
+  if (!title) {
+    titleInput.focus();
+    titleInput.style.borderBottom = '2px solid #ef4444';
+    setTimeout(() => titleInput.style.borderBottom = '', 2000);
+    return;
+  }
+  
+  const statusSelect = document.getElementById('inlineTaskStatus');
+  const prioritySelect = document.getElementById('inlineTaskPriority');
+  const assigneeSelect = document.getElementById('inlineTaskAssignee');
+  const startDateInput = document.getElementById('inlineTaskStartDate');
+  const dueDateInput = document.getElementById('inlineTaskDueDate');
+  
+  const taskData = {
+    project_id: {{ project.id }},
+    title: title,
+    status: statusSelect ? statusSelect.value : 'BACKLOG',
+    priority: prioritySelect ? prioritySelect.value : 'MEDIUM',
+    assigned_to_id: assigneeSelect && assigneeSelect.value ? parseInt(assigneeSelect.value) : null,
+    start_date: startDateInput && startDateInput.value ? startDateInput.value : null,
+    due_date: dueDateInput && dueDateInput.value ? dueDateInput.value : null
+  };
+  
+  // Show loading state
+  const saveBtn = document.querySelector('.inline-btn-save');
+  const originalHTML = saveBtn ? saveBtn.innerHTML : '';
+  if (saveBtn) {
+    saveBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
+    saveBtn.disabled = true;
+  }
+  
+  fetch('/api/tasks', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(taskData)
+  })
+  .then(async response => {
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.error || error.errors || 'Error al crear tarea');
+    }
+    return response.json();
+  })
+  .then(task => {
+    // Success! Reload to show new task
+    location.reload();
+  })
+  .catch(err => {
+    console.error('Error creating task:', err);
+    alert('Error al crear la tarea: ' + err.message);
+    
+    // Restore button
+    if (saveBtn) {
+      saveBtn.innerHTML = originalHTML;
+      saveBtn.disabled = false;
+    }
+  });
+}
+
+// Legacy function - now opens modal for full form
 function addNewTask() {
   openNewTaskModal();
 }
+
+// Keyboard shortcuts for inline form
+document.addEventListener('keydown', function(e) {
+  const inlineForm = document.getElementById('inlineTaskForm');
+  if (!inlineForm || inlineForm.style.display === 'none') return;
+  
+  if (e.key === 'Escape') {
+    hideInlineTaskForm();
+  }
+  
+  if (e.key === 'Enter' && !e.shiftKey) {
+    const activeEl = document.activeElement;
+    if (activeEl && activeEl.id === 'inlineTaskTitle') {
+      e.preventDefault();
+      saveInlineTask();
+    }
+  }
+});
 
 function deleteTask(taskId) {
   if (!confirm('¿Eliminar esta tarea?')) return;

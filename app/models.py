@@ -108,6 +108,7 @@ class Task(db.Model):
     # Relationships for convenience
     assigned_client = db.relationship('User', foreign_keys=[assigned_client_id], backref='client_assigned_tasks')
     priority = db.Column(db.String(16), nullable=False, default='MEDIUM')
+    start_date = db.Column(db.DateTime, nullable=True)
     due_date = db.Column(db.DateTime, nullable=True)
     is_external_visible = db.Column(db.Boolean, default=False, index=True)
     is_internal_only = db.Column(db.Boolean, default=False, index=True)  # Solo visible para PMP/Admin
@@ -289,7 +290,53 @@ class Task(db.Model):
     def has_incomplete_subtasks(self):
         """Check if task has any incomplete child tasks."""
         return len(self.all_incomplete_children()) > 0
-
+    
+    def can_advance_status(self, new_status):
+        """Check if task can advance to a new status.
+        
+        Reglas:
+        - Una tarea con predecesoras incompletas NO puede avanzar a ningún estado
+          (debe permanecer en BACKLOG hasta que sus predecesoras se completen)
+        - Una tarea padre NO puede completarse si tiene subtareas incompletas
+        - Siempre se puede retroceder (mover a BACKLOG)
+        
+        Returns:
+            tuple: (can_advance: bool, error_message: str or None, blockers: dict or None)
+        """
+        STATUS_ORDER = {'BACKLOG': 0, 'IN_PROGRESS': 1, 'IN_REVIEW': 2, 'COMPLETED': 3, 'DONE': 3}
+        current_order = STATUS_ORDER.get(self.status, 0)
+        new_order = STATUS_ORDER.get(new_status, 0)
+        
+        # Si está retrocediendo (ej: de IN_PROGRESS a BACKLOG), siempre permitir
+        if new_order <= current_order:
+            return (True, None, None)
+        
+        # Para cualquier avance, verificar predecesoras incompletas
+        incomplete_preds = self.incomplete_predecessors()
+        if incomplete_preds:
+            pred_titles = ', '.join([p.title for p in incomplete_preds[:3]])
+            if len(incomplete_preds) > 3:
+                pred_titles += f' (+{len(incomplete_preds) - 3} más)'
+            return (
+                False,
+                f'No se puede avanzar la tarea: tiene predecesoras incompletas ({pred_titles})',
+                {'incomplete_predecessors': [{'id': p.id, 'title': p.title, 'status': p.status} for p in incomplete_preds]}
+            )
+        
+        # Si intenta completar, también verificar subtareas
+        if new_status in ('COMPLETED', 'DONE'):
+            incomplete_children = self.all_incomplete_children()
+            if incomplete_children:
+                child_titles = ', '.join([c.title for c in incomplete_children[:3]])
+                if len(incomplete_children) > 3:
+                    child_titles += f' (+{len(incomplete_children) - 3} más)'
+                return (
+                    False,
+                    f'No se puede completar: tiene subtareas incompletas ({child_titles})',
+                    {'incomplete_children': [{'id': c.id, 'title': c.title, 'status': c.status} for c in incomplete_children]}
+                )
+        
+        return (True, None, None)
 
     def validate_predecessor_ids(self, predecessor_ids):
         """Validate a list of predecessor IDs before assignment.

@@ -60,3 +60,46 @@ def test_mark_complete_blocks_if_predecessors_incomplete(client, db, create_user
     assert rv.status_code == 400
     assert b'predecesoras' in rv.data or b'incomplete_predecessors' in rv.data
 
+
+def test_advance_to_in_progress_blocks_if_predecessors_incomplete(client, db, create_user, create_project, create_task, login):
+    """Test that a task cannot advance to IN_PROGRESS if predecessors are incomplete."""
+    u = create_user(email='advance_test@example.com', is_internal=True)
+    login(u)
+
+    p = create_project(name='P-advance')
+    t1 = create_task(project_id=p['id'], title='Predecessor')
+    t2 = create_task(project_id=p['id'], title='Dependent')
+
+    from app.models import Task, db as _db
+    t1_obj = Task.query.get(t1['id'])
+    t2_obj = Task.query.get(t2['id'])
+
+    # Set t1 as predecessor of t2
+    t2_obj.predecessors = [t1_obj]
+    _db.session.commit()
+
+    # Attempt to move t2 to IN_PROGRESS (should fail)
+    rv = client.post(f"/task/{t2_obj.id}/move", 
+                     json={'status': 'IN_PROGRESS'},
+                     content_type='application/json')
+    assert rv.status_code == 400
+    data = rv.get_json()
+    assert 'predecesoras' in data.get('error', '').lower()
+
+    # Verify task is still in BACKLOG
+    t2_obj = db.session.get(Task, t2['id'])
+    assert t2_obj.status == 'BACKLOG'
+
+    # Now complete the predecessor
+    t1_obj = db.session.get(Task, t1['id'])
+    t1_obj.status = 'COMPLETED'
+    _db.session.commit()
+
+    # Now t2 should be able to advance
+    rv = client.post(f"/task/{t2_obj.id}/move", 
+                     json={'status': 'IN_PROGRESS'},
+                     content_type='application/json')
+    assert rv.status_code == 200 or rv.status_code == 302
+
+    t2_obj = db.session.get(Task, t2['id'])
+    assert t2_obj.status == 'IN_PROGRESS'

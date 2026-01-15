@@ -37,6 +37,7 @@ def task_to_dict(t: Task):
         "assigned_client_id": t.assigned_client_id,
         "status": t.status,
         "priority": t.priority,
+        "start_date": t.start_date.isoformat() if t.start_date else None,
         "due_date": t.due_date.isoformat() if t.due_date else None,
         "is_external_visible": t.is_external_visible,
         "estimated_hours": float(t.estimated_hours) if t.estimated_hours is not None else None,
@@ -276,6 +277,7 @@ def create_task():
         assigned_to_id=validated.get("assigned_to_id"),
         status=validated.get("status", "BACKLOG"),
         priority=validated.get("priority", "MEDIUM"),
+        start_date=validated.get("start_date"),
         due_date=validated.get("due_date"),
         is_external_visible=validated.get("is_external_visible", False),
         estimated_hours=validated.get("estimated_hours"),
@@ -293,29 +295,23 @@ def create_task():
 def update_task(task_id):
     t = Task.query.get_or_404(task_id)
     data = request.get_json() or {}
-    # Validate status transition wrt predecessors and children
-    if 'status' in data and data['status'] in ('DONE', 'COMPLETED'):
-        blockers = t.get_completion_blockers()
-        if blockers['incomplete_predecessors']:
-            pred_titles = ', '.join([p['title'] for p in blockers['incomplete_predecessors'][:3]])
+    
+    # Validate status transition using can_advance_status
+    if 'status' in data:
+        can_advance, error_msg, blockers = t.can_advance_status(data['status'])
+        if not can_advance:
             return jsonify({
-                'error': f'No se puede completar la tarea: tiene predecesoras incompletas ({pred_titles})',
-                'incomplete_predecessors': blockers['incomplete_predecessors']
-            }), 400
-        if blockers['incomplete_children']:
-            child_titles = ', '.join([c['title'] for c in blockers['incomplete_children'][:3]])
-            return jsonify({
-                'error': f'No se puede completar la tarea: tiene subtareas incompletas ({child_titles})',
-                'incomplete_children': blockers['incomplete_children']
+                'error': error_msg,
+                **(blockers or {})
             }), 400
 
     # Capture old assignment values to detect changes
     old_assigned_to = t.assigned_to_id
     old_assigned_client = t.assigned_client_id
 
-    for field in ["project_id", "parent_task_id", "title", "description", "assigned_to_id", "assigned_client_id", "status", "priority", "due_date", "is_external_visible", "estimated_hours"]:
+    for field in ["project_id", "parent_task_id", "title", "description", "assigned_to_id", "assigned_client_id", "status", "priority", "start_date", "due_date", "is_external_visible", "estimated_hours"]:
         if field in data:
-            if field == "due_date":
+            if field in ["start_date", "due_date"]:
                 setattr(t, field, parse_datetime(data[field]))
             else:
                 setattr(t, field, data[field])
@@ -403,6 +399,19 @@ def create_time_entry():
         validated = schema.load(data)
     except ValidationError as e:
         return jsonify({"errors": e.messages}), 400
+
+    # Validar que la tarea no tiene predecesoras incompletas
+    task_id = validated.get("task_id")
+    if task_id:
+        task = Task.query.get(task_id)
+        if task:
+            incomplete_preds = task.incomplete_predecessors()
+            if incomplete_preds:
+                pred_names = ', '.join([p.title for p in incomplete_preds[:3]])
+                return jsonify({
+                    "error": f"No se puede registrar tiempo. La tarea tiene predecesoras incompletas: {pred_names}",
+                    "blocked_by": [{"id": p.id, "title": p.title} for p in incomplete_preds]
+                }), 400
 
     te = TimeEntry(
         task_id=validated.get("task_id"),
