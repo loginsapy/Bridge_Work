@@ -16,7 +16,11 @@ def create_app(config_object="config.DevConfig"):
     load_dotenv()
     # Determine the absolute path to the project root
     project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
-    static_folder_path = os.path.join(project_root, 'static')
+    # Prefer serving static files from the package's `app/static` so assets
+    # (images, css, js) live with the app. Fall back to top-level `static/`
+    # when `app/static` does not exist (legacy).
+    package_static = os.path.join(os.path.dirname(__file__), 'static')
+    static_folder_path = package_static if os.path.isdir(package_static) else os.path.join(project_root, 'static')
 
     app = Flask(__name__, static_folder=static_folder_path)
     app.config.from_object(config_object)
@@ -74,6 +78,7 @@ def create_app(config_object="config.DevConfig"):
     def fecha_es_filter(date, formato='corto'):
         if not date:
             return 'N/A'
+        dias = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo']
         meses = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
         meses_largo = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 
                        'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
@@ -81,6 +86,10 @@ def create_app(config_object="config.DevConfig"):
             return f"{date.day} de {meses_largo[date.month - 1]} {date.year}"
         elif formato == 'corto_año':
             return f"{date.day} {meses[date.month - 1]} {date.year}"
+        elif formato == 'completo':
+            return f"{dias[date.weekday()]}, {date.day} {meses[date.month - 1]} {date.year}"
+        elif formato == 'dia_semana':
+            return dias[date.weekday()]
         else:  # corto
             return f"{date.day} {meses[date.month - 1]}"
 
@@ -160,7 +169,8 @@ def create_app(config_object="config.DevConfig"):
             'unread_notifications_count': 0, 
             'pending_approvals_count': 0, 
             # System settings (branding)
-            'sys_app_name': SystemSettings.get('app_name', 'BridgeWork'),
+            # Use org_name if set, otherwise fall back to app_name, then 'BridgeWork'
+            'sys_app_name': SystemSettings.get('org_name') or SystemSettings.get('app_name', 'BridgeWork'),
             'sys_app_subtitle': SystemSettings.get('app_subtitle', 'Project Manager'),
             'sys_primary_color': SystemSettings.get('primary_color', '#0d6efd'),
             'sys_secondary_color': SystemSettings.get('secondary_color', '#6c757d'),

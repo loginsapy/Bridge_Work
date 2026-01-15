@@ -259,7 +259,7 @@
           {% if task.due_date %}
           <div class="card-due {% if task.due_date.date() < now.date() %}overdue{% endif %}">
             <i class="fa-regular fa-calendar"></i>
-            {{ task.due_date.strftime('%d %b') }}
+            {{ task.due_date|fecha_es }}
           </div>
           {% endif %}
         </div>
@@ -303,7 +303,7 @@
           {% if task.due_date %}
           <div class="card-due {% if task.due_date.date() < now.date() %}overdue{% endif %}">
             <i class="fa-regular fa-calendar"></i>
-            {{ task.due_date.strftime('%d %b') }}
+            {{ task.due_date|fecha_es }}
           </div>
           {% endif %}
         </div>
@@ -347,7 +347,7 @@
           {% if task.due_date %}
           <div class="card-due {% if task.due_date.date() < now.date() %}overdue{% endif %}">
             <i class="fa-regular fa-calendar"></i>
-            {{ task.due_date.strftime('%d %b') }}
+            {{ task.due_date|fecha_es }}
           </div>
           {% endif %}
         </div>
@@ -391,7 +391,7 @@
           {% if task.due_date %}
           <div class="card-due">
             <i class="fa-regular fa-calendar"></i>
-            {{ task.due_date.strftime('%d %b') }}
+            {{ task.due_date|fecha_es }}
           </div>
           {% endif %}
         </div>

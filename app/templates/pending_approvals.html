@@ -49,7 +49,7 @@
               </div>
               <div class="col-4">
                 <small class="text-muted d-block">Vencimiento</small>
-                <strong>{{ task.due_date.strftime('%d %b') if task.due_date else 'N/A' }}</strong>
+                <strong>{{ task.due_date|fecha_es if task.due_date else 'N/A' }}</strong>
               </div>
             </div>
             

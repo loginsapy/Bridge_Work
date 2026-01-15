@@ -1,0 +1,94 @@
+/* ============================================
+   BridgeWork - Monday.com Inspired Design System
+   Modern, Clean, Colorful Dashboard Styling
+   ============================================ */
+
+:root {
+  /* Monday.com Color Palette */
+  /* Map Monday-like tokens to BridgeWork subtle palette */
+  --monday-blue: #3182CE;            /* professional blue for links/actions */
+  --monday-blue-hover: #2B6CB0;
+  --monday-green: #38A169;           /* success green (softer) */
+  --monday-green-light: #68D391;
+  --monday-yellow: #F5B945;          /* brand amber (muted) */
+  --monday-orange: #E86A33;          /* brand primary terracotta */
+  --monday-red: #E53E3E;             /* alert red */
+  --monday-purple: #805AD5;          /* professional purple */
+  --monday-pink: #C74B6D;            /* brand secondary dusty rose */
+  --monday-aqua: #38B2AC;            /* teal accent */
+  --monday-royal: #5A67D8;           /* indigo for highlights */
+  
+  /* Neutral Colors */
+  --monday-dark: #323338;
+  --monday-dark-hover: #1f1f1f;
+  --monday-grey: #676879;
+  --monday-grey-light: #c5c7d0;
+  --monday-grey-lighter: #e6e9ef;
+  --monday-surface: #f5f6f8;
+  --monday-white: #ffffff;
+  
+  /* Status Colors */
+  --status-done: #00c875;
+  --status-working: #fdab3d;
+  --status-stuck: #e2445c;
+  --status-pending: #c4c4c4;
+  --status-review: #a25ddc;
+  
+  /* Spacing */
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 16px;
+  --space-lg: 24px;
+  --space-xl: 32px;
+  --space-2xl: 48px;
+  
+  /* Border Radius */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-full: 50%;
+  
+  /* Shadows */
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.08);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.1);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.12);
+  --shadow-hover: 0 6px 20px rgba(0, 115, 234, 0.15);
+  
+  /* Typography */
+  --font-family: 'Figtree', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-size-xs: 11px;
+  --font-size-sm: 13px;
+  --font-size-md: 14px;
+  --font-size-lg: 16px;
+  --font-size-xl: 20px;
+  --font-size-2xl: 24px;
+  --font-size-3xl: 32px;
+  
+  /* Transitions */
+  --transition-fast: 100ms ease;
+  --transition-normal: 200ms ease;
+  --transition-slow: 300ms ease;
+}
+
+/* ============================================
+   Base Styles
+   ============================================ */
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body.app-body {
+  font-family: var(--font-family);
+  font-size: var(--font-size-md);
+  color: var(--monday-dark);
+  background: var(--monday-surface);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ... (rest of file unchanged for brevity) */

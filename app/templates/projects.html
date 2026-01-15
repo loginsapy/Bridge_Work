@@ -444,6 +444,7 @@ tr:hover .actions-cell {
           <th style="min-width: 250px;">{{ _('project') }}</th>
           <th style="min-width: 120px;">{{ _('status') }}</th>
           <th style="min-width: 150px;">{{ _('progress') }}</th>
+          <th style="min-width: 120px;">Responsable</th>
           <th style="min-width: 100px;">{{ _('client') }}</th>
           <th style="min-width: 120px;">{{ _('hours') }}</th>
           <th style="min-width: 140px;">{{ _('due_date') }}</th>
@@ -481,6 +482,18 @@ tr:hover .actions-cell {
             </div>
           </td>
           <td>
+            {% if project.manager %}
+            <div class="d-flex align-items-center gap-2">
+              <div class="client-avatar" style="background: var(--brand-primary); color: white;" title="{{ project.manager.first_name or project.manager.email }}">
+                {{ (project.manager.first_name or project.manager.email)[0]|upper }}
+              </div>
+              <span class="small">{{ project.manager.first_name or project.manager.email.split('@')[0] }}</span>
+            </div>
+            {% else %}
+            <span class="text-muted">—</span>
+            {% endif %}
+          </td>
+          <td>
             {% if project.clients %}
             <div class="client-avatars">
               {% for client in project.clients[:3] %}
@@ -505,7 +518,7 @@ tr:hover .actions-cell {
           <td>
             <div class="date-cell {% if project.end_date and project.end_date < now.date() %}overdue{% endif %}">
               {% if project.end_date %}
-              <i class="fa-regular fa-calendar me-1"></i>{{ project.end_date.strftime('%d %b %Y') }}
+              <i class="fa-regular fa-calendar me-1"></i>{{ project.end_date|fecha_es('corto_año') }}
               {% else %}
               —
               {% endif %}
@@ -572,11 +585,20 @@ tr:hover .actions-cell {
         </div>
         <div class="project-stat">
           <i class="fa-regular fa-calendar"></i>
-          {{ project.end_date.strftime('%d %b') if project.end_date else _('no_end_date') }}
+          {{ project.end_date|fecha_es if project.end_date else _('no_end_date') }}
         </div>
       </div>
     </div>
     <div class="project-card-footer">
+      {% if project.manager %}
+      <div class="d-flex align-items-center gap-1 me-auto" title="Responsable: {{ project.manager.first_name or project.manager.email }}">
+        <div class="client-avatar" style="background: var(--brand-primary); color: white; width: 24px; height: 24px; font-size: 11px;">
+          {{ (project.manager.first_name or project.manager.email)[0]|upper }}
+        </div>
+        <small class="text-muted">{{ project.manager.first_name or project.manager.email.split('@')[0] }}</small>
+      </div>
+      {% endif %}
+      
       {% if project.clients %}
       <div class="client-avatars">
         {% for client in project.clients[:2] %}

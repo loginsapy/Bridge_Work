@@ -1,0 +1,586 @@
+/* Brand Overrides - Professional & Subtle BridgeWork Theme */
+:root {
+  --brand-gradient: linear-gradient(135deg, var(--brand-primary) 0%, var(--brand-secondary) 100%);
+  --brand-gradient-subtle: linear-gradient(135deg, rgba(232,106,51,0.08), rgba(199,75,109,0.05));
+}
+
+/* ========================================
+   Buttons - Clean, Professional Style
+   ======================================== */
+.btn-primary {
+  background: var(--brand-primary) !important;
+  color: #fff !important;
+  border: none !important;
+  border-radius: 0.5rem !important;
+  padding: 0.5rem 1.25rem !important;
+  font-weight: 500 !important;
+  box-shadow: 0 2px 4px rgba(232,106,51,0.15) !important;
+  transition: all 0.2s ease !important;
+}
+.btn-primary:hover, .btn-primary:focus {
+  background: var(--brand-primary-dark) !important;
+  box-shadow: 0 4px 12px rgba(232,106,51,0.25) !important;
+  transform: translateY(-1px);
+}
+
+.btn-outline-primary {
+  color: var(--brand-primary) !important;
+  border: 1.5px solid var(--brand-primary) !important;
+  background: transparent !important;
+  border-radius: 0.5rem !important;
+  font-weight: 500 !important;
+}
+.btn-outline-primary:hover {
+  background: rgba(232,106,51,0.08) !important;
+  color: var(--brand-primary-dark) !important;
+}
+
+/* ========================================
+   Cards - Elevated but Subtle
+   ======================================== */
+.card {
+  border-radius: 0.75rem !important;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06), 0 4px 12px rgba(0,0,0,0.04) !important;
+  border: 1px solid rgba(0,0,0,0.06) !important;
+  background: #fff !important;
+}
+.card:hover {
+  box-shadow: 0 4px 16px rgba(0,0,0,0.08) !important;
+}
+.card-header {
+  background: #FAFBFC !important;
+  border-bottom: 1px solid rgba(0,0,0,0.06) !important;
+  font-weight: 600 !important;
+}
+
+/* ========================================
+   Form Inputs - Refined Focus States
+   ======================================== */
+.form-control:focus {
+  box-shadow: 0 0 0 3px rgba(232,106,51,0.12) !important;
+  border-color: var(--brand-primary) !important;
+}
+
+/* ========================================
+   Navigation - Professional Look
+   ======================================== */
+.nav-link.active, .nav-link:hover { 
+  color: var(--brand-primary) !important; 
+}
+
+/* ========================================
+   Stat Cards (Dashboard)
+   ======================================== */
+.stat-card {
+  border-left: 3px solid var(--brand-primary) !important;
+}
+.stat-card .stat-icon {
+  background: var(--brand-gradient-subtle) !important;
+  color: var(--brand-primary) !important;
+}
+.stat-card .display-6 {
+  color: var(--brand-text, #2D3748) !important;
+}
+
+/* ========================================
+   Kanban Board - Projects by Status
+   ======================================== */
+.monday-kanban {
+  display: grid !important;
+  grid-template-columns: repeat(4, 1fr) !important;
+  gap: 1rem !important;
+  min-height: 320px !important;
+}
+.monday-kanban-column {
+  background: #F7F8FA !important;
+  border-radius: 0.5rem !important;
+  overflow: hidden !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+.monday-kanban-header {
+  padding: 0.75rem 1rem !important;
+  font-weight: 600 !important;
+  font-size: 0.875rem !important;
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  color: #fff !important;
+}
+.monday-kanban-header.yellow { background: #ECC94B !important; color: #744210 !important; }
+.monday-kanban-header.blue { background: #4299E1 !important; }
+.monday-kanban-header.green { background: #48BB78 !important; }
+.monday-kanban-header.grey { background: #A0AEC0 !important; }
+
+.monday-kanban-cards {
+  padding: 0.75rem !important;
+  flex: 1 !important;
+  overflow-y: auto !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 0.5rem !important;
+}
+.monday-kanban-card {
+  background: #fff !important;
+  border-radius: 0.375rem !important;
+  padding: 0.75rem !important;
+  border-left: 3px solid transparent !important;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.06) !important;
+  transition: all 0.15s ease !important;
+}
+.monday-kanban-card:hover {
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1) !important;
+  transform: translateY(-1px) !important;
+}
+.monday-kanban-card.yellow { border-left-color: #ECC94B !important; }
+.monday-kanban-card.blue { border-left-color: #4299E1 !important; }
+.monday-kanban-card.green { border-left-color: #48BB78 !important; }
+.monday-kanban-card.grey { border-left-color: #A0AEC0 !important; }
+
+/* Progress bars in cards */
+.monday-progress {
+  height: 4px !important;
+  background: rgba(0,0,0,0.08) !important;
+  border-radius: 2px !important;
+  overflow: hidden !important;
+}
+.monday-progress-bar {
+  height: 100% !important;
+  background: var(--brand-primary) !important;
+  border-radius: 2px !important;
+  transition: width 0.3s ease !important;
+}
+.monday-progress-bar.warning { background: #ECC94B !important; }
+.monday-progress-bar.danger { background: #E53E3E !important; }
+
+/* Avatars */
+.monday-avatar {
+  border-radius: 50% !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  font-weight: 600 !important;
+  color: #fff !important;
+}
+.monday-avatar.sm { width: 24px !important; height: 24px !important; font-size: 0.7rem !important; }
+.monday-avatar-yellow { background: #ECC94B !important; color: #744210 !important; }
+.monday-avatar-blue { background: #4299E1 !important; }
+.monday-avatar-green { background: #48BB78 !important; }
+.monday-avatar-grey { background: #A0AEC0 !important; }
+
+/* ========================================
+   Responsive Kanban
+   ======================================== */
+@media (max-width: 992px) {
+  .monday-kanban {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+}
+@media (max-width: 576px) {
+  .monday-kanban {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* ========================================
+   Utilities
+   ======================================== */
+.text-brand { color: var(--brand-primary) !important; }
+.bg-brand { background: var(--brand-primary) !important; color: #fff !important; }
+.bg-brand-subtle { background: var(--brand-gradient-subtle) !important; }
+
+.hover-lift { transition: transform 0.2s ease, box-shadow 0.2s ease; }
+.hover-lift:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,0.1) !important; }
+
+/* Fade in animation */
+.fade-in {
+  animation: fadeInUp 0.4s ease forwards;
+  opacity: 0;
+}
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+/* ========================================
+   Navbar - Modern Clean Design (Fixed)
+   ======================================== */
+:root { --navbar-height: 64px; }
+.navbar {
+  background: #fff !important;
+  border-bottom: 1px solid rgba(0,0,0,0.06) !important;
+  padding: 0.45rem 0 !important;
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  width: 100% !important;
+  height: var(--navbar-height) !important;
+  z-index: 1050 !important;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04) !important;
+  display: flex !important;
+  align-items: center !important;
+}
+
+/* Offset page so content isn't hidden by fixed navbar */
+body.app-body { padding-top: var(--navbar-height) !important; }
+
+.navbar-brand {
+  font-size: 1.125rem !important;
+  color: var(--brand-text, #2D3748) !important;
+  text-decoration: none !important;
+}
+.navbar-brand:hover {
+  color: var(--brand-primary) !important;
+}
+.navbar-brand img {
+  transition: transform 0.2s ease;
+}
+.navbar-brand:hover img {
+  transform: scale(1.05);
+}
+
+.navbar-toggler {
+  padding: 0.5rem !important;
+  color: var(--brand-text, #2D3748) !important;
+  background: transparent !important;
+}
+.navbar-toggler:hover {
+  color: var(--brand-primary) !important;
+}
+
+/* Icon Button Style */
+.btn-icon {
+  width: 38px !important;
+  height: 38px !important;
+  padding: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  border-radius: 0.5rem !important;
+  background: transparent !important;
+  border: none !important;
+  color: var(--brand-muted, #718096) !important;
+  position: relative !important;
+  transition: all 0.15s ease !important;
+}
+.btn-icon:hover {
+  background: rgba(0,0,0,0.04) !important;
+  color: var(--brand-text, #2D3748) !important;
+}
+.btn-icon .badge-dot {
+  position: absolute !important;
+  top: 6px !important;
+  right: 6px !important;
+  width: 8px !important;
+  height: 8px !important;
+  background: #E53E3E !important;
+  border-radius: 50% !important;
+  border: 2px solid #fff !important;
+}
+
+/* Search Input in Navbar */
+.search-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.global-search-input {
+  width: 220px !important;
+  padding: 0.5rem 0.75rem 0.5rem 2.25rem !important;
+  font-size: 0.875rem !important;
+  border: 1px solid rgba(0,0,0,0.1) !important;
+  border-radius: 0.5rem !important;
+  background: #F7F8FA !important;
+  transition: all 0.2s ease !important;
+}
+.global-search-input:focus {
+  width: 280px !important;
+  background: #fff !important;
+  border-color: var(--brand-primary) !important;
+  box-shadow: 0 0 0 3px rgba(232,106,51,0.1) !important;
+}
+.search-input-wrapper .search-icon {
+  position: absolute;
+  left: 0.75rem;
+  color: var(--brand-muted, #718096);
+  font-size: 0.8rem;
+  pointer-events: none;
+}
+.search-shortcut {
+  position: absolute;
+  right: 0.5rem;
+  background: rgba(0,0,0,0.06);
+  color: var(--brand-muted, #718096);
+  font-size: 0.65rem;
+  padding: 0.15rem 0.35rem;
+  border-radius: 0.25rem;
+  font-family: inherit;
+}
+
+/* User Menu Button */
+.user-menu-btn {
+  background: transparent !important;
+  border: none !important;
+  padding: 0.25rem 0.5rem !important;
+  border-radius: 0.5rem !important;
+  color: var(--brand-text, #2D3748) !important;
+  transition: all 0.15s ease !important;
+}
+.user-menu-btn:hover {
+  background: rgba(0,0,0,0.04) !important;
+}
+.user-avatar {
+  width: 32px !important;
+  height: 32px !important;
+  border-radius: 50% !important;
+  background: var(--brand-primary) !important;
+  color: #fff !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  font-size: 0.875rem !important;
+  font-weight: 600 !important;
+}
+.user-name {
+  font-weight: 500 !important;
+  font-size: 0.875rem !important;
+}
+
+/* Ensure avatar is perfectly circular and supports images */
+.user-avatar {
+  width: 36px !important;
+  height: 36px !important;
+  border-radius: 50% !important;
+  overflow: hidden !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  font-size: 0.9rem !important;
+  background: var(--brand-primary) !important;
+  color: #fff !important;
+}
+.user-avatar img {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
+  display: block !important;
+}
+
+/* Make user menu button flexible (not fixed square) */
+.user-menu-btn.btn-icon {
+  width: auto !important;
+  height: auto !important;
+  padding: 0.25rem 0.5rem !important;
+}
+
+/* Responsive adjustments for search */
+@media (max-width: 1199px) {
+  .global-search-input { width: 360px !important; }
+  .global-search-input:focus { width: 440px !important; }
+  .search-results-dropdown { min-width: 420px !important; }
+}
+@media (max-width: 991px) {
+  .global-search-input { width: 260px !important; }
+  .global-search-input:focus { width: 340px !important; }
+  .search-results-dropdown { min-width: 340px !important; }
+}
+/* Notification Dropdown */
+.notification-dropdown {
+  width: 360px !important;
+  max-height: 460px !important;
+  overflow: hidden !important;
+  border-radius: 0.75rem !important;
+  border: 1px solid rgba(0,0,0,0.08) !important;
+  box-shadow: 0 10px 40px rgba(0,0,0,0.12) !important;
+}
+.notification-dropdown .dropdown-header {
+  padding: 0.75rem 1rem !important;
+  background: #FAFBFC !important;
+  border-bottom: 1px solid rgba(0,0,0,0.06) !important;
+}
+.notification-dropdown .dropdown-footer {
+  padding: 0.75rem 1rem !important;
+  background: #FAFBFC !important;
+  border-top: 1px solid rgba(0,0,0,0.06) !important;
+  text-align: center !important;
+}
+.notification-list {
+  max-height: 320px !important;
+  overflow-y: auto !important;
+}
+
+/* Search Results Dropdown */
+.search-results-dropdown {
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  left: 0;
+  right: 0;
+  background: #fff;
+  border-radius: 0.75rem;
+  border: 1px solid rgba(0,0,0,0.08);
+  display: none;
+  z-index: 1050;
+}
+.search-results-dropdown.show {
+  display: block;
+}
+
+/* Dropdown Menu Refinements */
+.dropdown-menu {
+  border-radius: 0.75rem !important;
+  border: 1px solid rgba(0,0,0,0.08) !important;
+  box-shadow: 0 10px 40px rgba(0,0,0,0.12) !important;
+  padding: 0.5rem !important;
+}
+.dropdown-item {
+  border-radius: 0.375rem !important;
+  padding: 0.5rem 0.75rem !important;
+  font-size: 0.875rem !important;
+  transition: all 0.15s ease !important;
+}
+.dropdown-item:hover {
+  background: rgba(0,0,0,0.04) !important;
+}
+.dropdown-item.text-danger:hover {
+  background: rgba(229,62,62,0.08) !important;
+}
+.dropdown-divider {
+  margin: 0.25rem 0 !important;
+  opacity: 0.08 !important;
+}
+.dropdown-header {
+  font-size: 0.8rem !important;
+  padding: 0.5rem 0.75rem !important;
+}
+
+/* Mobile responsiveness */
+@media (max-width: 767px) {
+  .global-search-input,
+  .global-search-input:focus {
+    width: 100% !important;
+  }
+  .notification-dropdown {
+    width: 320px !important;
+    right: -100px !important;
+  }
+}
+
+/* Role Badge in Navbar */
+.role-badge {
+  font-size: 0.75rem !important;
+  padding: 0.35rem 0.65rem !important;
+  border-radius: 0.375rem !important;
+  font-weight: 600 !important;
+}
+
+/* Bootstrap subtle backgrounds for roles (if not already defined) */
+.bg-danger-subtle { background-color: rgba(220, 53, 69, 0.12) !important; }
+.bg-primary-subtle { background-color: rgba(13, 110, 253, 0.12) !important; }
+.bg-success-subtle { background-color: rgba(25, 135, 84, 0.12) !important; }
+.bg-info-subtle { background-color: rgba(13, 202, 240, 0.12) !important; }
+.bg-secondary-subtle { background-color: rgba(108, 117, 125, 0.12) !important; }
+
+.text-danger { color: #dc3545 !important; }
+.text-primary { color: var(--brand-primary, #E86A33) !important; }
+.text-success { color: #198754 !important; }
+.text-info { color: #0dcaf0 !important; }
+.text-secondary { color: #6c757d !important; }
+
+/* Footer - Full Width Fix (sidebar is 250px) */
+.app-footer {
+  margin-left: 250px !important;
+  width: calc(100% - 250px) !important;
+  position: relative !important;
+  left: 0 !important;
+  right: 0 !important;
+  transition: margin-left 0.3s ease, width 0.3s ease !important;
+}
+
+/* When sidebar is collapsed or on mobile */
+@media (max-width: 991px) {
+  .app-footer {
+    margin-left: 0 !important;
+    width: 100% !important;
+  }
+}
+
+/* Sidebar offset to account for fixed navbar */
+#sidebar-wrapper {
+  padding-top: var(--navbar-height) !important;
+  height: 100vh !important;
+  overflow-y: auto !important;
+}
+
+/* Sidebar Navigation - Modern Clean Style */
+.sidebar-nav {
+  padding: 0.75rem 0.5rem !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 0.25rem !important;
+}
+
+.sidebar-link {
+  display: flex !important;
+  align-items: center !important;
+  gap: 0.75rem !important;
+  padding: 0.65rem 1rem !important;
+  border-radius: 0.5rem !important;
+  color: rgba(255,255,255,0.75) !important;
+  text-decoration: none !important;
+  font-size: 0.9rem !important;
+  font-weight: 500 !important;
+  transition: all 0.15s ease !important;
+  position: relative !important;
+}
+
+.sidebar-link i {
+  width: 20px !important;
+  text-align: center !important;
+  font-size: 1rem !important;
+  opacity: 0.85 !important;
+}
+
+.sidebar-link:hover {
+  background: rgba(255,255,255,0.1) !important;
+  color: #fff !important;
+}
+
+.sidebar-link.active {
+  background: var(--brand-primary) !important;
+  color: #fff !important;
+  box-shadow: 0 2px 8px rgba(232,106,51,0.3) !important;
+}
+
+.sidebar-link.active i {
+  opacity: 1 !important;
+}
+
+.sidebar-divider {
+  height: 1px !important;
+  background: rgba(255,255,255,0.1) !important;
+  margin: 0.5rem 1rem !important;
+}
+
+.sidebar-badge {
+  margin-left: auto !important;
+  background: #E53E3E !important;
+  color: #fff !important;
+  font-size: 0.7rem !important;
+  font-weight: 600 !important;
+  padding: 0.15rem 0.5rem !important;
+  border-radius: 10px !important;
+  min-width: 20px !important;
+  text-align: center !important;
+}
+
+.sidebar-badge.warning {
+  background: #ECC94B !important;
+  color: #744210 !important;
+}
+
+@media (max-width: 767px) {
+  /* Reduce the offset on mobile to avoid too much whitespace */
+  #sidebar-wrapper {
+    padding-top: var(--navbar-height) !important;
+  }
+}

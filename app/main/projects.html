@@ -48,7 +48,7 @@
           </div>
         </div>
         <div class="card-footer bg-white border-top-0 py-3">
-          <small class="text-muted"><i class="fa-regular fa-calendar me-1"></i> Inicio: {{ project.start_date.strftime('%d %b %Y') if project.start_date else 'TBD' }}</small>
+          <small class="text-muted"><i class="fa-regular fa-calendar me-1"></i> Inicio: {{ project.start_date|fecha_es('corto_año') if project.start_date else 'TBD' }}</small>
         </div>
       </div>
     </div>

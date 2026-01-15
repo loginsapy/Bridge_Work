@@ -28,21 +28,24 @@ def app():
 
 @pytest.fixture(scope='function')
 def db(app):
-    _db.create_all()
-    yield _db
-    _db.session.remove()
+    with app.app_context():
+        _db.create_all()
+        yield _db
+        _db.session.remove()
 
-    # Guard: refuse to drop tables on a non-testing or remote DB
-    uri = app.config.get('SQLALCHEMY_DATABASE_URI', '') or ''
-    if not app.config.get('TESTING', False) or not (uri.startswith('sqlite') or 'localhost' in uri or '127.0.0.1' in uri):
-        raise RuntimeError(f"Refusing to drop DB for unsafe URI: {uri!r}")
+        # Guard: refuse to drop tables on a non-testing or remote DB
+        uri = app.config.get('SQLALCHEMY_DATABASE_URI', '') or ''
+        if not app.config.get('TESTING', False) or not (uri.startswith('sqlite') or 'localhost' in uri or '127.0.0.1' in uri):
+            raise RuntimeError(f"Refusing to drop DB for unsafe URI: {uri!r}")
 
-    _db.drop_all()
+        _db.drop_all()
 
 
 @pytest.fixture(scope='function')
 def client(app, db):
-    return app.test_client()
+    with app.test_client() as test_client:
+        with app.app_context():
+            yield test_client
 
 
 # Factory helpers for tests
@@ -79,10 +82,24 @@ def create_user(db):
 
 
 @pytest.fixture
-def login(client):
-    def _login(user):
+def login(client, db):
+    """Login fixture that properly handles SQLAlchemy session.
+    
+    Accepts either a User object or a user_id (int).
+    """
+    def _login(user_or_id):
+        # Handle both User objects and plain IDs
+        if isinstance(user_or_id, int):
+            user_id = user_or_id
+        else:
+            # It's a User object - get the ID
+            user_id = user_or_id.id
+        
+        # Ensure session is committed and clean before setting session vars
+        db.session.commit()
+        
         with client.session_transaction() as sess:
-            sess['_user_id'] = str(user.id)
+            sess['_user_id'] = str(user_id)
             sess['_fresh'] = True
 
     return _login

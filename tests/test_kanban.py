@@ -28,10 +28,10 @@ def test_move_task_changes_status(client, db, create_user, create_project, creat
 
 
 def test_move_parent_blocked_until_successor_children_complete(client, db, create_user, create_project, create_task, login):
-    """Test that parent (predecessor) cannot be moved to COMPLETED while children (successors) are incomplete.
+    """Test that parent task cannot be moved to COMPLETED while children (via parent_task_id) are incomplete.
     
-    In our tree model: predecessor = parent, successor = child.
-    Parent cannot close until all children are closed first.
+    This tests the hierarchical parent-child relationship:
+    - Parent task cannot be completed until all its children are completed first.
     
     Uses API endpoints to avoid move_task notification bug.
     """
@@ -61,11 +61,11 @@ def test_move_parent_blocked_until_successor_children_complete(client, db, creat
     parent_id = parent['id']
     child_id = child['id']
 
-    # Set up predecessor relationship: child is successor of parent
+    # Set up parent-child hierarchy: child's parent is the parent task
     # Refetch to get session-bound instances
     parent_obj = db.session.get(Task, parent_id)
     child_obj = db.session.get(Task, child_id)
-    child_obj.predecessors = [parent_obj]
+    child_obj.parent_task_id = parent_id  # Child has Parent as its parent
     db.session.commit()
 
     # Use API endpoint to test completion blocking
@@ -74,8 +74,8 @@ def test_move_parent_blocked_until_successor_children_complete(client, db, creat
     assert rv.status_code == 400
     j = rv.get_json()
     assert 'error' in j
-    # The error message should mention blocked children/successors
-    assert 'child' in j['error'].lower() or 'hijos' in j['error'].lower()
+    # The error message should mention blocked children/subtasks
+    assert 'subtarea' in j['error'].lower() or 'child' in j['error'].lower()
 
     # Now complete the child first via API
     rv_child = client.patch(f"/api/tasks/{child_id}", json={'status':'COMPLETED'})

@@ -264,6 +264,25 @@
 {% endblock %}
 
 {% block content %}
+{% if no_role %}
+<!-- No Role Message -->
+<div class="container py-5">
+  <div class="row justify-content-center">
+    <div class="col-md-6">
+      <div class="card border-0 shadow-sm text-center">
+        <div class="card-body py-5">
+          <i class="fa-solid fa-user-lock fa-4x text-warning mb-4"></i>
+          <h3 class="fw-bold">{{ _('no_role_title') }}</h3>
+          <p class="text-muted mb-4">{{ _('no_role_message') }}</p>
+          <a href="{{ url_for('main.profile') }}" class="btn btn-outline-primary">
+            <i class="fa-solid fa-user me-2"></i>{{ _('view_profile') }}
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% else %}
 <!-- Page Header -->
 <div class="time-page-header">
   <h1>
@@ -413,6 +432,8 @@
     </tbody>
   </table>
 </div>
+{% endif %}
+<!-- End content conditional -->
 
 <script>
 // Set avatar colors from data attribute

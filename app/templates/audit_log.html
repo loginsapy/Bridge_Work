@@ -1,0 +1,408 @@
+{% extends 'base.html' %}
+
+{% block title %}Registro de Auditoría — {{ sys_app_name }}{% endblock %}
+
+{% block head %}
+<style>
+.audit-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+}
+
+.audit-filters {
+  background: white;
+  border-radius: 12px;
+  padding: 1rem 1.5rem;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  margin-bottom: 1.5rem;
+}
+
+.audit-table-container {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+  overflow: hidden;
+}
+
+.audit-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.audit-table th {
+  background: var(--brand-surface, #f8f9fa);
+  padding: 12px 16px;
+  text-align: left;
+  font-weight: 500;
+  font-size: 13px;
+  color: var(--brand-muted, #718096);
+  border-bottom: 1px solid rgba(0,0,0,0.06);
+}
+
+.audit-table td {
+  padding: 12px 16px;
+  border-bottom: 1px solid rgba(0,0,0,0.04);
+  font-size: 14px;
+  vertical-align: top;
+}
+
+.audit-table tr:hover {
+  background: rgba(232,106,51,0.02);
+}
+
+.action-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.action-badge.create { background: rgba(16, 185, 129, 0.12); color: #059669; }
+.action-badge.update { background: rgba(59, 130, 246, 0.12); color: #2563eb; }
+.action-badge.delete { background: rgba(239, 68, 68, 0.12); color: #dc2626; }
+
+.entity-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 8px;
+  font-size: 12px;
+  background: var(--brand-surface, #f1f5f9);
+  color: var(--brand-text, #2D3748);
+}
+
+.changes-preview {
+  max-width: 300px;
+  font-size: 12px;
+}
+
+.changes-preview .change-item {
+  background: #f8fafc;
+  padding: 4px 8px;
+  border-radius: 4px;
+  margin-bottom: 4px;
+  border-left: 2px solid var(--brand-primary, #E86A33);
+}
+
+.changes-preview .field-name {
+  font-weight: 600;
+  color: var(--brand-text);
+}
+
+.changes-preview .old-value {
+  color: #dc2626;
+  text-decoration: line-through;
+}
+
+.changes-preview .new-value {
+  color: #059669;
+}
+
+.user-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.user-avatar-sm {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--brand-primary, #E86A33);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.retention-notice {
+  background: rgba(245, 185, 69, 0.1);
+  border: 1px solid rgba(245, 185, 69, 0.3);
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin-bottom: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.retention-notice i {
+  color: var(--brand-accent, #F5B945);
+  font-size: 1.2rem;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 3rem;
+  color: var(--brand-muted);
+}
+
+.empty-state i {
+  font-size: 3rem;
+  margin-bottom: 1rem;
+  opacity: 0.5;
+}
+
+/* Pagination */
+.pagination-wrapper {
+  padding: 1rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-top: 1px solid rgba(0,0,0,0.06);
+}
+
+.pagination-info {
+  font-size: 13px;
+  color: var(--brand-muted);
+}
+
+/* Brand-styled pagination */
+.pagination .page-link {
+  border: 1px solid rgba(232,106,51,0.2);
+  color: var(--brand-primary, #E86A33);
+  background: white;
+  padding: 6px 12px;
+  font-size: 13px;
+  transition: all 0.15s ease;
+}
+
+.pagination .page-link:hover {
+  background: rgba(232,106,51,0.08);
+  border-color: var(--brand-primary, #E86A33);
+  color: var(--brand-primary, #E86A33);
+}
+
+.pagination .page-item.active .page-link {
+  background: var(--brand-primary, #E86A33);
+  border-color: var(--brand-primary, #E86A33);
+  color: white;
+}
+
+.pagination .page-item.disabled .page-link {
+  background: #f8f9fa;
+  border-color: #e9ecef;
+  color: var(--brand-muted, #718096);
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="audit-header">
+  <div>
+    <h2 class="fw-bold mb-1" style="color: var(--brand-text);">
+      <i class="fa-solid fa-clipboard-list me-2" style="color: var(--brand-primary);"></i>
+      Registro de Auditoría
+    </h2>
+    <p class="text-muted mb-0">Historial de cambios y acciones en el sistema</p>
+  </div>
+</div>
+
+<div class="retention-notice">
+  <i class="fa-solid fa-circle-info"></i>
+  <div>
+    <strong>Política de retención:</strong> Los registros de auditoría se conservan por <strong>6 meses</strong>. 
+    Los registros más antiguos se eliminan automáticamente.
+    {% if oldest_record %}
+    <span class="text-muted ms-2">| Registro más antiguo: {{ oldest_record|fecha_es('corto_año') }}</span>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Filters -->
+<div class="audit-filters">
+  <form method="GET" class="row g-3 align-items-end">
+    <div class="col-md-2">
+      <label class="form-label small fw-semibold">Tipo de Entidad</label>
+      <select name="entity_type" class="form-select form-select-sm">
+        <option value="">Todos</option>
+        <option value="Project" {% if filters.entity_type == 'Project' %}selected{% endif %}>Proyecto</option>
+        <option value="Task" {% if filters.entity_type == 'Task' %}selected{% endif %}>Tarea</option>
+        <option value="User" {% if filters.entity_type == 'User' %}selected{% endif %}>Usuario</option>
+        <option value="TimeEntry" {% if filters.entity_type == 'TimeEntry' %}selected{% endif %}>Entrada de Tiempo</option>
+      </select>
+    </div>
+    <div class="col-md-2">
+      <label class="form-label small fw-semibold">Acción</label>
+      <select name="action" class="form-select form-select-sm">
+        <option value="">Todas</option>
+        <option value="CREATE" {% if filters.action == 'CREATE' %}selected{% endif %}>Crear</option>
+        <option value="UPDATE" {% if filters.action == 'UPDATE' %}selected{% endif %}>Actualizar</option>
+        <option value="DELETE" {% if filters.action == 'DELETE' %}selected{% endif %}>Eliminar</option>
+      </select>
+    </div>
+    <div class="col-md-2">
+      <label class="form-label small fw-semibold">Usuario</label>
+      <select name="user_id" class="form-select form-select-sm">
+        <option value="">Todos</option>
+        {% for user in users %}
+        <option value="{{ user.id }}" {% if filters.user_id == user.id %}selected{% endif %}>
+          {{ user.first_name or user.email.split('@')[0] }}
+        </option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-2">
+      <label class="form-label small fw-semibold">Desde</label>
+      <input type="date" name="date_from" class="form-control form-control-sm" value="{{ filters.date_from or '' }}">
+    </div>
+    <div class="col-md-2">
+      <label class="form-label small fw-semibold">Hasta</label>
+      <input type="date" name="date_to" class="form-control form-control-sm" value="{{ filters.date_to or '' }}">
+    </div>
+    <div class="col-md-2">
+      <button type="submit" class="btn btn-primary btn-sm w-100">
+        <i class="fa-solid fa-filter me-1"></i> Filtrar
+      </button>
+    </div>
+  </form>
+</div>
+
+<!-- Table -->
+<div class="audit-table-container">
+  {% if logs %}
+  <table class="audit-table">
+    <thead>
+      <tr>
+        <th style="width: 140px;">Fecha</th>
+        <th style="width: 100px;">Acción</th>
+        <th style="width: 120px;">Entidad</th>
+        <th>Detalles</th>
+        <th style="width: 150px;">Usuario</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for log in logs %}
+      <tr>
+        <td>
+          <div class="fw-medium">{{ log.created_at|fecha_es('corto_año') }}</div>
+          <small class="text-muted">{{ log.created_at.strftime('%H:%M') }}</small>
+        </td>
+        <td>
+          <span class="action-badge {{ log.action|lower }}">
+            {% if log.action == 'CREATE' %}
+              <i class="fa-solid fa-plus me-1"></i> Crear
+            {% elif log.action == 'UPDATE' %}
+              <i class="fa-solid fa-pen me-1"></i> Editar
+            {% elif log.action == 'DELETE' %}
+              <i class="fa-solid fa-trash me-1"></i> Eliminar
+            {% else %}
+              {{ log.action }}
+            {% endif %}
+          </span>
+        </td>
+        <td>
+          <span class="entity-badge">
+            {% if log.entity_type == 'Project' %}
+              <i class="fa-solid fa-folder"></i>
+            {% elif log.entity_type == 'Task' %}
+              <i class="fa-solid fa-check-circle"></i>
+            {% elif log.entity_type == 'User' %}
+              <i class="fa-solid fa-user"></i>
+            {% elif log.entity_type == 'TimeEntry' %}
+              <i class="fa-solid fa-clock"></i>
+            {% else %}
+              <i class="fa-solid fa-cube"></i>
+            {% endif %}
+            {{ log.entity_type }}
+            <small class="text-muted">#{{ log.entity_id }}</small>
+          </span>
+        </td>
+        <td>
+          <div class="changes-preview">
+            {% if log.changes %}
+              {% for field, change in log.changes.items() %}
+                {% if loop.index <= 3 %}
+                <div class="change-item">
+                  <span class="field-name">{{ field }}:</span>
+                  {% if change is mapping and 'old' in change and 'new' in change %}
+                    {% if change.old %}
+                      <span class="old-value">{{ change.old|string|truncate(30) }}</span>
+                    {% endif %}
+                    → <span class="new-value">{{ change.new|string|truncate(30) if change.new else '(vacío)' }}</span>
+                  {% else %}
+                    <span class="new-value">{{ change|string|truncate(50) }}</span>
+                  {% endif %}
+                </div>
+                {% endif %}
+              {% endfor %}
+              {% if log.changes|length > 3 %}
+                <small class="text-muted">+{{ log.changes|length - 3 }} más cambios</small>
+              {% endif %}
+            {% else %}
+              <span class="text-muted">Sin detalles</span>
+            {% endif %}
+          </div>
+        </td>
+        <td>
+          {% if log.user %}
+          <div class="user-cell">
+            <div class="user-avatar-sm">
+              {{ (log.user.first_name or log.user.email)[0]|upper }}
+            </div>
+            <div>
+              <div class="fw-medium small">{{ log.user.first_name or log.user.email.split('@')[0] }}</div>
+              <small class="text-muted">{{ log.user.role.name if log.user.role else 'Sin rol' }}</small>
+            </div>
+          </div>
+          {% else %}
+          <span class="text-muted">Usuario eliminado</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  
+  <!-- Pagination -->
+  <div class="pagination-wrapper">
+    <div class="pagination-info">
+      Mostrando {{ ((page - 1) * per_page) + 1 }} - {{ [page * per_page, total]|min }} de {{ total }} registros
+    </div>
+    <nav>
+      <ul class="pagination pagination-sm mb-0">
+        {% if page > 1 %}
+        <li class="page-item">
+          <a class="page-link" href="?page={{ page - 1 }}{% for k, v in filters.items() if v %}&{{ k }}={{ v }}{% endfor %}">
+            <i class="fa-solid fa-chevron-left"></i>
+          </a>
+        </li>
+        {% endif %}
+        
+        {% for p in range(1, total_pages + 1) %}
+          {% if p == 1 or p == total_pages or (p >= page - 2 and p <= page + 2) %}
+            <li class="page-item {{ 'active' if p == page }}">
+              <a class="page-link" href="?page={{ p }}{% for k, v in filters.items() if v %}&{{ k }}={{ v }}{% endfor %}">{{ p }}</a>
+            </li>
+          {% elif p == page - 3 or p == page + 3 %}
+            <li class="page-item disabled"><span class="page-link">...</span></li>
+          {% endif %}
+        {% endfor %}
+        
+        {% if page < total_pages %}
+        <li class="page-item">
+          <a class="page-link" href="?page={{ page + 1 }}{% for k, v in filters.items() if v %}&{{ k }}={{ v }}{% endfor %}">
+            <i class="fa-solid fa-chevron-right"></i>
+          </a>
+        </li>
+        {% endif %}
+      </ul>
+    </nav>
+  </div>
+  {% else %}
+  <div class="empty-state">
+    <i class="fa-solid fa-clipboard-list"></i>
+    <h5>No hay registros de auditoría</h5>
+    <p class="text-muted">No se encontraron registros que coincidan con los filtros seleccionados.</p>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

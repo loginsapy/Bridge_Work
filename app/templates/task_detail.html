@@ -554,7 +554,7 @@
         <div class="detail-item">
           <div class="detail-label">Fecha de Vencimiento</div>
           <div class="detail-value">
-            {% if task.due_date %}{{ task.due_date.strftime('%d %b %Y') }}{% else %}<span class="text-muted">—</span>{% endif %}
+            {% if task.due_date %}{{ task.due_date|fecha_es('corto_año') }}{% else %}<span class="text-muted">—</span>{% endif %}
           </div>
         </div>
 

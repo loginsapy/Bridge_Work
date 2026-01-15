@@ -1,119 +1,127 @@
-<nav class="navbar navbar-expand-lg navbar-light">
-  <div class="container-fluid">
+<nav class="navbar navbar-expand-lg">
+  <div class="container-fluid px-3 px-lg-4">
+    <!-- Logo & Brand -->
+    <a class="navbar-brand d-flex align-items-center gap-2" href="{{ url_for('main.index') }}">
+      <img src="{{ url_for('static', filename='images/sbwlogo.png') }}" alt="" height="32" class="d-inline-block">
+      <span class="fw-bold d-none d-sm-inline">{{ sys_app_name }}</span>
+    </a>
+
     <!-- Mobile Menu Toggle -->
-    <button class="btn btn-link d-lg-none me-3" id="sidebarToggle" type="button">
-      <i class="fa-solid fa-bars fa-lg"></i>
+    <button class="navbar-toggler border-0" type="button" id="sidebarToggle">
+      <i class="fa-solid fa-bars"></i>
     </button>
 
-    <!-- Page Title -->
-    <h5 class="mb-0 fw-semibold d-none d-md-block">{{ sys_app_name }}</h5>
-
     <!-- Right Side Actions -->
-    <div class="ms-auto d-flex align-items-center gap-3">
-      <!-- Global Search -->
-      <div class="position-relative" id="globalSearchContainer">
+    <div class="navbar-nav ms-auto flex-row align-items-center gap-2 gap-lg-3">
+      
+      <!-- Global Search (collapsible on mobile) -->
+      <div class="nav-item d-none d-md-block" id="globalSearchContainer" data-search-allowed="{{ 1 if ((current_user.role and current_user.role.name in ['PMP','Admin','Participante']) or not current_user.is_internal) else 0 }}">
         <div class="search-input-wrapper">
           <i class="fa-solid fa-search search-icon"></i>
           <input type="search" 
                  id="globalSearchInput" 
                  class="form-control global-search-input" 
-                 placeholder="Buscar proyectos, tareas, usuarios..." 
+                 placeholder="Buscar..." 
                  autocomplete="off"
                  aria-label="Buscar">
-          <kbd class="search-shortcut d-none d-lg-inline">Ctrl+K</kbd>
-          <div class="search-spinner d-none">
-            <i class="fa-solid fa-spinner fa-spin"></i>
-          </div>
+          <kbd class="search-shortcut d-none d-xl-inline">⌘K</kbd>
         </div>
-        
         <!-- Search Results Dropdown -->
         <div id="searchResults" class="search-results-dropdown shadow-lg">
-          <div class="search-results-content">
-            <!-- Results will be injected here -->
-          </div>
+          <div class="search-results-content"></div>
         </div>
       </div>
 
-      <!-- Quick Actions -->
-      {% if current_user.is_authenticated and current_user.is_internal and not (current_user.role and current_user.role.name in ['Participante','Cliente']) %}
-      <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#createProjectModal">
-        <i class="fa-solid fa-plus me-1"></i>
-        <span class="d-none d-lg-inline">Nuevo Proyecto</span>
+      <!-- Quick Actions: New Project -->
+      {% if current_user.is_authenticated and current_user.is_internal and current_user.role and current_user.role.name in ['Admin','PMP'] %}
+      <button class="nav-item btn btn-primary btn-sm d-flex align-items-center gap-1" data-bs-toggle="modal" data-bs-target="#createProjectModal">
+        <i class="fa-solid fa-plus"></i>
+        <span class="d-none d-lg-inline">Nuevo</span>
       </button>
       {% endif %}
 
       <!-- Notifications -->
-      <div class="position-relative dropdown" id="notificationDropdown">
-        <button class="btn btn-link text-secondary p-2" data-bs-toggle="dropdown" aria-expanded="false" id="notificationBtn">
-          <i class="fa-solid fa-bell fa-lg"></i>
+      <div class="nav-item dropdown" id="notificationDropdown">
+        <button class="btn btn-icon" data-bs-toggle="dropdown" aria-expanded="false" id="notificationBtn" title="Notificaciones">
+          <i class="fa-solid fa-bell"></i>
           {% if unread_notifications_count > 0 %}
-          <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger notification-badge" style="font-size: 0.65rem;">
-            {{ unread_notifications_count if unread_notifications_count < 100 else '99+' }}
-          </span>
+          <span class="badge-dot"></span>
           {% endif %}
         </button>
-        <div class="dropdown-menu dropdown-menu-end shadow-lg notification-dropdown" style="width: 380px; max-height: 480px; overflow-y: auto;">
-          <div class="px-3 py-2 border-bottom d-flex justify-content-between align-items-center sticky-top bg-white">
-            <h6 class="mb-0">Notificaciones</h6>
+        <div class="dropdown-menu dropdown-menu-end notification-dropdown">
+          <div class="dropdown-header d-flex justify-content-between align-items-center">
+            <span class="fw-semibold">Notificaciones</span>
             {% if unread_notifications_count > 0 %}
-            <button class="btn btn-link btn-sm text-primary p-0" onclick="markAllAsRead()" style="font-size: 0.75rem;">
-              Marcar todo como leído
+            <button class="btn btn-link btn-sm p-0 text-primary" onclick="markAllAsRead()">
+              Marcar leídas
             </button>
             {% endif %}
           </div>
-          <div id="notificationList">
-            <!-- Las notificaciones se cargan dinámicamente -->
+          <div id="notificationList" class="notification-list">
             <div class="text-center py-4 text-muted">
               <i class="fa-solid fa-spinner fa-spin me-2"></i>Cargando...
             </div>
           </div>
-          <div class="border-top sticky-bottom bg-white">
-            <a class="dropdown-item text-center py-2 text-primary" href="{{ url_for('main.notifications') }}">
-              <i class="fa-solid fa-bell me-1"></i>Ver todas las notificaciones
+          <div class="dropdown-footer">
+            <a href="{{ url_for('main.notifications') }}" class="text-primary text-decoration-none">
+              Ver todas <i class="fa-solid fa-arrow-right ms-1"></i>
             </a>
           </div>
         </div>
       </div>
 
-      {% if current_user.is_authenticated and current_user.is_internal and current_user.role and current_user.role.name == 'PMP' %}
-        <div class="dropdown">
-          <button class="btn btn-link text-secondary p-2" data-bs-toggle="dropdown">Admin</button>
-          <ul class="dropdown-menu dropdown-menu-end shadow">
-            <li><a class="dropdown-item" href="{{ url_for('main.admin_users') }}">Gestionar Usuarios</a></li>
-            <li><a class="dropdown-item" href="{{ url_for('main.admin_roles') }}">Gestionar Roles</a></li>
-          </ul>
-        </div>
+      <!-- User Role Badge -->
+      {% if current_user.is_authenticated %}
+      <div class="nav-item d-none d-lg-flex align-items-center">
+        {% set user_role = current_user.role.name if current_user.role else 'Sin Rol' %}
+        {% set role_icon = {'Admin': 'fa-shield-halved', 'PMP': 'fa-user-tie', 'Participante': 'fa-user', 'Cliente': 'fa-building'}.get(user_role, 'fa-user-slash') %}
+        {% set role_color = {'Admin': 'danger', 'PMP': 'primary', 'Participante': 'success', 'Cliente': 'info'}.get(user_role, 'secondary') %}
+        <span class="role-badge badge bg-{{ role_color }}-subtle text-{{ role_color }} d-flex align-items-center gap-1">
+          <i class="fa-solid {{ role_icon }} fa-xs"></i>
+          <span>{{ user_role }}</span>
+        </span>
+      </div>
       {% endif %}
 
       <!-- User Menu -->
       {% if current_user.is_authenticated %}
-        <div class="dropdown">
-          <button class="btn btn-link text-decoration-none p-0 d-flex align-items-center gap-2" data-bs-toggle="dropdown">
-            <div class="d-none d-md-block text-end">
-              <div class="fw-semibold" style="font-size: 0.875rem; line-height: 1.2;">{{ current_user.first_name or current_user.email }}</div>
-              <small class="text-muted">Conectado</small>
-            </div>
-            <div class="rounded-circle bg-primary text-white d-flex align-items-center justify-content-center" style="width: 40px; height: 40px;">
-              <i class="fa-solid fa-user"></i>
-            </div>
-          </button>
-          <ul class="dropdown-menu dropdown-menu-end shadow">
-            <li><a class="dropdown-item" href="{{ url_for('main.profile') }}"><i class="fa-solid fa-user me-2"></i> Mi Perfil</a></li>
-            <li><hr class="dropdown-divider"></li>
-            <li><a class="dropdown-item text-danger" href="{{ url_for('auth.logout') }}"><i class="fa-solid fa-right-from-bracket me-2"></i> Cerrar Sesión</a></li>
-          </ul>
-        </div>
+      <div class="nav-item dropdown">
+        <button class="btn btn-icon user-menu-btn d-flex align-items-center gap-2" data-bs-toggle="dropdown">
+          <div class="user-avatar">
+            {{ (current_user.first_name or current_user.email)[0]|upper }}
+          </div>
+          <span class="d-none d-lg-inline user-name">{{ current_user.first_name or current_user.email.split('@')[0] }}</span>
+          <i class="fa-solid fa-chevron-down fa-xs d-none d-lg-inline"></i>
+        </button>
+        <ul class="dropdown-menu dropdown-menu-end">
+          <li class="dropdown-header">
+            <div class="fw-semibold">{{ current_user.first_name }} {{ current_user.last_name or '' }}</div>
+            <small class="text-muted">{{ current_user.email }}</small>
+            {% set user_role = current_user.role.name if current_user.role else 'Sin Rol' %}
+            {% set role_color = {'Admin': 'danger', 'PMP': 'primary', 'Participante': 'success', 'Cliente': 'info'}.get(user_role, 'secondary') %}
+            <span class="badge bg-{{ role_color }}-subtle text-{{ role_color }} mt-1">{{ user_role }}</span>
+          </li>
+          <li><hr class="dropdown-divider"></li>
+          <li><a class="dropdown-item" href="{{ url_for('main.profile') }}"><i class="fa-solid fa-user me-2 text-muted"></i>Mi Perfil</a></li>
+          {% if current_user.is_internal and current_user.role and current_user.role.name in ['Admin','PMP'] %}
+          <li><a class="dropdown-item" href="{{ url_for('main.admin_users') }}"><i class="fa-solid fa-users-gear me-2 text-muted"></i>Usuarios</a></li>
+          <li><a class="dropdown-item" href="{{ url_for('main.admin_settings_page') }}"><i class="fa-solid fa-gear me-2 text-muted"></i>Configuración</a></li>
+          {% endif %}
+          <li><hr class="dropdown-divider"></li>
+          <li><a class="dropdown-item text-danger" href="{{ url_for('auth.logout') }}"><i class="fa-solid fa-right-from-bracket me-2"></i>Cerrar Sesión</a></li>
+        </ul>
+      </div>
       {% else %}
-        <a class="btn btn-outline-primary btn-sm" href="{{ url_for('auth.login') }}">
-          <i class="fa-solid fa-right-to-bracket me-1"></i> Iniciar Sesión
-        </a>
+      <a class="btn btn-primary btn-sm" href="{{ url_for('auth.login') }}">
+        Iniciar Sesión
+      </a>
       {% endif %}
     </div>
   </div>
 </nav>
 
 <!-- Modal Nuevo Proyecto (Global) -->
-{% if current_user.is_authenticated and current_user.is_internal and not (current_user.role and current_user.role.name in ['Participante','Cliente']) %}
+{% if current_user.is_authenticated and current_user.is_internal and current_user.role and current_user.role.name in ['Admin','PMP'] %}
 <div class="modal fade" id="createProjectModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog">
     <div class="modal-content">
@@ -304,8 +312,9 @@ document.addEventListener('DOMContentLoaded', function() {
   align-items: center;
 }
 
+/* Increased widths for better discoverability */
 .global-search-input {
-  width: 320px;
+  width: 440px;
   padding: 0.5rem 2.5rem 0.5rem 2.5rem;
   border: 2px solid transparent;
   background: var(--surface-secondary, #f5f6f8);
@@ -315,10 +324,10 @@ document.addEventListener('DOMContentLoaded', function() {
 }
 
 .global-search-input:focus {
-  width: 400px;
+  width: 560px;
   background: #fff;
   border-color: var(--primary, #0073ea);
-  box-shadow: 0 0 0 4px rgba(0, 115, 234, 0.1);
+  box-shadow: 0 0 0 4px rgba(0, 115, 234, 0.08);
   outline: none;
 }
 
@@ -369,7 +378,7 @@ document.addEventListener('DOMContentLoaded', function() {
   overflow: hidden;
   display: none;
   z-index: 1050;
-  min-width: 400px;
+  min-width: 540px;
 }
 
 .search-results-dropdown.active {
@@ -573,6 +582,67 @@ document.addEventListener('DOMContentLoaded', function() {
     min-width: auto;
   }
 }
+
+/* Brand and Navbar adjustments - Professional subtle palette */
+.navbar {
+  background: #fff;
+  border-bottom: 1px solid rgba(0,0,0,0.06);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+}
+.navbar .navbar-brand { color: var(--brand-text, #2D3748) !important; font-weight: 600; }
+.navbar .nav-link { color: var(--brand-muted, #718096); }
+.navbar .nav-link:hover { color: var(--brand-primary); }
+
+/* Primary buttons in navbar - clean style */
+.navbar .btn-primary {
+  background: var(--brand-primary);
+  border: none;
+  color: #fff;
+  padding: 0.45rem 1rem;
+  border-radius: 0.5rem;
+  font-weight: 500;
+  box-shadow: 0 2px 4px rgba(232,106,51,0.15);
+}
+.navbar .btn-primary:hover { background: var(--brand-primary-dark, #C7581F); }
+
+/* Outline buttons subtle */
+.navbar .btn-outline-primary {
+  border: 1.5px solid var(--brand-primary);
+  color: var(--brand-primary);
+  background: transparent;
+  border-radius: 0.5rem;
+}
+.navbar .btn-outline-primary:hover {
+  background: rgba(232,106,51,0.08);
+}
+
+/* Search input clean style */
+.navbar .global-search-input { 
+  background: #F7F8FA; 
+  color: var(--brand-text, #2D3748); 
+  border: 1px solid rgba(0,0,0,0.08); 
+}
+.navbar .global-search-input:focus { 
+  background: #fff; 
+  border-color: var(--brand-primary);
+  box-shadow: 0 0 0 3px rgba(232,106,51,0.1); 
+}
+
+/* Notification badge using accent color (muted) */
+.notification-badge { background: var(--brand-accent, #F5B945) !important; color: #744210 !important; }
+.notification-dropdown { border-radius: 0.75rem; overflow: hidden; }
+
+/* Clean dropdown menus */
+.dropdown-menu { 
+  border-radius: 0.5rem; 
+  box-shadow: 0 4px 16px rgba(0,0,0,0.1); 
+  border: 1px solid rgba(0,0,0,0.06);
+}
+
+/* Icon buttons in navbar */
+.navbar .btn-link { color: var(--brand-muted, #718096); }
+.navbar .btn-link:hover { color: var(--brand-primary); }
+
 </style>
 
 <!-- Global Search JavaScript -->
@@ -587,9 +657,23 @@ document.addEventListener('DOMContentLoaded', function() {
 
   if (!searchInput || !searchResults) return;
 
+  // Determine whether the current user is allowed to search (PMP/Admin/Participante) - controlled via data attribute on container
+
   // Debounced search
   function debounceSearch(query) {
     const spinner = searchContainer.querySelector('.search-spinner');
+
+    const SEARCH_ALLOWED = Boolean(Number(searchContainer.dataset.searchAllowed || 0));
+    if (!SEARCH_ALLOWED) {
+      // Show a friendly message rather than performing the search
+      searchResults.querySelector('.search-results-content').innerHTML = `
+        <div class="search-empty">
+          <i class="fa-solid fa-user-lock text-warning"></i>
+          <p class="mb-0">No tienes permisos para buscar. Contacta a un administrador.</p>
+        </div>`;
+      showResults();
+      return;
+    }
     
     if (searchTimeout) clearTimeout(searchTimeout);
     
@@ -610,7 +694,17 @@ document.addEventListener('DOMContentLoaded', function() {
     const spinner = searchContainer.querySelector('.search-spinner');
     
     try {
-      const response = await fetch(`{{ url_for("main.global_search") }}?q=${encodeURIComponent(query)}`);
+      const response = await fetch(`{{ url_for("main.global_search") }}?q=${encodeURIComponent(query)}`);      if (response.status === 403) {
+        const err = await response.json();
+        spinner?.classList.add('d-none');
+        searchResults.querySelector('.search-results-content').innerHTML = `
+          <div class="search-empty">
+            <i class="fa-solid fa-user-lock text-warning"></i>
+            <p class="mb-0">${escapeHtml(err.error || 'No tienes permisos para buscar.')}</p>
+          </div>`;
+        showResults();
+        return;
+      }
       const data = await response.json();
       
       spinner?.classList.add('d-none');

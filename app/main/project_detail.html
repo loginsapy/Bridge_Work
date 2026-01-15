@@ -108,7 +108,7 @@
               {% endif %}
             </td>
             <td><span class="badge bg-{{ status_colors.get(task.status, 'secondary') }}">{{ task.status.replace('_', ' ')|title }}</span></td>
-            <td><small class="text-muted">{{ task.due_date.strftime('%d %b %Y') if task.due_date else '-' }}</small></td>
+            <td><small class="text-muted">{{ task.due_date|fecha_es('corto_año') if task.due_date else '-' }}</small></td>
             <td class="text-end pe-4">
               <button class="btn btn-sm btn-outline-secondary"><i class="fa-solid fa-pen"></i></button>
             </td>

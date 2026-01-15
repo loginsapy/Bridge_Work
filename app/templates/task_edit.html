@@ -198,15 +198,85 @@
             </div>
 
             <div class="col-md-6 mb-3">
-              <label class="form-label fw-semibold">Predecesoras</label>
-              <select class="form-select" name="predecessor_ids" multiple size="6">
-                {% for t in candidate_predecessors %}
-                  <option value="{{ t.id }}" {% if t in task.predecessors %}selected{% endif %}>{{ t.title }} (ID {{ t.id }})</option>
+              <label class="form-label fw-semibold">Tarea Padre</label>
+              <select class="form-select" name="parent_task_id">
+                <option value="">-- Sin tarea padre --</option>
+                {% for t in candidate_predecessors if t.id != task.id %}
+                  <option value="{{ t.id }}" {% if task.parent_task_id and task.parent_task_id == t.id %}selected{% endif %}>{{ t.title }} (#{{ t.id }})</option>
                 {% endfor %}
               </select>
-              <small class="text-muted d-block">Seleccione tareas que deben completarse antes que esta. No se permiten ciclos.</small>
+              <small class="text-muted d-block">Crear como subtarea de otra tarea (jerarquía WBS).</small>
+            </div>
+
+            <div class="col-md-6 mb-3">
+              <label class="form-label fw-semibold">Predecesoras (Dependencias)</label>
+              <select class="form-select" name="predecessor_ids" multiple size="5">
+                {% for t in candidate_predecessors if t.id != task.id %}
+                  <option value="{{ t.id }}" {% if t in task.predecessors %}selected{% endif %}>{{ t.title }} (#{{ t.id }}) {% if t.status in ['DONE', 'COMPLETED'] %}✓{% endif %}</option>
+                {% endfor %}
+              </select>
+              <small class="text-muted d-block">Tareas que deben completarse antes de esta (bloquean completar).</small>
             </div>
           </div>
+
+          <!-- Alertas de Bloqueo -->
+          {% set blockers = task.get_completion_blockers() %}
+          {% if blockers.incomplete_predecessors or blockers.incomplete_children %}
+          <div class="alert alert-warning mb-3">
+            <h6 class="alert-heading mb-2"><i class="fa-solid fa-exclamation-triangle me-2"></i>Esta tarea no puede completarse</h6>
+            {% if blockers.incomplete_predecessors %}
+            <div class="mb-2">
+              <strong>Predecesoras incompletas:</strong>
+              <ul class="mb-0 mt-1">
+                {% for p in blockers.incomplete_predecessors %}
+                  <li>{{ p.title }} (#{{ p.id }})</li>
+                {% endfor %}
+              </ul>
+            </div>
+            {% endif %}
+            {% if blockers.incomplete_children %}
+            <div>
+              <strong>Subtareas incompletas:</strong>
+              <ul class="mb-0 mt-1">
+                {% for c in blockers.incomplete_children %}
+                  <li>{{ c.title }} (#{{ c.id }})</li>
+                {% endfor %}
+              </ul>
+            </div>
+            {% endif %}
+          </div>
+          {% endif %}
+
+          <!-- Info de Jerarquía -->
+          {% if task.parent or task.children|length > 0 %}
+          <div class="card mb-3 border-info">
+            <div class="card-header bg-info text-white py-2">
+              <i class="fa-solid fa-sitemap me-2"></i>Jerarquía de Tareas
+            </div>
+            <div class="card-body py-2">
+              {% if task.parent %}
+              <div class="mb-2">
+                <strong>Tarea Padre:</strong> 
+                <a href="{{ url_for('main.edit_task', task_id=task.parent.id) }}">{{ task.parent.title }}</a>
+                <span class="badge bg-{{ {'BACKLOG': 'secondary', 'IN_PROGRESS': 'primary', 'COMPLETED': 'success'}.get(task.parent.status, 'secondary') }}">{{ task.parent.status }}</span>
+              </div>
+              {% endif %}
+              {% if task.children|length > 0 %}
+              <div>
+                <strong>Subtareas ({{ task.children|length }}):</strong>
+                <ul class="mb-0 mt-1">
+                  {% for child in task.children %}
+                  <li>
+                    <a href="{{ url_for('main.edit_task', task_id=child.id) }}">{{ child.title }}</a>
+                    <span class="badge bg-{{ {'BACKLOG': 'secondary', 'IN_PROGRESS': 'primary', 'COMPLETED': 'success'}.get(child.status, 'secondary') }} ms-1">{{ child.status }}</span>
+                  </li>
+                  {% endfor %}
+                </ul>
+              </div>
+              {% endif %}
+            </div>
+          </div>
+          {% endif %}
 
           <div class="mb-3 form-check">
             <input type="checkbox" class="form-check-input" name="is_internal_only" id="is_internal_only" {% if task.is_internal_only %}checked{% endif %}>

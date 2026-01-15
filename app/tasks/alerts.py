@@ -101,6 +101,27 @@ def generate_alerts(cutoff_days=None, idempotency_hours=24):
     return result
 
 
+def cleanup_old_audit_logs():
+    """Elimina registros de auditoría con más de 6 meses de antigüedad.
+    
+    Esta función se ejecuta periódicamente para mantener la base de datos limpia.
+    Los registros de auditoría se conservan por 6 meses (180 días).
+    """
+    from ..models import AuditLog
+    
+    cutoff_date = datetime.now() - timedelta(days=180)
+    
+    try:
+        deleted_count = AuditLog.query.filter(AuditLog.created_at < cutoff_date).delete()
+        if deleted_count > 0:
+            db.session.commit()
+            return {"deleted": deleted_count, "cutoff_date": cutoff_date.isoformat()}
+        return {"deleted": 0, "cutoff_date": cutoff_date.isoformat()}
+    except Exception as e:
+        db.session.rollback()
+        return {"error": str(e)}
+
+
 # Celery task wrapper (import lazily to avoid circular imports during app startup)
 
 try:
@@ -110,6 +131,13 @@ try:
     @celery.task(name='alerts.generate_alerts')
     def celery_generate_alerts(cutoff_days=2, idempotency_hours=24):
         return generate_alerts(cutoff_days=cutoff_days, idempotency_hours=idempotency_hours)
+    
+    @celery.task(name='alerts.cleanup_audit_logs')
+    def celery_cleanup_audit_logs():
+        """Tarea Celery para limpiar registros de auditoría antiguos"""
+        return cleanup_old_audit_logs()
+        
 except Exception:
     # Running in contexts without Celery available (tests, import-time) is fine
     celery_generate_alerts = None
+    celery_cleanup_audit_logs = None

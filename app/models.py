@@ -187,24 +187,22 @@ class Task(db.Model):
     def incomplete_predecessors(self):
         """Return list of predecessor Task objects that are not completed.
         
-        NOTE: In our tree model, predecessors are visual PARENTS, not blockers.
-        Children (successors) must be completed BEFORE the parent (predecessor) can be completed.
-        So this method returns an empty list - predecessors do NOT block completion.
+        PREDECESORAS = Dependencias de secuencia (no jerarquía).
+        Una tarea NO puede iniciar/completarse hasta que sus predecesoras estén completas.
+        Esto es diferente a la jerarquía padre-hijo.
         """
-        # Predecessors do NOT block task completion in our tree model.
-        # The inverse is true: parents cannot close until children are done.
-        return []
+        return [p for p in getattr(self, 'predecessors', []) or [] if p.status not in ('DONE', 'COMPLETED')]
 
-    def incomplete_successors(self):
-        """Return list of direct successor (child) tasks that are not completed.
+    def incomplete_children(self):
+        """Return list of direct child tasks (via parent_task_id) that are not completed.
         
-        In our tree model, successors are visual CHILDREN. A parent task cannot be
-        completed until all its children (successors) are completed first.
+        HIJOS = Jerarquía WBS (subtareas).
+        Una tarea padre NO puede completarse hasta que todas sus subtareas estén completas.
         """
-        return [s for s in getattr(self, 'successors', []) or [] if s.status not in ('DONE', 'COMPLETED')]
+        return [c for c in getattr(self, 'children', []) or [] if c.status not in ('DONE', 'COMPLETED')]
 
     def incomplete_hierarchical_descendants(self):
-        """Return list of hierarchical descendant tasks (children recursively via parent_task_id) that are not completed."""
+        """Return list of ALL hierarchical descendant tasks (children recursively via parent_task_id) that are not completed."""
         result = []
         visited = set()
 
@@ -220,48 +218,77 @@ class Task(db.Model):
         dfs(self)
         return result
 
-    def incomplete_dependent_tasks(self):
-        """Return list of dependent tasks (successors recursively) that are not completed.
+    def all_incomplete_children(self):
+        """Return list of ALL incomplete child tasks (direct + descendants via hierarchy).
         
-        These are the visual "children" in our tree - they must be completed before
-        this task (the parent) can be completed.
+        Combina hijos directos e indirectos para validación de cierre.
         """
         result = []
         visited = set()
 
         def dfs(node):
-            for s in getattr(node, 'successors', []) or []:
-                if s.id in visited or s.id == self.id:
+            for c in getattr(node, 'children', []) or []:
+                if c.id in visited or c.id == self.id:
                     continue
-                visited.add(s.id)
-                if s.status not in ('DONE', 'COMPLETED'):
-                    result.append(s)
-                dfs(s)
+                visited.add(c.id)
+                result.append(c)
+                dfs(c)
 
         dfs(self)
-        return result
+        return [c for c in result if c.status not in ('DONE', 'COMPLETED')]
+
+    def can_complete(self):
+        """Check if this task can be marked as completed.
+        
+        Returns (bool, str): (can_complete, reason_if_not)
+        
+        Reglas:
+        1. No se puede completar si tiene predecesoras incompletas (dependencias)
+        2. No se puede completar si tiene subtareas incompletas (jerarquía)
+        """
+        # Verificar predecesoras (dependencias de secuencia)
+        incomplete_preds = self.incomplete_predecessors()
+        if incomplete_preds:
+            titles = ', '.join([p.title for p in incomplete_preds[:3]])
+            if len(incomplete_preds) > 3:
+                titles += f' y {len(incomplete_preds) - 3} más'
+            return False, f'Predecesoras incompletas: {titles}'
+        
+        # Verificar subtareas (jerarquía)
+        incomplete_kids = self.all_incomplete_children()
+        if incomplete_kids:
+            titles = ', '.join([c.title for c in incomplete_kids[:3]])
+            if len(incomplete_kids) > 3:
+                titles += f' y {len(incomplete_kids) - 3} más'
+            return False, f'Subtareas incompletas: {titles}'
+        
+        return True, None
 
     def get_completion_blockers(self):
         """Return dict with lists of incomplete tasks that block completion.
         
-        In our tree model:
-        - incomplete_predecessors: EMPTY - predecessors do NOT block (children can close first)
-        - incomplete_children: successors (visual children) + hierarchical descendants that must be completed first
+        Sistema de gestión de proyectos:
+        - incomplete_predecessors: Tareas que deben completarse ANTES (dependencias de secuencia)
+        - incomplete_children: Subtareas que deben completarse ANTES (jerarquía WBS)
         """
-        # Combine successors (tree children) and hierarchical children (parent_task_id)
-        all_incomplete_children = self.incomplete_successors() + self.incomplete_hierarchical_descendants()
-        # Deduplicate by id
-        seen = set()
-        unique_children = []
-        for c in all_incomplete_children:
-            if c.id not in seen:
-                seen.add(c.id)
-                unique_children.append(c)
+        incomplete_preds = self.incomplete_predecessors()
+        incomplete_kids = self.all_incomplete_children()
         
         return {
-            'incomplete_predecessors': [],  # Predecessors do NOT block in tree model
-            'incomplete_children': [{'id': c.id, 'title': c.title} for c in unique_children]
+            'incomplete_predecessors': [{'id': p.id, 'title': p.title} for p in incomplete_preds],
+            'incomplete_children': [{'id': c.id, 'title': c.title} for c in incomplete_kids]
         }
+    
+    def is_blocked(self):
+        """Check if task is blocked by incomplete predecessors.
+        
+        Una tarea está bloqueada si tiene predecesoras sin completar.
+        """
+        return len(self.incomplete_predecessors()) > 0
+
+    def has_incomplete_subtasks(self):
+        """Check if task has any incomplete child tasks."""
+        return len(self.all_incomplete_children()) > 0
 
 
     def validate_predecessor_ids(self, predecessor_ids):

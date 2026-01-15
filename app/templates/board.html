@@ -450,6 +450,20 @@ tr:hover .task-actions {
   background: white;
 }
 
+/* Blocked task row styling */
+tr.table-warning {
+  background-color: #fff8e1 !important;
+}
+tr.table-warning:hover {
+  background-color: #ffecb3 !important;
+}
+
+/* WBS badge styling */
+.badge.bg-light {
+  font-family: 'SF Mono', SFMono-Regular, ui-monospace, monospace;
+  letter-spacing: 0.02em;
+}
+
 /* Progress bar in header */
 .project-progress {
   display: flex;
@@ -618,20 +632,26 @@ tr:hover .task-actions {
       <tbody id="tasksBody">
         {% macro render_node(node, level=0, parent_id=None) %}
           {% set task = node.task %}
-          <tr class="{% if level>0 %}child-row{% endif %}" data-task-id="{{ task.id }}" data-status="{{ task.status }}" {% if parent_id %}data-parent-id="{{ parent_id }}"{% endif %} {% if current_user.is_internal %}draggable="true"{% endif %}>
+          <tr class="{% if level>0 %}child-row{% endif %}{% if task.is_blocked() %} table-warning{% endif %}" data-task-id="{{ task.id }}" data-status="{{ task.status }}" {% if parent_id %}data-parent-id="{{ parent_id }}"{% endif %} {% if current_user.is_internal %}draggable="true"{% endif %}>
             <td class="row-checkbox">{% if current_user.is_internal %}<input type="checkbox" class="task-check">{% endif %}</td>
             <td class="row-grip">{% if current_user.is_internal %}<i class="fa-solid fa-grip-vertical" draggable="true" title="Arrastrar"></i>{% endif %}</td>
             <td>
-              <div class="cell cell-title" style="padding-left: {{ (level * 18) }}px; position:relative;">
+              <div class="cell cell-title" style="padding-left: {{ (level * 18) + 5 }}px; position:relative;">
                 {% if level > 0 %}
                 <span class="connector" style="left: {{ (level * 18) - 12 }}px; top: 18px; position:absolute; width:8px; height:1px; background:#d0d7de;"></span>
                 {% endif %}
+                
+                <!-- WBS Number Badge -->
+                <span class="badge bg-light text-dark border me-2" style="font-size: 0.7rem; font-weight: 600; min-width: 35px;" title="Número WBS">
+                  {{ task.wbs_number|default('—') }}
+                </span>
+                
                 {% if node.children %}
-                  <button class="btn btn-sm btn-link toggle-btn" onclick="event.stopPropagation(); toggleNode({{ task.id }});">
+                  <button class="btn btn-sm btn-link toggle-btn p-0" onclick="event.stopPropagation(); toggleNode({{ task.id }});">
                     <i class="fa-solid fa-chevron-down" id="toggle-icon-{{ task.id }}"></i>
                   </button>
                 {% else %}
-                  <span class="toggle-placeholder" style="display:inline-block;width:26px;"></span>
+                  <span class="toggle-placeholder" style="display:inline-block;width:20px;"></span>
                 {% endif %}
                 {% if current_user.is_internal %}
                 <input type="text" value="{{ task.title }}" onblur="updateTask({{ task.id }}, 'title', this.value)" onkeypress="if(event.key==='Enter')this.blur()">
@@ -641,6 +661,14 @@ tr:hover .task-actions {
                 {% if task.is_internal_only %}
                 <span class="badge bg-secondary ms-2" title="Solo visible para PMP/Admin"><i class="fa-solid fa-lock fa-xs"></i></span>
                 {% endif %}
+                
+                <!-- Predecessor indicator with order -->
+                {% if task.predecessor_order %}
+                <span class="badge bg-info text-white ms-1" style="font-size: 0.65rem;" 
+                      title="Depende de: {% for idx, pred in task.predecessor_order %}{{ idx }}. {{ pred.title }} ({{ pred.wbs_number|default('#'+pred.id|string) }}) {% if pred.status in ['DONE','COMPLETED'] %}✓{% else %}⏳{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}">
+                  <i class="fa-solid fa-link"></i> {{ task.predecessor_order|length }}
+                </span>
+                {% endif %}
               </div>
             </td>
             <td>
@@ -648,6 +676,12 @@ tr:hover .task-actions {
                 <span class="status-pill status-{{ task.status }}">
                   {{ {'BACKLOG':'Backlog','IN_PROGRESS':'En Progreso','IN_REVIEW':'En Revisión','COMPLETED':'Completado'}.get(task.status, task.status) }}
                 </span>
+                {% set blockers = task.get_completion_blockers() %}
+                {% if blockers.incomplete_predecessors or blockers.incomplete_children %}
+                  <span class="badge bg-warning text-dark ms-1" title="{% if blockers.incomplete_predecessors %}Predecesoras: {{ blockers.incomplete_predecessors|map(attribute='title')|join(', ') }}{% endif %}{% if blockers.incomplete_children %} Subtareas: {{ blockers.incomplete_children|map(attribute='title')|join(', ') }}{% endif %}" style="font-size: 0.65rem;">
+                    <i class="fa-solid fa-lock"></i>
+                  </span>
+                {% endif %}
               </div>
             </td>
             <td>
@@ -830,14 +864,27 @@ tr:hover .task-actions {
             <input type="number" name="estimated_hours" class="form-control" step="0.5" min="0" placeholder="0">
           </div>
 
-          <div class="mb-3">
-            <label class="form-label">Predecesoras</label>
-            <select name="predecessor_ids" class="form-select" multiple size="6">
-              {% for t in candidate_predecessors %}
-                <option value="{{ t.id }}">{{ t.title }} (ID {{ t.id }})</option>
-              {% endfor %}
-            </select>
-            <small class="text-muted d-block">Selecciona tareas que deben completarse antes que la nueva tarea (opcional).</small>
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Tarea Padre</label>
+              <select name="parent_task_id" class="form-select">
+                <option value="">-- Sin tarea padre --</option>
+                {% for t in candidate_predecessors %}
+                  <option value="{{ t.id }}">{{ t.title }} (#{{ t.id }})</option>
+                {% endfor %}
+              </select>
+              <small class="text-muted d-block">Crear como subtarea (jerarquía WBS).</small>
+            </div>
+
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Predecesoras</label>
+              <select name="predecessor_ids" class="form-select" multiple size="4">
+                {% for t in candidate_predecessors %}
+                  <option value="{{ t.id }}">{{ t.title }} (#{{ t.id }}) {% if t.status in ['DONE', 'COMPLETED'] %}✓{% endif %}</option>
+                {% endfor %}
+              </select>
+              <small class="text-muted d-block">Dependencias (bloquean completar).</small>
+            </div>
           </div>
 
           <div class="mb-3">

@@ -30,7 +30,7 @@
       <p class="mb-0 opacity-75">{{ _('summary') }}</p>
     </div>
     <div class="d-none d-md-flex align-items-center gap-3">
-      <span class="opacity-75"><i class="fa-regular fa-calendar me-2"></i>{{ now.strftime('%A, %d %b %Y') if now else '' }}</span>
+      <span class="opacity-75"><i class="fa-regular fa-calendar me-2"></i>{{ now|fecha_es('completo') if now else '' }}</span>
     </div>
   </div>
 </div>
@@ -152,7 +152,7 @@
                         </div>
                         {% if project.end_date %}
                           <small class="text-muted">
-                            <i class="fa-regular fa-calendar me-1"></i>{{ project.end_date.strftime('%d %b') }}
+                            <i class="fa-regular fa-calendar me-1"></i>{{ project.end_date|fecha_es }}
                           </small>
                         {% endif %}
                       </div>
@@ -249,7 +249,7 @@
                       </div>
                     </td>
                     <td><span class="badge badge-primary">{{ project.status|title }}</span></td>
-                    <td><small class="text-secondary">{{ project.end_date.strftime('%d %b %Y') if project.end_date else 'N/A' }}</small></td>
+                    <td><small class="text-secondary">{{ project.end_date|fecha_es('corto_año') if project.end_date else 'N/A' }}</small></td>
                   </tr>
                 {% endfor %}
               {% else %}
@@ -286,7 +286,7 @@
                   {{ activity.assigned_to.first_name or _('someone') }} {{ _('completed_task') }} "{{ activity.title }}"
                 </p>
                 {% if activity.due_date %}
-                  <small class="text-secondary"><i class="fa-solid fa-clock me-1"></i> {{ activity.due_date.strftime('%d %b %Y') }}</small>
+                  <small class="text-secondary"><i class="fa-solid fa-clock me-1"></i> {{ activity.due_date|fecha_es('corto_año') }}</small>
                 {% endif %}
               </div>
             </div>

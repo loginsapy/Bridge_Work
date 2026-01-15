@@ -288,6 +288,7 @@ def edit_project(project_id):
                 'description': project.description,
                 'budget_hours': float(project.budget_hours) if project.budget_hours else None,
                 'status': project.status,
+                'manager_id': project.manager_id,
                 'client_ids': old_client_ids,
                 'member_ids': old_member_ids
             }
@@ -297,6 +298,10 @@ def edit_project(project_id):
             project.description = request.form.get('description')
             project.budget_hours = float(request.form.get('budget_hours')) if request.form.get('budget_hours') and request.form.get('budget_hours').strip() else project.budget_hours
             project.status = request.form.get('status', project.status)
+            
+            # Actualizar responsable del proyecto
+            manager_id = request.form.get('manager_id')
+            project.manager_id = int(manager_id) if manager_id and manager_id.strip() else None
             
             # Actualizar clientes asociados
             client_ids = request.form.getlist('client_ids')
@@ -319,6 +324,7 @@ def edit_project(project_id):
                 'description': project.description,
                 'budget_hours': float(project.budget_hours) if project.budget_hours else None,
                 'status': project.status,
+                'manager_id': project.manager_id,
                 'client_ids': new_client_ids,
                 'member_ids': new_member_ids
             }
@@ -357,8 +363,11 @@ def edit_project(project_id):
 
     # IDs of currently assigned members (for checkbox checked state)
     project_member_ids = [m.id for m in project.members]
+    
+    # Obtener usuarios internos para selector de responsable
+    available_managers = User.query.filter_by(is_internal=True, is_active=True).order_by(User.first_name).all()
 
-    return render_template('project_edit.html', project=project, available_clients=available_clients, available_members=available_members, project_member_ids=project_member_ids)
+    return render_template('project_edit.html', project=project, available_clients=available_clients, available_members=available_members, project_member_ids=project_member_ids, available_managers=available_managers)
 
 
 @main_bp.route('/project/<int:project_id>/delete', methods=['POST'])
@@ -535,28 +544,31 @@ def project_detail(project_id):
 
     # Sugeridos para asignación: usuarios internos
     assignees = User.query.filter_by(is_internal=True).order_by(User.first_name).all()
-    # Candidate predecessors: all tasks in this project
+    # Candidate predecessors: all tasks in this project (for parent selection and dependencies)
     candidate_predecessors = Task.query.filter(Task.project_id == project_id).order_by(Task.title).all()
     
-    # Build nested task tree respecting predecessors (only consider visible tasks)
+    # Build nested task tree using parent_task_id (hierarchy, not dependencies)
     def build_task_tree(task_list):
+        """Build a tree structure using parent_task_id (WBS hierarchy).
+        
+        This creates a proper parent-child tree where:
+        - Tasks with no parent_task_id are roots
+        - Tasks with parent_task_id are children of that parent
+        Also assigns WBS numbers (1, 1.1, 1.2, 2, 2.1, etc.)
+        """
         tasks_by_id = {t.id: t for t in task_list}
         children_map = {t.id: [] for t in task_list}
-        root_ids = set(tasks_by_id.keys())
+        root_ids = []
+        
         for t in task_list:
-            # Choose a single primary predecessor from possibly many (to avoid duplicate rendering)
-            preds = [pred for pred in t.predecessors if pred.id in tasks_by_id]
-            if preds:
-                # sort preds to pick deterministic primary
-                status_order = {'BACKLOG': 0, 'IN_PROGRESS': 1, 'IN_REVIEW': 2, 'COMPLETED': 3}
-                priority_order = {'CRITICAL': 3, 'HIGH': 2, 'MEDIUM': 1, 'LOW': 0}
-                def sort_key_obj(x):
-                    return (status_order.get(x.status, 99), -priority_order.get(x.priority, 0), x.title or '')
-                primary = sorted(preds, key=sort_key_obj)[0]
-                children_map[primary.id].append(t)
-                if t.id in root_ids:
-                    root_ids.remove(t.id)
-        # sort function: prefer status, priority, title
+            if t.parent_task_id and t.parent_task_id in tasks_by_id:
+                # Has a valid parent in the visible task list
+                children_map[t.parent_task_id].append(t)
+            else:
+                # No parent or parent not visible - treat as root
+                root_ids.append(t.id)
+        
+        # Sort function: prefer position, then status, priority, title
         status_order = {'BACKLOG': 0, 'IN_PROGRESS': 1, 'IN_REVIEW': 2, 'COMPLETED': 3}
         priority_order = {'CRITICAL': 3, 'HIGH': 2, 'MEDIUM': 1, 'LOW': 0}
         def sort_key(x):
@@ -564,17 +576,43 @@ def project_detail(project_id):
             if getattr(x, 'position', None) is not None:
                 return (0, x.position)
             return (1, status_order.get(x.status, 99), -priority_order.get(x.priority, 0), x.title or '')
-        # build recursive nodes
-        def build_node(tid):
+        
+        # Build recursive nodes with WBS numbering
+        def build_node(tid, depth=0, wbs_prefix='', index=1):
             t = tasks_by_id[tid]
+            t.tree_depth = depth  # Attach depth for indentation
+            
+            # Assign WBS number (e.g., "1", "1.1", "1.2", "2", "2.1.1")
+            if wbs_prefix:
+                t.wbs_number = f"{wbs_prefix}.{index}"
+            else:
+                t.wbs_number = str(index)
+            
             children = sorted(children_map[tid], key=sort_key)
-            return {'task': t, 'children': [build_node(c.id) for c in children]}
+            child_nodes = []
+            for i, c in enumerate(children, 1):
+                child_nodes.append(build_node(c.id, depth + 1, t.wbs_number, i))
+            
+            return {'task': t, 'children': child_nodes}
+        
         roots = [tasks_by_id[rid] for rid in root_ids]
         roots_sorted = sorted(roots, key=sort_key)
-        forest = [build_node(r.id) for r in roots_sorted]
+        forest = []
+        for i, r in enumerate(roots_sorted, 1):
+            forest.append(build_node(r.id, 0, '', i))
+        
         return forest
 
     tasks_tree = build_task_tree(tasks)
+    
+    # Calculate predecessor order info for each task
+    for task in tasks:
+        if task.predecessors:
+            # Sort predecessors by their WBS number if available, otherwise by ID
+            sorted_preds = sorted(task.predecessors, key=lambda p: (getattr(p, 'wbs_number', '999'), p.id))
+            task.predecessor_order = [(i+1, p) for i, p in enumerate(sorted_preds)]
+        else:
+            task.predecessor_order = []
 
     # Calcular métricas del proyecto
     metrics = calculate_project_metrics(project_id)
@@ -721,6 +759,16 @@ def create_task():
         assigned_to_id = request.form.get('assigned_to_id')
         if assigned_to_id and assigned_to_id.strip():
             task.assigned_to_id = int(assigned_to_id)
+
+        # Parent task (hierarchy)
+        parent_task_id = request.form.get('parent_task_id')
+        if parent_task_id and parent_task_id.strip():
+            parent_id = int(parent_task_id)
+            parent_task = Task.query.get(parent_id)
+            if not parent_task or parent_task.project_id != project.id:
+                flash('Tarea padre inválida.', 'danger')
+                return redirect(url_for('main.project_detail', project_id=project_id))
+            task.parent_task_id = parent_id
 
         # Internal only flag - only visible for PMP/Admin
         task.is_internal_only = request.form.get('is_internal_only') == 'on'
@@ -1624,6 +1672,11 @@ def time_entries():
     page = int(request.args.get('page', 1))
     per_page = 25
 
+    # Usuario sin rol: mostrar mensaje y lista vacía
+    if not user_role:
+        flash('No tienes un rol asignado. Contacta al administrador para obtener acceso.', 'warning')
+        return render_template('time_entries.html', time_entries=[], total_hours_week=0, page=1, total_pages=0, users=[], total_count=0, page_urls=[], prev_url=None, next_url=None, no_role=True)
+
     # Parse filters
     start_date_s = request.args.get('start_date')
     end_date_s = request.args.get('end_date')
@@ -2178,13 +2231,15 @@ def move_task(task_id):
     if new_status in ('DONE', 'COMPLETED'):
         blockers = task.get_completion_blockers()
         if blockers['incomplete_predecessors']:
+            pred_titles = ', '.join([p['title'] for p in blockers['incomplete_predecessors'][:3]])
             return jsonify({
-                'error': 'Cannot complete task while predecessors are incomplete',
+                'error': f'No se puede completar: tiene predecesoras incompletas ({pred_titles})',
                 'incomplete_predecessors': blockers['incomplete_predecessors']
             }), 400
         if blockers['incomplete_children']:
+            child_titles = ', '.join([c['title'] for c in blockers['incomplete_children'][:3]])
             return jsonify({
-                'error': 'Cannot complete task while child tasks are incomplete',
+                'error': f'No se puede completar: tiene subtareas incompletas ({child_titles})',
                 'incomplete_children': blockers['incomplete_children']
             }), 400
 
@@ -2271,13 +2326,15 @@ def edit_task(task_id):
             # Guardar valores anteriores para detectar cambios y auditoría
             old_assigned_to_id = task.assigned_to_id
             old_assigned_client_id = task.assigned_client_id
+            old_parent_id = task.parent_task_id
             old_values = {
                 'title': task.title,
                 'status': task.status,
                 'priority': task.priority,
                 'assigned_to_id': task.assigned_to_id,
                 'is_internal_only': task.is_internal_only,
-                'predecessor_ids': sorted([p.id for p in task.predecessors])
+                'predecessor_ids': sorted([p.id for p in task.predecessors]),
+                'parent_task_id': task.parent_task_id
             }
             
             task.title = request.form.get('title') or task.title
@@ -2299,6 +2356,23 @@ def edit_task(task_id):
                 task.due_date = datetime.fromisoformat(due_date_str)
             else:
                 task.due_date = None
+
+            # Update parent task (validate no cycles)
+            parent_task_id = request.form.get('parent_task_id')
+            if parent_task_id and parent_task_id.strip():
+                new_parent_id = int(parent_task_id)
+                if new_parent_id == task.id:
+                    raise ValueError('La tarea no puede ser su propia tarea padre')
+                parent_task = Task.query.get(new_parent_id)
+                if not parent_task or parent_task.project_id != project.id:
+                    raise ValueError('Tarea padre inválida')
+                # Ensure not assigning a descendant as parent (would create cycle)
+                descendant_ids = [d.id for d in task.descendants()]
+                if new_parent_id in descendant_ids:
+                    raise ValueError('No se puede asignar una subtarea como tarea padre')
+                task.parent_task_id = new_parent_id
+            else:
+                task.parent_task_id = None
 
             estimated_hours = request.form.get('estimated_hours')
             if estimated_hours and estimated_hours.strip():
@@ -2359,7 +2433,8 @@ def edit_task(task_id):
                 'priority': task.priority,
                 'assigned_to_id': task.assigned_to_id,
                 'is_internal_only': task.is_internal_only,
-                'predecessor_ids': sorted([p.id for p in task.predecessors])
+                'predecessor_ids': sorted([p.id for p in task.predecessors]),
+                'parent_task_id': task.parent_task_id
             }
             changes = {k: {'old': old_values[k], 'new': new_values[k]} for k in old_values if old_values[k] != new_values[k]}
             
@@ -2775,6 +2850,14 @@ def mark_all_notifications_read():
 def global_search():
     """Búsqueda global de proyectos, tareas y usuarios"""
     try:
+        # Determine role and allow search for:
+        # - internal users with role (PMP/Admin/Participante)
+        # - clients (external users) but they will be limited to their projects/tasks
+        user_role = current_user.role.name if (current_user and getattr(current_user, 'role', None)) else None
+        if current_user.is_internal and not user_role:
+            # Internal user without a role is not allowed to search
+            return jsonify({'error': 'No tienes permisos para realizar búsquedas. Contacta al administrador.'}), 403
+
         query = request.args.get('q', '').strip()
         
         if not query or len(query) < 2:
@@ -2790,11 +2873,24 @@ def global_search():
         search_term = f"%{query}%"
         
         # Buscar proyectos
-        if current_user.is_internal:
+        if current_user.is_internal and user_role in ['PMP', 'Admin']:
+            # PMP/Admin ven todos los proyectos
             projects = Project.query.filter(
                 db.or_(
                     Project.name.ilike(search_term),
                     Project.description.ilike(search_term)
+                )
+            ).limit(5).all()
+        elif current_user.is_internal and user_role == 'Participante':
+            # Participante solo ve proyectos donde es miembro o tiene tareas asignadas
+            projects = Project.query.filter(
+                db.or_(
+                    Project.name.ilike(search_term),
+                    Project.description.ilike(search_term)
+                ),
+                db.or_(
+                    Project.members.any(User.id == current_user.id),
+                    Project.tasks.any(Task.assignee_id == current_user.id)
                 )
             ).limit(5).all()
         else:
@@ -2817,11 +2913,24 @@ def global_search():
             })
         
         # Buscar tareas
-        if current_user.is_internal:
+        if current_user.is_internal and user_role in ['PMP', 'Admin']:
+            # PMP/Admin ven todas las tareas
             tasks = Task.query.filter(
                 db.or_(
                     Task.title.ilike(search_term),
                     Task.description.ilike(search_term)
+                )
+            ).limit(8).all()
+        elif current_user.is_internal and user_role == 'Participante':
+            # Participante solo ve tareas que tiene asignadas o donde es miembro del proyecto
+            tasks = Task.query.join(Project).filter(
+                db.or_(
+                    Task.title.ilike(search_term),
+                    Task.description.ilike(search_term)
+                ),
+                db.or_(
+                    Task.assignee_id == current_user.id,
+                    Project.members.any(User.id == current_user.id)
                 )
             ).limit(8).all()
         else:
@@ -2845,8 +2954,8 @@ def global_search():
                 'url': url_for('main.task_detail', task_id=t.id)
             })
         
-        # Buscar usuarios (solo para internos)
-        if current_user.is_internal:
+        # Buscar usuarios (solo para PMP/Admin)
+        if current_user.is_internal and user_role in ['PMP', 'Admin']:
             users = User.query.filter(
                 db.or_(
                     User.email.ilike(search_term),
@@ -2868,8 +2977,6 @@ def global_search():
     except Exception as e:
         current_app.logger.exception(f"Search error: {e}")
         return jsonify({'error': str(e), 'projects': [], 'tasks': [], 'users': [], 'query': ''}), 500
-    
-    return jsonify(results)
 
 
 @main_bp.route('/notifications/recent')
@@ -3032,6 +3139,107 @@ def reject_task(task_id):
         flash(f'Error al rechazar: {str(e)}', 'danger')
     
     return redirect(url_for('main.pending_approvals'))
+
+
+# ========== AUDIT LOG ROUTES ==========
+
+def pmp_or_admin_required(f):
+    """Decorator to require PMP or Admin role"""
+    from functools import wraps
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not current_user.is_authenticated:
+            return redirect(url_for('auth.login'))
+        if not current_user.role or current_user.role.name not in ['PMP', 'Admin']:
+            flash('Solo usuarios PMP o Admin pueden acceder a esta sección.', 'danger')
+            return redirect(url_for('main.index'))
+        return f(*args, **kwargs)
+    return decorated
+
+
+@main_bp.route('/audit')
+@login_required
+@pmp_or_admin_required
+def audit_log():
+    """Vista del registro de auditoría - Solo PMP y Admin"""
+    # Limpiar registros antiguos (más de 6 meses)
+    cleanup_old_audit_logs()
+    
+    # Filtros
+    entity_type = request.args.get('entity_type', '')
+    action = request.args.get('action', '')
+    user_id = request.args.get('user_id', type=int)
+    date_from = request.args.get('date_from', '')
+    date_to = request.args.get('date_to', '')
+    page = request.args.get('page', 1, type=int)
+    per_page = 15
+    
+    # Construir query
+    query = AuditLog.query
+    
+    if entity_type:
+        query = query.filter(AuditLog.entity_type == entity_type)
+    if action:
+        query = query.filter(AuditLog.action == action)
+    if user_id:
+        query = query.filter(AuditLog.user_id == user_id)
+    if date_from:
+        try:
+            date_from_dt = datetime.strptime(date_from, '%Y-%m-%d')
+            query = query.filter(AuditLog.created_at >= date_from_dt)
+        except ValueError:
+            pass
+    if date_to:
+        try:
+            date_to_dt = datetime.strptime(date_to, '%Y-%m-%d') + timedelta(days=1)
+            query = query.filter(AuditLog.created_at < date_to_dt)
+        except ValueError:
+            pass
+    
+    # Ordenar y paginar
+    query = query.order_by(AuditLog.created_at.desc())
+    total = query.count()
+    logs = query.offset((page - 1) * per_page).limit(per_page).all()
+    total_pages = (total + per_page - 1) // per_page
+    
+    # Obtener registro más antiguo
+    oldest = AuditLog.query.order_by(AuditLog.created_at.asc()).first()
+    oldest_record = oldest.created_at if oldest else None
+    
+    # Obtener usuarios para filtro
+    users = User.query.filter(User.is_internal == True).order_by(User.first_name).all()
+    
+    filters = {
+        'entity_type': entity_type,
+        'action': action,
+        'user_id': user_id,
+        'date_from': date_from,
+        'date_to': date_to
+    }
+    
+    return render_template('audit_log.html',
+        logs=logs,
+        page=page,
+        per_page=per_page,
+        total=total,
+        total_pages=total_pages,
+        filters=filters,
+        users=users,
+        oldest_record=oldest_record
+    )
+
+
+def cleanup_old_audit_logs():
+    """Elimina registros de auditoría con más de 6 meses de antigüedad"""
+    try:
+        cutoff_date = datetime.now() - timedelta(days=180)  # 6 meses
+        deleted_count = AuditLog.query.filter(AuditLog.created_at < cutoff_date).delete()
+        if deleted_count > 0:
+            db.session.commit()
+            current_app.logger.info(f'Limpieza de auditoría: {deleted_count} registros eliminados')
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f'Error limpiando auditoría: {e}')
 
 
 # ========== ADMIN SETTINGS ROUTES ==========

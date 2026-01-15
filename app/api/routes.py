@@ -293,17 +293,19 @@ def create_task():
 def update_task(task_id):
     t = Task.query.get_or_404(task_id)
     data = request.get_json() or {}
-    # Validate status transition wrt predecessors
+    # Validate status transition wrt predecessors and children
     if 'status' in data and data['status'] in ('DONE', 'COMPLETED'):
         blockers = t.get_completion_blockers()
         if blockers['incomplete_predecessors']:
+            pred_titles = ', '.join([p['title'] for p in blockers['incomplete_predecessors'][:3]])
             return jsonify({
-                'error': 'Cannot complete task while predecessors are incomplete',
+                'error': f'No se puede completar la tarea: tiene predecesoras incompletas ({pred_titles})',
                 'incomplete_predecessors': blockers['incomplete_predecessors']
             }), 400
         if blockers['incomplete_children']:
+            child_titles = ', '.join([c['title'] for c in blockers['incomplete_children'][:3]])
             return jsonify({
-                'error': 'Cannot complete task while child tasks are incomplete',
+                'error': f'No se puede completar la tarea: tiene subtareas incompletas ({child_titles})',
                 'incomplete_children': blockers['incomplete_children']
             }), 400
 
