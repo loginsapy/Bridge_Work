@@ -1,0 +1,188 @@
+/* Shared Board Styles - extracted from board.html for reuse in tasks view */
+:root {
+  --board-bg: white;
+  --board-border: #e6e8eb;
+  --board-hover: rgba(0,115,234,0.04);
+  /* Standardized palette used by Board (Primer Proyecto) */
+  --monday-blue: #0d6efd;
+  --monday-purple: #6f42c1;
+  --monday-grey: #6b7280;
+  --monday-green: #00c875;
+  --monday-orange: #fdab3d;
+  --monday-red: #e2445c;
+  --monday-light-grey: #f5f6f8;
+  --monday-dark: #111827;
+  --monday-text-secondary: #6b7280;
+}
+
+.monday-board {
+  background: var(--board-bg);
+  border-radius: 8px;
+  border: 1px solid var(--board-border);
+  overflow: hidden;
+  /* Subtle shadow to match Board screenshot */
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+}
+
+/* Keep the board compact and lifted like the project board */
+.monday-board-header, .monday-board-row { background-clip: padding-box; }
+
+.monday-board-header {
+  display: grid;
+  grid-template-columns: 40px 48px 1.6fr 1fr 120px 120px 96px 120px 140px; /* narrower title, wider hours */
+  padding: 0 14px;
+  background: var(--monday-light-grey); /* header background */
+  border-bottom: 1px solid rgba(229,231,235,1);
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--monday-dark); /* stronger contrast */
+}
+.monday-board-header > div { color: var(--monday-dark); padding: 12px 8px; }
+
+
+.monday-board-row { 
+  display: grid;
+  grid-template-columns: 40px 48px 1.6fr 1fr 120px 120px 96px 120px 140px; /* match header columns */
+  align-items: center;
+  transition: background 0.12s ease;
+  cursor: pointer;
+  grid-auto-rows: minmax(48px, auto); /* prevent excessive single-line height */
+}
+
+.monday-board-row > div { display: flex; align-items: center; gap: 8px; padding: 12px 8px; }
+.monday-board-row .task-title-cell { flex-direction: column; align-items: flex-start; gap: 4px; }
+.monday-board-row .task-title { font-weight: 600; }
+.monday-board-row .task-description { max-width: 480px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.wbs-cell { text-align: center; }
+
+/* Make filter buttons look like board chips */
+.filter-buttons { display:flex; gap:8px; align-items:center; white-space:nowrap; }
+.filter-button { display:inline-flex; align-items:center; gap:6px; padding:8px 10px; border-radius: 16px; border:1px solid var(--board-border); background:white; cursor:pointer; }
+.filter-button.active { background:#0d6efd; color:white; border-color:#0d6efd; }
+
+/* Toolbar form layout: keep status + priority on same row and make toolbar a card */
+.tasks-toolbar { display:flex; align-items:center; gap:12px; width:100%; background:white; border-radius:12px; padding:8px 14px; box-shadow: 0 10px 30px rgba(15,23,42,0.06); border: 1px solid rgba(229,231,235,0.9); height:48px; }
+.tasks-toolbar form { display:flex; align-items:center; gap:10px; flex-wrap:nowrap; }
+.filter-chip { white-space:nowrap; }
+
+/* Filter chip visual parity with board chips */
+.filter-chip { display:inline-flex; align-items:center; gap:8px; padding:6px 12px; border-radius:8px; border:1px solid rgba(229,231,235,1); background:white; box-shadow: 0 1px 6px rgba(15,23,42,0.03); cursor:pointer; font-weight:600; min-height:36px; }
+.filter-chip.active { background: var(--monday-blue); color: white; border-color: var(--monday-blue); box-shadow: 0 8px 24px rgba(13,110,253,0.08); }
+
+.filter-button { padding:8px 12px; border-radius:8px; border:1px solid rgba(229,231,235,1); background:white; cursor:pointer; font-size:13px; font-weight:600; min-height:36px; display:inline-flex; align-items:center; }
+.filter-button:hover, .filter-chip:hover { box-shadow: 0 8px 24px rgba(13,110,253,0.04); }
+
+/* Ensure the search box aligns visually within the card */
+.monday-search-box { flex: 1 1 320px; }
+.monday-search-box input { background: var(--monday-light-grey); border-radius: 8px; box-shadow: none; border: none; height:36px; padding: 8px 12px 8px 40px; }
+.monday-search-box i { left:14px; top:50%; }
+.monday-search-box input::placeholder { color: #9ca3af; }
+
+
+
+.monday-board-row > div { padding-top:10px; padding-bottom:10px; }
+
+
+
+.monday-board-row:hover { background: var(--board-hover); }
+
+.task-checkbox { width:18px; height:18px; border:2px solid var(--board-border); border-radius:4px; }
+.task-checkbox.checked { background:#00c875; border-color:#00c875; }
+
+.wbs-badge { font-family: monospace; font-size:12px; padding:4px 8px; border-radius:6px; background: rgba(255,255,255,0.9); border:none; color: var(--monday-blue); font-weight:700; box-shadow: 0 0 0 1px rgba(0,0,0,0.03) inset; }
+
+.task-title { font-weight:600; color:#111827; font-size:14px; }
+.task-description { color:#6b7280; max-width:380px; text-overflow:ellipsis; overflow:hidden; white-space:nowrap; }
+
+.project-badge { display:inline-flex; align-items:center; gap:8px; padding:4px 10px; background:#f5f6f8; border-radius:6px; }
+
+.status-pill { display:inline-block; padding:6px 12px; border-radius:20px; font-weight:700; color:white; min-width:84px; text-align:center; }
+.status-pill.BACKLOG { background: var(--monday-grey); }
+.status-pill.TODO { background: var(--monday-purple); }
+.status-pill.IN_PROGRESS { background: var(--monday-blue); }
+.status-pill.IN_REVIEW { background: var(--monday-purple); }
+.status-pill.COMPLETED, .status-pill.DONE { background: var(--monday-green); }
+
+/* Priority pills styled to match Board: larger rounded chip with subtle background */
+.monday-priority { padding:8px 14px; border-radius:20px; font-weight:700; font-size:12px; }
+.monday-priority.low { color:#579bfc; background:rgba(87,155,252,0.12); }
+.monday-priority.medium { color:var(--monday-orange); background:rgba(253,171,61,0.12); }
+.monday-priority.high { color:var(--monday-red); background:rgba(226,68,92,0.12); }
+.monday-priority.critical { color:white; background:var(--monday-red); }
+
+.person-avatars { display:inline-flex; gap:6px; align-items:center; }
+.monday-avatar-sm { width:32px; height:32px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; color:white; font-weight:700; }
+
+
+
+/* Project header (blue) to match Board 'Primer Proyecto' look */
+.project-board-header { display:flex; justify-content:space-between; align-items:center; padding:10px 18px; color:white; background: var(--monday-blue); border-radius: 8px 8px 0 0; margin-bottom: 0; box-shadow: 0 6px 18px rgba(13,110,253,0.08) inset; height:64px; }
+.project-board-header .project-title { font-size: 16px; font-weight:700; margin:0; display:flex; align-items:center; gap:12px; }
+.project-board-header .project-badge { background: rgba(255,255,255,0.12); padding:6px 10px; border-radius:12px; font-weight:700; color:white; font-size:12px; }
+.project-board-header .project-right { display:flex; align-items:center; gap:12px; }
+.project-progress { width:220px; height:12px; background: rgba(255,255,255,0.18); border-radius:999px; overflow:hidden; }
+.project-progress .progress-bar { height:100%; background: linear-gradient(90deg, rgba(255,255,255,1), rgba(255,255,255,0.95)); transition: width 400ms ease; box-shadow: inset 0 -3px 6px rgba(0,0,0,0.06); }
+.project-progress-text { font-weight:700; font-size:13px; color:rgba(255,255,255,0.95); margin-left:8px; }
+
+/* Make monday-board sit flush below the project header */
+.monday-board { border-radius: 0 0 8px 8px; margin-top:0; box-shadow: 0 8px 24px rgba(15,23,42,0.06); }
+
+/* Ensure toolbar and board align nicely on small widths */
+.tasks-toolbar, .monday-board { border-radius: 12px; }
+
+/* Time table specific refinements to align pixel-perfect with Board */
+.monday-time-table {
+  background: white;
+  border-radius: 12px;
+  border: 1px solid rgba(229,231,235,1);
+  overflow: hidden;
+  box-shadow: 0 8px 24px rgba(15,23,42,0.06);
+}
+
+.monday-time-table th {
+  padding: 12px 14px;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--monday-text-secondary);
+  background: transparent;
+  border-bottom: 1px solid rgba(229,231,235,1);
+}
+
+.monday-time-table td {
+  padding: 12px 14px;
+  vertical-align: middle;
+  color: var(--monday-dark);
+}
+
+/* Action buttons in time table should match board action style */
+.action-btn {
+  padding: 6px 10px;
+  border: 1px solid rgba(229,231,235,1);
+  border-radius: 8px;
+  background: white;
+  color: var(--monday-text-secondary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  min-width: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.action-btn:hover { background: var(--monday-light-grey); color: var(--monday-blue); border-color: rgba(13,110,253,0.08); }
+.action-btn.delete:hover { background: rgba(226,68,92,0.06); color: var(--monday-red); border-color: rgba(226,68,92,0.12); }
+
+/* Small helper for filter chips in time header */
+.time-filter-chips { display:flex; gap:8px; align-items:center; }
+
+@media (max-width: 768px) {
+  .monday-board-header, .monday-board-row { grid-template-columns: 40px 1fr 100px 80px; }
+  .task-description { display:none; }
+  .project-progress { width:120px; }
+  .tasks-toolbar { flex-wrap:wrap; height:auto; padding:10px; }
+}
+
+

@@ -3,6 +3,7 @@
 {% block title %}{{ _('time_entries') }} — {{ sys_app_name }}{% endblock %}
 
 {% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/board-shared.css') }}">
 <style>
 /* Monday.com Time Entries Page Styles */
 .time-page-header {
@@ -33,12 +34,15 @@
   display: flex;
   align-items: center;
   gap: 16px;
-  padding: 20px 24px;
+  padding: 16px 20px;
   background: white;
-  border-radius: 8px;
-  border: 1px solid var(--monday-border);
+  border-radius: 12px;
+  border: 1px solid rgba(229,231,235,1);
   margin-bottom: 24px;
+  box-shadow: 0 8px 24px rgba(15,23,42,0.06);
 }
+.week-icon { font-size: 20px; color: var(--monday-blue); margin-right:8px; }
+
 
   /* Filter badges */
   .filter-badges { margin-top: 8px; display:flex; gap:8px; flex-wrap:wrap; align-items:center }
@@ -67,18 +71,19 @@
 /* Monday Time Table */
 .monday-time-table {
   background: white;
-  border-radius: 8px;
-  border: 1px solid var(--monday-border);
+  border-radius: 12px;
+  border: 1px solid rgba(229,231,235,1);
   overflow: hidden;
+  box-shadow: 0 8px 24px rgba(15,23,42,0.06);
 }
 
 .monday-time-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 16px 20px;
-  background: var(--monday-light-grey);
-  border-bottom: 1px solid var(--monday-border);
+  padding: 10px 14px;
+  background: transparent;
+  border-bottom: none;
 }
 
 .monday-time-header h3 {
@@ -312,13 +317,18 @@
 <div class="monday-time-table">
   <div class="monday-time-header">
     <h3>{{ _('recent_history') }}</h3>
-    <div>
+    <div class="tasks-toolbar">
+      <div class="monday-search-box">
+        <i class="fa-solid fa-magnifying-glass"></i>
+        <input type="text" id="timeSearch" placeholder="{{ _('search') }}..." value="{{ request.args.get('q','') }}">
+      </div>
+
       <form class="time-filter-form" method="GET" action="{{ url_for('main.time_entries') }}">
         <input type="date" name="start_date" class="form-control form-control-sm" value="{{ request.args.get('start_date','') }}" placeholder="Start">
         <input type="date" name="end_date" class="form-control form-control-sm" value="{{ request.args.get('end_date','') }}" placeholder="End">
         {% if users %}
         <select name="user_id" class="form-select form-select-sm">
-          <option value="">Todos</option>
+          <option value="">{{ _('all_users') }}</option>
           {% for u in users %}
             <option value="{{ u.id }}" {% if request.args.get('user_id') and request.args.get('user_id')|int == u.id %}selected{% endif %}>{{ u.first_name or u.email }}</option>
           {% endfor %}
@@ -328,25 +338,30 @@
         <a href="{{ url_for('main.time_entries') }}" class="btn btn-sm btn-outline-secondary">{{ _('clear') }}</a>
       </form>
 
-      <!-- Active filters badges -->
-      <div class="filter-badges">
+      <div class="time-filter-chips" style="margin-left:auto;">
         {% if request.args.get('start_date') %}
           {% set p = request.args.to_dict() %}
           {% set _ = p.pop('start_date', None) %}
-          <span class="badge bg-secondary">Desde: {{ request.args.get('start_date') }} <a href="{{ url_for('main.time_entries', **p) }}" class="ms-2 text-white text-decoration-none">&times;</a></span>
+          <a href="{{ url_for('main.time_entries', **p) }}" class="filter-chip">
+            <i class="fa-solid fa-calendar-day"></i>&nbsp; {{ _('from') }}: {{ request.args.get('start_date') }} <i class="fa-solid fa-xmark ms-2" aria-hidden="true"></i>
+          </a>
         {% endif %}
         {% if request.args.get('end_date') %}
           {% set p = request.args.to_dict() %}
           {% set _ = p.pop('end_date', None) %}
-          <span class="badge bg-secondary">Hasta: {{ request.args.get('end_date') }} <a href="{{ url_for('main.time_entries', **p) }}" class="ms-2 text-white text-decoration-none">&times;</a></span>
+          <a href="{{ url_for('main.time_entries', **p) }}" class="filter-chip">
+            <i class="fa-solid fa-calendar-day"></i>&nbsp; {{ _('to') }}: {{ request.args.get('end_date') }} <i class="fa-solid fa-xmark ms-2" aria-hidden="true"></i>
+          </a>
         {% endif %}
         {% if request.args.get('user_id') %}
           {% set p = request.args.to_dict() %}
           {% set _ = p.pop('user_id', None) %}
           {% set selected_user = users|selectattr('id','equalto', request.args.get('user_id')|int)|first %}
-          <span class="badge bg-secondary">Usuario: {{ (selected_user.first_name or selected_user.email) if selected_user else request.args.get('user_id') }} <a href="{{ url_for('main.time_entries', **p) }}" class="ms-2 text-white text-decoration-none">&times;</a></span>
+          <a href="{{ url_for('main.time_entries', **p) }}" class="filter-chip">
+            <i class="fa-solid fa-user"></i>&nbsp; {{ _('user') }}: {{ (selected_user.first_name or selected_user.email) if selected_user else request.args.get('user_id') }} <i class="fa-solid fa-xmark ms-2" aria-hidden="true"></i>
+          </a>
         {% endif %}
-        <span class="count">Mostrando {{ time_entries|length }} de {{ total_count }}</span>
+        <span class="filter-chip">{{ _('showing') }} {{ time_entries|length }} / {{ total_count }}</span>
       </div>
     </div>
   </div>
@@ -436,6 +451,25 @@
 <!-- End content conditional -->
 
 <script>
+// Search functionality for time entries
+document.getElementById('timeSearch').addEventListener('input', function(e) {
+  const searchTerm = e.target.value.toLowerCase();
+  const rows = document.querySelectorAll('.monday-time-table tbody tr');
+  rows.forEach(row => {
+    // skip empty state row
+    if (row.querySelector('.monday-empty-time')) return;
+    const date = row.querySelector('.date-cell')?.textContent.toLowerCase() || '';
+    const user = row.querySelector('.user-cell .name')?.textContent.toLowerCase() || '';
+    const task = row.querySelector('.task-link')?.textContent.toLowerCase() || '';
+    const desc = row.querySelector('.description-cell')?.textContent.toLowerCase() || '';
+    if (date.includes(searchTerm) || user.includes(searchTerm) || task.includes(searchTerm) || desc.includes(searchTerm)) {
+      row.style.display = '';
+    } else {
+      row.style.display = 'none';
+    }
+  });
+});
+
 // Set avatar colors from data attribute
 document.addEventListener('DOMContentLoaded', function(){
   document.querySelectorAll('.avatar[data-color]').forEach(function(el){
