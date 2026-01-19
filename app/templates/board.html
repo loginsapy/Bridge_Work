@@ -856,17 +856,8 @@ tr.table-warning:hover {
               </div>
             </td>
             <td>
-              <div class="cell person-cell" data-assignees="{{ task.assignees|map(attribute='id')|join(',') }}" {% if current_user.is_internal %}onclick="showPersonDropdown(event, {{ task.id }})"{% endif %}>
-                {% if task.assignees and task.assignees|length > 0 %}
-                <div class="d-flex align-items-center">
-                  {% for a in task.assignees[:2] %}
-                    <div class="person-avatar" title="{{ a.first_name or a.email }}">{{ (a.first_name or a.email)[0]|upper }}</div>
-                  {% endfor %}
-                  {% if task.assignees|length > 2 %}
-                    <span class="text-muted ms-1 small">+{{ task.assignees|length - 2 }}</span>
-                  {% endif %}
-                </div>
-                {% elif task.assigned_to %}
+              <div class="cell person-cell" data-assignee-id="{{ task.assigned_to_id or '' }}" {% if current_user.is_internal %}onclick="showPersonDropdown(event, {{ task.id }})"{% endif %}>
+                {% if task.assigned_to %}
                 <div class="person-avatar">{{ (task.assigned_to.first_name or task.assigned_to.email)[0]|upper }}</div>
                 <span class="person-name">{{ task.assigned_to.first_name or task.assigned_to.email }}</span>
                 {% else %}
@@ -1024,28 +1015,18 @@ tr.table-warning:hover {
   <div class="status-option" onclick="setPriority('CRITICAL')"><div class="status-dot" style="background:var(--monday-red)"></div>Crítica</div>
 </div>
 
-<!-- Person Dropdown (multi-select) -->
+<!-- Person Dropdown -->
 <div class="person-dropdown" id="personDropdown" style="display:none;">
-  <div class="p-2 pb-0"><strong>Asignar a:</strong></div>
-  <div class="p-2" style="max-height:260px; overflow:auto;">
-    <div class="form-check">
-      <input class="form-check-input person-checkbox" type="checkbox" value="" id="person-none" data-user-id="" />
-      <label class="form-check-label" for="person-none">Sin asignar</label>
-    </div>
-    {% for u in users %}
-    <div class="form-check">
-      <input class="form-check-input person-checkbox" type="checkbox" id="person-{{ u.id }}" data-user-id="{{ u.id }}" />
-      <label class="form-check-label" for="person-{{ u.id }}">
-        <span class="person-avatar">{{ (u.first_name or u.email)[0]|upper }}</span>
-        {{ u.first_name or u.email }}
-      </label>
-    </div>
-    {% endfor %}
+  <div class="person-option" onclick="setAssignee(null)">
+    <div class="person-avatar" style="background:#ccc">—</div>
+    <span>Sin asignar</span>
   </div>
-  <div class="d-flex justify-content-end gap-2 p-2 border-top">
-    <button class="btn btn-sm btn-secondary" type="button" onclick="cancelPersonDropdown()">Cancelar</button>
-    <button class="btn btn-sm btn-primary" type="button" onclick="saveAssignees()">Guardar</button>
+  {% for u in users %}
+  <div class="person-option" onclick="setAssignee({{ u.id }})">
+    <div class="person-avatar">{{ (u.first_name or u.email)[0]|upper }}</div>
+    <span>{{ u.first_name or u.email }}</span>
   </div>
+  {% endfor %}
 </div>
 
 <!-- Modal Nueva Tarea - World Class Design -->
@@ -1386,17 +1367,14 @@ tr.table-warning:hover {
               <div class="property-item">
                 <label class="property-label">
                   <i class="fa-solid fa-user"></i>
-                  Asignados (Internos)
+                  Asignado (Interno)
                 </label>
-                <div class="p-2" style="max-height:160px; overflow:auto; border:1px solid var(--monday-border); border-radius:6px; background:#fff;">
+                <select name="assigned_to_id" class="form-select">
+                  <option value="">👤 Sin asignar</option>
                   {% for u in users %}
-                  <div class="form-check">
-                    <input class="form-check-input" type="checkbox" name="assignees" id="assignee-{{ u.id }}" value="{{ u.id }}">
-                    <label class="form-check-label" for="assignee-{{ u.id }}">{{ u.first_name or u.email }}</label>
-                  </div>
+                  <option value="{{ u.id }}">{{ u.first_name or u.email }}</option>
                   {% endfor %}
-                </div>
-                <small class="text-muted d-block">Selecciona uno o varios usuarios marcando las casillas.</small>
+                </select>
               </div>
               
               <div class="property-item">
@@ -1664,40 +1642,11 @@ function showPersonDropdown(e, taskId) {
   e.stopPropagation();
   currentTaskId = taskId;
   const dd = document.getElementById('personDropdown');
-  // Clear existing checks
-  document.querySelectorAll('.person-checkbox').forEach(cb => cb.checked = false);
-
-  // Read current assignees from the person-cell inside the task row
-  const row = document.querySelector(`[data-task-id='${taskId}']`);
-  let ids = [];
-  const personCell = row ? row.querySelector('.person-cell') : null;
-  if (personCell && personCell.dataset && personCell.dataset.assignees) {
-    ids = personCell.dataset.assignees ? personCell.dataset.assignees.split(',').filter(Boolean) : [];
-  }
-
-  // Check boxes that match
-  ids.forEach(id => {
-    const el = document.querySelector(`.person-checkbox[data-user-id='${id}']`);
-    if (el) el.checked = true;
-  });
-
   dd.style.display = 'block';
   dd.style.left = e.pageX + 'px';
   dd.style.top = e.pageY + 'px';
   document.getElementById('statusDropdown').style.display = 'none';
   document.getElementById('priorityDropdown').style.display = 'none';
-}
-
-function cancelPersonDropdown() {
-  document.getElementById('personDropdown').style.display = 'none';
-}
-
-function saveAssignees() {
-  const checked = Array.from(document.querySelectorAll('.person-checkbox:checked'))
-                    .map(cb => cb.dataset.userId)
-                    .filter(v => v !== undefined && v !== null && v !== '');
-  updateTask(currentTaskId, 'assignees', checked);
-  document.getElementById('personDropdown').style.display = 'none';
 }
 
 function setStatus(status) {
@@ -1711,9 +1660,7 @@ function setPriority(priority) {
 }
 
 function setAssignee(userId) {
-  // Helper: set single assignee by replacing 'assignees' list with one id (or empty)
-  const payload = userId ? [userId] : [];
-  updateTask(currentTaskId, 'assignees', payload);
+  updateTask(currentTaskId, 'assigned_to_id', userId);
   document.getElementById('personDropdown').style.display = 'none';
 }
 

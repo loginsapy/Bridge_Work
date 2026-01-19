@@ -541,8 +541,10 @@ def project_detail(project_id):
             or_(Task.is_internal_only == False, Task.is_internal_only == None)
         ).order_by(Task.status, Task.priority.desc()).all()
     else:
-        # Participantes solo ven sus tareas asignadas
-        tasks = Task.query.filter_by(project_id=project_id, assigned_to_id=current_user.id).order_by(Task.status, Task.priority.desc()).all()
+        # Participantes solo ven sus tareas asignadas (incluye multi-asignados)
+        tasks = Task.query.filter(Task.project_id == project_id).filter(
+            (Task.assigned_to_id == current_user.id) | (Task.assignees.any(User.id == current_user.id))
+        ).order_by(Task.status, Task.priority.desc()).all()
 
     # Sugeridos para asignación: usuarios internos
     assignees = User.query.filter_by(is_internal=True).order_by(User.first_name).all()
@@ -631,7 +633,10 @@ def reorder_project_tasks(project_id):
     Body: { "ordered_task_ids": [id1, id2, ...] }
     This sets the `position` field for the tasks according to the list order.
     """
+    # Only internal users with role 'PMP' or 'Admin' can reorder tasks
     if not current_user.is_internal:
+        return jsonify({'error': 'Permission denied'}), 403
+    if not getattr(current_user, 'role', None) or current_user.role.name not in ['PMP', 'Admin']:
         return jsonify({'error': 'Permission denied'}), 403
 
     data = request.get_json() or {}
@@ -651,7 +656,40 @@ def reorder_project_tasks(project_id):
             if t:
                 t.position = idx
         db.session.commit()
-        return jsonify({'status': 'ok'})
+
+        # Recompute WBS numbers for current project view and return mapping so client can update UI
+        tasks_all = Task.query.filter_by(project_id=project_id).all()
+        tasks_by_id = {t.id: t for t in tasks_all}
+        children_map = {t.id: [] for t in tasks_all}
+        root_ids = []
+        for t in tasks_all:
+            if t.parent_task_id and t.parent_task_id in tasks_by_id:
+                children_map[t.parent_task_id].append(t)
+            else:
+                root_ids.append(t.id)
+
+        status_order = {'BACKLOG': 0, 'IN_PROGRESS': 1, 'IN_REVIEW': 2, 'COMPLETED': 3}
+        priority_order = {'CRITICAL': 3, 'HIGH': 2, 'MEDIUM': 1, 'LOW': 0}
+        def sort_key(x):
+            if getattr(x, 'position', None) is not None:
+                return (0, x.position)
+            return (1, status_order.get(x.status, 99), -priority_order.get(x.priority, 0), x.title or '')
+
+        wbs_map = {}
+        def build_and_assign(tid, depth=0, prefix='', index=1):
+            t = tasks_by_id[tid]
+            wbs = f"{prefix}.{index}" if prefix else str(index)
+            wbs_map[tid] = wbs
+            children = sorted(children_map[tid], key=sort_key)
+            for i, c in enumerate(children, 1):
+                build_and_assign(c.id, depth+1, wbs, i)
+
+        roots = [tasks_by_id[rid] for rid in root_ids]
+        roots_sorted = sorted(roots, key=sort_key)
+        for i, r in enumerate(roots_sorted, 1):
+            build_and_assign(r.id, 0, '', i)
+
+        return jsonify({'status': 'ok', 'wbs': wbs_map})
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
