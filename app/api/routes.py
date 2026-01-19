@@ -356,12 +356,12 @@ def update_task(task_id):
 
         # assigned_to change
         new_assigned_to = t.assigned_to_id
-        if 'assigned_to_id' in data and new_assigned_to and new_assigned_to != old_assigned_to and new_assigned_to != getattr(current_user, 'id', None):
+        if 'assigned_to_id' in data and new_assigned_to and new_assigned_to != old_assigned_to:
             NotificationService.notify_task_assigned(task=t, assigned_by_user=current_user if getattr(current_user, 'is_authenticated', False) else None, send_email=send_email, notify_client=False)
 
         # assigned_client change
         new_assigned_client = t.assigned_client_id
-        if 'assigned_client_id' in data and new_assigned_client and new_assigned_client != old_assigned_client and new_assigned_client != getattr(current_user, 'id', None):
+        if 'assigned_client_id' in data and new_assigned_client and new_assigned_client != old_assigned_client:
             NotificationService.notify_task_assigned(task=t, assigned_by_user=current_user if getattr(current_user, 'is_authenticated', False) else None, send_email=send_email, notify_client=True)
 
         # assignees change: notify newly added assigned users

@@ -547,7 +547,7 @@ def project_detail(project_id):
         ).order_by(Task.status, Task.priority.desc()).all()
 
     # Sugeridos para asignación: usuarios internos
-    assignees = User.query.filter_by(is_internal=True).order_by(User.first_name).all()
+    assignees = User.query.filter_by(is_internal=True, is_active=True).order_by(User.first_name).all()
     # Candidate predecessors: all tasks in this project (for parent selection and dependencies)
     candidate_predecessors = Task.query.filter(Task.project_id == project_id).order_by(Task.title).all()
     
@@ -740,7 +740,7 @@ def project_kanban(project_id):
     else:
         tasks = Task.query.filter_by(project_id=project_id, assigned_to_id=current_user.id).all()
     
-    assignees = User.query.filter_by(is_internal=True).order_by(User.first_name).all()
+    assignees = User.query.filter_by(is_internal=True, is_active=True).order_by(User.first_name).all()
     metrics = calculate_project_metrics(project_id)
     
     # Agrupar tareas por estado
@@ -800,7 +800,7 @@ def project_gantt(project_id):
     else:
         tasks = Task.query.filter_by(project_id=project_id, assigned_to_id=current_user.id).order_by(Task.position, Task.id).all()
     
-    assignees = User.query.filter_by(is_internal=True).order_by(User.first_name).all()
+    assignees = User.query.filter_by(is_internal=True, is_active=True).order_by(User.first_name).all()
     metrics = calculate_project_metrics(project_id)
     
     # Preparar datos para el Gantt
@@ -897,6 +897,11 @@ def create_task():
             task.assignees = users
             # Keep compatibility with single assigned_to_id: use first selected if any
             task.assigned_to_id = users[0].id if users else None
+        else:
+            # Handle single assignee from assigned_to_id field (for backwards compatibility)
+            assigned_to_id = request.form.get('assigned_to_id')
+            if assigned_to_id and assigned_to_id.strip():
+                task.assigned_to_id = int(assigned_to_id)
 
         # Parent task (hierarchy)
         parent_task_id = request.form.get('parent_task_id')
@@ -976,28 +981,27 @@ def create_task():
         send_email = send_email_setting == 'true' or send_email_setting == True
         email_sent = False
 
-        # If we created with multiple assignees via form, notify each (excluding creator)
+        # If we created with multiple assignees via form, notify each (including self-assignment)
         if assignee_ids:
             project_obj = Project.query.get(task.project_id) if task.project_id else None
             for uid in set(assignee_ids):
-                if uid != getattr(current_user, 'id', None):
-                    try:
-                        NotificationService.notify(
-                            user_id=uid,
-                            title='Nueva tarea asignada',
-                            message=f"Se te ha asignado la tarea '{task.title}'{(' en el proyecto '+project_obj.name) if project_obj else ''}",
-                            notification_type=NotificationService.TASK_ASSIGNED,
-                            related_entity_type='task',
-                            related_entity_id=task.id,
-                            send_email=send_email,
-                            email_context={'task': task, 'project': project_obj, 'assigned_by': current_user}
-                        )
-                        email_sent = True
-                    except Exception:
-                        current_app.logger.exception('Failed to notify new assignee %s for task %s', uid, task.id)
+                try:
+                    NotificationService.notify(
+                        user_id=uid,
+                        title='Nueva tarea asignada',
+                        message=f"Se te ha asignado la tarea '{task.title}'{(' en el proyecto '+project_obj.name) if project_obj else ''}",
+                        notification_type=NotificationService.TASK_ASSIGNED,
+                        related_entity_type='task',
+                        related_entity_id=task.id,
+                        send_email=send_email,
+                        email_context={'task': task, 'project': project_obj, 'assigned_by': current_user}
+                    )
+                    email_sent = True
+                except Exception:
+                    current_app.logger.exception('Failed to notify new assignee %s for task %s', uid, task.id)
         else:
             # Backwards compatibility: notify single assigned_to_id if provided
-            if task.assigned_to_id and task.assigned_to_id != current_user.id:
+            if task.assigned_to_id:
                 NotificationService.notify_task_assigned(
                     task=task,
                     assigned_by_user=current_user,
@@ -1916,7 +1920,7 @@ def team():
     if not _ensure_pmp():
         return redirect(url_for('main.index'))
     # Obtener usuarios internos
-    internal_users = User.query.filter_by(is_internal=True).all()
+    internal_users = User.query.filter_by(is_internal=True, is_active=True).all()
     
     # Estadísticas de tareas por estado para cada usuario interno
     for u in internal_users:
@@ -2640,27 +2644,26 @@ def edit_task(task_id):
             send_email = send_email_setting == 'true' or send_email_setting == True
             email_sent = False
 
-            # Notify newly added assignees (for multi-assign)
+            # Notify newly added assignees (for multi-assign) - including self-assignment
             new_assignees = set([u.id for u in task.assignees]) if getattr(task, 'assignees', None) else set()
             added = new_assignees - old_assignees
             if added:
                 project_obj = Project.query.get(task.project_id) if task.project_id else None
                 for uid in added:
-                    if uid != getattr(current_user, 'id', None):
-                        try:
-                            NotificationService.notify(
-                                user_id=uid,
-                                title='Nueva tarea asignada',
-                                message=f"Se te ha asignado la tarea '{task.title}'{(' en el proyecto '+project_obj.name) if project_obj else ''}",
-                                notification_type=NotificationService.TASK_ASSIGNED,
-                                related_entity_type='task',
-                                related_entity_id=task.id,
-                                send_email=send_email,
-                                email_context={'task': task, 'project': project_obj, 'assigned_by': current_user}
-                            )
-                            email_sent = True
-                        except Exception:
-                            current_app.logger.exception('Failed to notify new assignee %s for task %s', uid, task.id)
+                    try:
+                        NotificationService.notify(
+                            user_id=uid,
+                            title='Nueva tarea asignada',
+                            message=f"Se te ha asignado la tarea '{task.title}'{(' en el proyecto '+project_obj.name) if project_obj else ''}",
+                            notification_type=NotificationService.TASK_ASSIGNED,
+                            related_entity_type='task',
+                            related_entity_id=task.id,
+                            send_email=send_email,
+                            email_context={'task': task, 'project': project_obj, 'assigned_by': current_user}
+                        )
+                        email_sent = True
+                    except Exception:
+                        current_app.logger.exception('Failed to notify new assignee %s for task %s', uid, task.id)
 
             # Notificar si se asignó a un nuevo cliente
             if new_assigned_client_id and new_assigned_client_id != old_assigned_client_id and new_assigned_client_id != current_user.id:
@@ -2682,7 +2685,7 @@ def edit_task(task_id):
             flash(f'Error al actualizar: {str(e)}', 'danger')
 
     # Provide user list for assignment
-    users = User.query.filter_by(is_internal=True).order_by(User.first_name).all()
+    users = User.query.filter_by(is_internal=True, is_active=True).order_by(User.first_name).all()
     # Candidate predecessors: tasks within the same project (exclude self)
     candidate_predecessors = Task.query.filter(Task.project_id == project.id, Task.id != task.id).order_by(Task.title).all()
     return render_template('task_edit.html', task=task, project=project, users=users, candidate_predecessors=candidate_predecessors)
