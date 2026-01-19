@@ -1875,8 +1875,27 @@ def time_entries():
     # Total hours visible in this filtered view
     total_hours_week = query.with_entities(func.sum(TimeEntry.hours)).filter(TimeEntry.date >= (datetime.now().date() - timedelta(days=7))).scalar() or 0
 
-    # If PMP/Admin, expose list of users for filter
-    users = User.query.order_by(User.first_name).all() if user_role in ['PMP', 'Admin'] else []
+    # If PMP/Admin, expose list of users for filter (only users that have time entries within the date filters)
+    users = []
+    if user_role in ['PMP', 'Admin']:
+        user_ids_q = db.session.query(TimeEntry.user_id.distinct())
+        if start_date_s:
+            try:
+                s_date = datetime.strptime(start_date_s, '%Y-%m-%d').date()
+                user_ids_q = user_ids_q.filter(TimeEntry.date >= s_date)
+            except Exception:
+                pass
+        if end_date_s:
+            try:
+                e_date = datetime.strptime(end_date_s, '%Y-%m-%d').date()
+                user_ids_q = user_ids_q.filter(TimeEntry.date <= e_date)
+            except Exception:
+                pass
+        user_ids = [r[0] for r in user_ids_q.all()]
+        if user_ids:
+            users = User.query.filter(User.id.in_(user_ids)).order_by(User.first_name).all()
+        else:
+            users = []
 
     # Build pagination urls (preserve filters)
     params = request.args.to_dict()

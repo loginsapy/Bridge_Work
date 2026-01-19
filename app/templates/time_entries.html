@@ -29,6 +29,17 @@
   color: var(--monday-green);
 }
 
+/* Ensure the header action button is styled correctly */
+.time-page-header .monday-btn-primary {
+  background: var(--monday-blue) !important;
+  color: white !important;
+  border: none !important;
+  padding: 8px 14px !important;
+  box-shadow: 0 6px 20px rgba(13,110,253,0.08);
+}
+.time-page-header .monday-btn-primary:hover { background: var(--monday-blue-hover) !important; transform: translateY(-1px); }
+.time-page-header .monday-btn-primary:active { transform: translateY(0); }
+
 /* Week Summary Card */
 .week-summary {
   display: flex;
@@ -295,10 +306,10 @@
     {{ _('time_header') }}
   </h1>
   {% if current_user.is_internal %}
-  <a href="{{ url_for('main.create_time_entry') }}" class="monday-btn monday-btn-primary">
+  <button type="button" onclick="window.location='{{ url_for('main.create_time_entry') }}'" class="monday-btn monday-btn-primary">
     <i class="fa-solid fa-plus"></i>
     {{ _('register_hours') }}
-  </a>
+  </button>
   {% endif %}
 </div>
 
@@ -341,21 +352,21 @@
       <div class="time-filter-chips" style="margin-left:auto;">
         {% if request.args.get('start_date') %}
           {% set p = request.args.to_dict() %}
-          {% set _ = p.pop('start_date', None) %}
+          {% set _removed = p.pop('start_date', None) %}
           <a href="{{ url_for('main.time_entries', **p) }}" class="filter-chip">
             <i class="fa-solid fa-calendar-day"></i>&nbsp; {{ _('from') }}: {{ request.args.get('start_date') }} <i class="fa-solid fa-xmark ms-2" aria-hidden="true"></i>
           </a>
         {% endif %}
         {% if request.args.get('end_date') %}
           {% set p = request.args.to_dict() %}
-          {% set _ = p.pop('end_date', None) %}
+          {% set _removed = p.pop('end_date', None) %}
           <a href="{{ url_for('main.time_entries', **p) }}" class="filter-chip">
             <i class="fa-solid fa-calendar-day"></i>&nbsp; {{ _('to') }}: {{ request.args.get('end_date') }} <i class="fa-solid fa-xmark ms-2" aria-hidden="true"></i>
           </a>
         {% endif %}
         {% if request.args.get('user_id') %}
           {% set p = request.args.to_dict() %}
-          {% set _ = p.pop('user_id', None) %}
+          {% set _removed = p.pop('user_id', None) %}
           {% set selected_user = users|selectattr('id','equalto', request.args.get('user_id')|int)|first %}
           <a href="{{ url_for('main.time_entries', **p) }}" class="filter-chip">
             <i class="fa-solid fa-user"></i>&nbsp; {{ _('user') }}: {{ (selected_user.first_name or selected_user.email) if selected_user else request.args.get('user_id') }} <i class="fa-solid fa-xmark ms-2" aria-hidden="true"></i>

@@ -631,15 +631,19 @@ function showDescendantModal(taskId, preds) {
 <script>
 // Search functionality
 document.getElementById('taskSearch').addEventListener('input', function(e) {
-  const searchTerm = e.target.value.toLowerCase();
+  const searchTerm = e.target.value.toLowerCase().trim();
   const rows = document.querySelectorAll('.monday-board-row');
-  
+
   rows.forEach(row => {
     const title = row.querySelector('.task-title')?.textContent.toLowerCase() || '';
     const project = row.querySelector('.project-badge')?.textContent.toLowerCase() || '';
     const desc = row.querySelector('.task-description')?.textContent.toLowerCase() || '';
-    const assignee = row.querySelector('.assignee-cell')?.textContent.toLowerCase() || '';
-    
+    // include visible text AND title/aria-label attributes for avatars (covers initials + hidden full names)
+    let assignee = row.querySelector('.assignee-cell')?.textContent.toLowerCase() || '';
+    row.querySelectorAll('.assignee-cell [title], .assignee-cell [aria-label]').forEach(el => {
+      assignee += ' ' + ((el.getAttribute('title') || el.getAttribute('aria-label') || '').toLowerCase());
+    });
+
     if (title.includes(searchTerm) || project.includes(searchTerm) || desc.includes(searchTerm) || assignee.includes(searchTerm)) {
       row.style.display = '';
     } else {

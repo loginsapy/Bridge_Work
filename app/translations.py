@@ -176,6 +176,8 @@ TRANSLATIONS = {
         'no_time_entries': 'No hay registros de tiempo',
         'delete_entry': '¿Eliminar este registro?',
         'per_month': '/mes',
+        'all_users': 'Todos los usuarios',
+        'showing': 'Mostrando',
         
         # Team
         'team_header': 'Equipo Interno',
@@ -810,6 +812,8 @@ TRANSLATIONS = {
         'no_time_entries': 'No time entries',
         'delete_entry': 'Delete this entry?',
         'per_month': '/month',
+        'all_users': 'All users',
+        'showing': 'Showing',
         
         # Team
         'team_header': 'Internal Team',
