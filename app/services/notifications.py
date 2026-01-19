@@ -358,6 +358,8 @@ class NotificationService:
                 task_url = f"/task/{task.id}"
             current_app.logger.debug(f"build task_url fallback -> {task_url}")
 
+        current_app.logger.info(f"notify_task_assigned: enviando a {assignee.email}, send_email={send_email}, notify_client={notify_client}")
+        
         return cls.notify(
             user_id=user_id,
             title=title,

@@ -301,7 +301,48 @@ document.addEventListener('DOMContentLoaded', function() {
   if (dropdown) {
     dropdown.addEventListener('show.bs.dropdown', loadNotifications);
   }
+
+  // Auto-refresh notifications every 30 seconds
+  setInterval(function() {
+    // Only update the badge count, not the full list (to avoid interrupting user)
+    updateNotificationBadge();
+  }, 30000); // 30 seconds
 });
+
+// Function to update only the notification badge count
+function updateNotificationBadge() {
+  fetch('{{ url_for("main.recent_notifications") }}')
+    .then(r => r.json())
+    .then(data => {
+      const badge = document.querySelector('.notification-badge');
+      const btn = document.getElementById('notificationBtn');
+      const badgeDot = btn ? btn.querySelector('.badge-dot') : null;
+
+      if (data.unread_count > 0) {
+        // Update or create badge
+        if (badge) {
+          badge.textContent = data.unread_count < 100 ? data.unread_count : '99+';
+          badge.style.display = 'inline-block';
+        } else {
+          const newBadge = document.createElement('span');
+          newBadge.className = 'position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger notification-badge';
+          newBadge.style.fontSize = '0.65rem';
+          newBadge.textContent = data.unread_count < 100 ? data.unread_count : '99+';
+          btn.appendChild(newBadge);
+        }
+
+        // Show badge dot if not already visible
+        if (badgeDot) {
+          badgeDot.style.display = 'block';
+        }
+      } else {
+        // Hide badges when no unread notifications
+        if (badge) badge.style.display = 'none';
+        if (badgeDot) badgeDot.style.display = 'none';
+      }
+    })
+    .catch(err => console.error('Error updating notification badge:', err));
+}
 </script>
 
 <!-- Global Search Styles -->

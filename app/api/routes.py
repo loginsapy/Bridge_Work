@@ -292,6 +292,12 @@ def create_task():
     )
     try:
         db.session.add(t)
+        db.session.flush()  # Get task ID
+        
+        # Assign position at the end of the list
+        max_position = db.session.query(db.func.max(Task.position)).filter(Task.project_id == t.project_id).scalar()
+        t.position = (max_position + 1) if max_position is not None else 0
+        
         db.session.commit()
         # If API provided multiple assignees, assign them after creation
         if validated.get('assignees'):

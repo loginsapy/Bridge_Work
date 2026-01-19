@@ -1494,9 +1494,10 @@ tr.table-warning:hover {
             <button type="button" class="btn btn-cancel" data-bs-dismiss="modal">
               Cancelar
             </button>
-            <button type="submit" class="btn btn-create">
-              <i class="fa-solid fa-plus"></i>
-              Crear Tarea
+            <button type="submit" class="btn btn-create" id="createTaskBtn">
+              <span class="spinner-border spinner-border-sm d-none me-2" role="status" aria-hidden="true" id="createTaskSpinner"></span>
+              <i class="fa-solid fa-plus me-1"></i>
+              <span id="createTaskText">Crear Tarea</span>
             </button>
           </div>
         </div>
@@ -1564,6 +1565,21 @@ document.querySelector('.task-modal .title-input')?.addEventListener('keydown', 
     e.preventDefault();
     document.getElementById('newTaskForm').submit();
   }
+});
+
+// Handle form submission with loading state
+document.getElementById('newTaskForm')?.addEventListener('submit', function(e) {
+  const btn = document.getElementById('createTaskBtn');
+  const spinner = document.getElementById('createTaskSpinner');
+  const text = document.getElementById('createTaskText');
+  
+  // Disable button and show loading
+  btn.disabled = true;
+  spinner.classList.remove('d-none');
+  text.textContent = 'Creando y notificando participantes...';
+  
+  // The form will redirect on success, so this is mainly for user feedback
+  // If there's an error, the page will reload with flash messages
 });
 </script>
 {% endif %}

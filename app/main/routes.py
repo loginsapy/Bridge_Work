@@ -919,6 +919,10 @@ def create_task():
         db.session.add(task)
         db.session.flush()  # Get task ID
 
+        # Assign position at the end of the list
+        max_position = db.session.query(db.func.max(Task.position)).filter(Task.project_id == project.id).scalar()
+        task.position = (max_position + 1) if max_position is not None else 0
+
         # Handle predecessors at creation time (if provided)
         predecessor_ids = [int(x) for x in request.form.getlist('predecessor_ids') if x and x.strip()]
         if predecessor_ids:
