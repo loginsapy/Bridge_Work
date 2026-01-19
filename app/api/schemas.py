@@ -21,6 +21,7 @@ class TaskSchema(Schema):
     title = fields.Str(required=True, validate=validate.Length(min=1))
     description = fields.Str(allow_none=True)
     assigned_to_id = fields.Int(allow_none=True)
+    assignees = fields.List(fields.Int(), allow_none=True)
     assigned_client_id = fields.Int(allow_none=True)
     status = fields.Str(load_default="BACKLOG")
     priority = fields.Str(load_default="MEDIUM")

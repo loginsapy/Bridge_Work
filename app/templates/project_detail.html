@@ -137,7 +137,15 @@
             </td>
             <td>
               <div class="d-flex flex-column">
-                {% if task.assigned_to %}
+                {% if task.assignees and task.assignees|length > 0 %}
+                  <div class="d-flex align-items-center">
+                    {% for a in task.assignees[:2] %}
+                      <div class="rounded-circle bg-light text-primary d-flex align-items-center justify-content-center me-2" style="width: 24px; height: 24px; font-size: 10px;">{{ (a.first_name or a.email)[0]|upper }}</div>
+                    {% endfor %}
+                    <small>{{ task.assignees[0].first_name or task.assignees[0].email }}</small>
+                    {% if task.assignees|length > 1 %}<small class="text-muted ms-2">(+{{ task.assignees|length - 1 }} más)</small>{% endif %}
+                  </div>
+                {% elif task.assigned_to %}
                   <div class="d-flex align-items-center">
                     <div class="rounded-circle bg-light text-primary d-flex align-items-center justify-content-center me-2" style="width: 24px; height: 24px; font-size: 10px;">
                       {{ task.assigned_to.first_name[0] if task.assigned_to.first_name else 'U' }}
@@ -155,7 +163,7 @@
                   </div>
                 {% endif %}
 
-                {% if not task.assigned_to and not task.assigned_client %}
+                {% if not (task.assignees and task.assignees|length > 0) and not task.assigned_client and not task.assigned_to %}
                   <span class="text-muted small">Sin asignar</span>
                 {% endif %}
               </div>

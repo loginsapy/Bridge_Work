@@ -1,7 +1,7 @@
 from flask import jsonify, request, abort
 from . import api_bp
 from .. import db
-from ..models import Project, Task, TimeEntry
+from ..models import Project, Task, TimeEntry, User
 from sqlalchemy.exc import SQLAlchemyError
 from datetime import date, datetime
 from marshmallow import ValidationError
@@ -34,6 +34,8 @@ def task_to_dict(t: Task):
         "title": t.title,
         "description": t.description,
         "assigned_to_id": t.assigned_to_id,
+        "assignees": [u.id for u in (t.assignees or [])],
+        "assignees_info": [{"id": u.id, "name": (u.first_name or u.email.split('@')[0])} for u in (t.assignees or [])],
         "assigned_client_id": t.assigned_client_id,
         "status": t.status,
         "priority": t.priority,
@@ -193,6 +195,12 @@ def list_tasks():
             q = q.filter(Task.assigned_to_id == aid)
         except ValueError:
             return jsonify({"error": "invalid assigned_to_id"}), 400
+    if 'assignee_id' in request.args:
+        try:
+            aid = int(request.args['assignee_id'])
+            q = q.filter((Task.assigned_to_id == aid) | (Task.assignees.any(User.id == aid)))
+        except ValueError:
+            return jsonify({"error": "invalid assignee_id"}), 400
     if 'status' in request.args:
         q = q.filter(Task.status == request.args['status'])
 
@@ -285,6 +293,11 @@ def create_task():
     try:
         db.session.add(t)
         db.session.commit()
+        # If API provided multiple assignees, assign them after creation
+        if validated.get('assignees'):
+            users = User.query.filter(User.id.in_(validated.get('assignees'))).all()
+            t.assignees = users
+            db.session.commit()
     except SQLAlchemyError as e:
         db.session.rollback()
         abort(500, description=str(e))
@@ -308,6 +321,7 @@ def update_task(task_id):
     # Capture old assignment values to detect changes
     old_assigned_to = t.assigned_to_id
     old_assigned_client = t.assigned_client_id
+    old_assignees = set([u.id for u in t.assignees]) if getattr(t, 'assignees', None) else set()
 
     for field in ["project_id", "parent_task_id", "title", "description", "assigned_to_id", "assigned_client_id", "status", "priority", "start_date", "due_date", "is_external_visible", "estimated_hours"]:
         if field in data:
@@ -315,13 +329,23 @@ def update_task(task_id):
                 setattr(t, field, parse_datetime(data[field]))
             else:
                 setattr(t, field, data[field])
+
+    # Handle 'assignees' (list of user ids) explicitly
+    if 'assignees' in data:
+        try:
+            new_ids = set([int(x) for x in (data.get('assignees') or [])])
+        except Exception:
+            return jsonify({'error': 'assignees must be a list of user ids'}), 400
+        users = User.query.filter(User.id.in_(list(new_ids))).all()
+        t.assignees = users
+
     try:
         db.session.commit()
     except SQLAlchemyError as e:
         db.session.rollback()
         abort(500, description=str(e))
 
-    # After commit: notify on assignment changes (for API updates which previously didn't notify)
+    # After commit: notify on assignment changes (for API updates)
     try:
         from flask_login import current_user
         from app.services.notifications import NotificationService
@@ -339,6 +363,28 @@ def update_task(task_id):
         new_assigned_client = t.assigned_client_id
         if 'assigned_client_id' in data and new_assigned_client and new_assigned_client != old_assigned_client and new_assigned_client != getattr(current_user, 'id', None):
             NotificationService.notify_task_assigned(task=t, assigned_by_user=current_user if getattr(current_user, 'is_authenticated', False) else None, send_email=send_email, notify_client=True)
+
+        # assignees change: notify newly added assigned users
+        new_assignees = set([u.id for u in t.assignees]) if getattr(t, 'assignees', None) else set()
+        added = new_assignees - old_assignees
+        if added:
+            # Build email_context
+            project = Project.query.get(t.project_id) if t.project_id else None
+            for uid in added:
+                try:
+                    NotificationService.notify(
+                        user_id=uid,
+                        title='Nueva tarea asignada',
+                        message=f"Se te ha asignado la tarea '{t.title}'{(' en el proyecto '+project.name) if project else ''}",
+                        notification_type=NotificationService.TASK_ASSIGNED,
+                        related_entity_type='task',
+                        related_entity_id=t.id,
+                        send_email=send_email,
+                        email_context={'task': t, 'project': project, 'assigned_by': current_user}
+                    )
+                except Exception:
+                    current_app.logger.exception('Failed to notify new assignee %s for task %s', uid, t.id)
+
     except Exception as e:
         # Log and ignore notification errors to keep API update successful
         current_app.logger.exception('Error while sending assignment notifications: %s', e)

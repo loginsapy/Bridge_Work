@@ -119,9 +119,9 @@ def index():
             'ARCHIVED': Project.query.filter_by(status='ARCHIVED').order_by(Project.end_date.desc()).all()
         }
     elif user_role == 'Participante':
-        # Participante ve solo proyectos donde tiene tareas asignadas
+        # Participante ve solo proyectos donde tiene tareas asignadas (incluyendo multi-asignados)
         user_project_ids = db.session.query(Task.project_id).filter(
-            Task.assigned_to_id == current_user.id
+            (Task.assigned_to_id == current_user.id) | (Task.assignees.any(User.id == current_user.id))
         ).distinct().subquery()
         
         active_projects_count = db.session.query(func.count(Project.id)).filter(
@@ -130,12 +130,12 @@ def index():
         ).scalar()
         tasks_completed_count = db.session.query(func.count(Task.id)).filter(
             Task.status == 'COMPLETED',
-            Task.assigned_to_id == current_user.id
+            (Task.assigned_to_id == current_user.id) | (Task.assignees.any(User.id == current_user.id))
         ).scalar()
         recent_projects = Project.query.filter(Project.id.in_(user_project_ids)).order_by(Project.start_date.desc()).limit(5).all()
         recent_activity = Task.query.filter(
             Task.status == 'COMPLETED',
-            Task.assigned_to_id == current_user.id
+            (Task.assigned_to_id == current_user.id) | (Task.assignees.any(User.id == current_user.id))
         ).order_by(Task.due_date.desc()).limit(5).all()
         projects_by_status = {
             'PLANNING': Project.query.filter(Project.status == 'PLANNING', Project.id.in_(user_project_ids)).order_by(Project.start_date.desc()).all(),
@@ -512,7 +512,9 @@ def project_detail(project_id):
         pass
     elif user_role == 'Participante':
         # Participante solo puede ver proyectos donde tiene tareas asignadas o es miembro
-        has_tasks = Task.query.filter_by(project_id=project_id, assigned_to_id=current_user.id).first()
+        has_tasks = Task.query.filter(Task.project_id == project_id).filter(
+            (Task.assigned_to_id == current_user.id) | (Task.assignees.any(User.id == current_user.id))
+        ).first()
         is_member = current_user in project.members
         if not has_tasks and not is_member:
             flash('No tienes permiso para ver este proyecto.', 'danger')
@@ -672,7 +674,9 @@ def project_kanban(project_id):
     if user_role in ['PMP', 'Admin']:
         pass
     elif user_role == 'Participante':
-        has_tasks = Task.query.filter_by(project_id=project_id, assigned_to_id=current_user.id).first()
+        has_tasks = Task.query.filter(Task.project_id == project_id).filter(
+            (Task.assigned_to_id == current_user.id) | (Task.assignees.any(User.id == current_user.id))
+        ).first()
         if not has_tasks:
             flash('No tienes permiso para ver este proyecto.', 'danger')
             return redirect(url_for('main.projects'))
@@ -688,7 +692,9 @@ def project_kanban(project_id):
     if user_role in ['PMP', 'Admin']:
         tasks = Task.query.filter_by(project_id=project_id).all()
     elif user_role == 'Participante':
-        tasks = Task.query.filter_by(project_id=project_id, assigned_to_id=current_user.id).all()
+        tasks = Task.query.filter(Task.project_id == project_id).filter(
+            (Task.assigned_to_id == current_user.id) | (Task.assignees.any(User.id == current_user.id))
+        ).all()
     elif user_role == 'Cliente' or not current_user.is_internal:
         tasks = Task.query.filter(Task.project_id == project_id).filter(
             (Task.is_external_visible == True) | (Task.assigned_client_id == current_user.id)
@@ -708,6 +714,93 @@ def project_kanban(project_id):
     }
     
     return render_template('kanban.html', project=project, tasks_by_status=tasks_by_status, 
+                          metrics=metrics, users=assignees, now=datetime.now())
+
+
+@main_bp.route('/project/<int:project_id>/gantt')
+@login_required
+def project_gantt(project_id):
+    """Vista Gantt del proyecto con timeline de tareas."""
+    project = Project.query.get_or_404(project_id)
+    from ..auth.decorators import _get_user_from_session
+    user = _get_user_from_session()
+    user_role = user.role.name if (user and user.role) else None
+
+    # Usuario sin rol: no puede ver nada
+    if not user_role:
+        flash('No tienes un rol asignado. Contacta al administrador para obtener acceso.', 'warning')
+        return redirect(url_for('main.projects'))
+
+    # Control de acceso según rol
+    if user_role in ['PMP', 'Admin']:
+        pass
+    elif user_role == 'Participante':
+        has_tasks = Task.query.filter_by(project_id=project_id, assigned_to_id=current_user.id).first()
+        is_member = current_user in project.members
+        if not has_tasks and not is_member:
+            flash('No tienes permiso para ver este proyecto.', 'danger')
+            return redirect(url_for('main.projects'))
+    elif user_role == 'Cliente' or not current_user.is_internal:
+        if current_user not in project.clients:
+            flash('No tienes permiso para ver este proyecto.', 'danger')
+            return redirect(url_for('main.projects'))
+    else:
+        flash('No tienes permiso para ver este proyecto.', 'danger')
+        return redirect(url_for('main.projects'))
+
+    # Filtrar tareas según rol
+    if user_role in ['PMP', 'Admin']:
+        tasks = Task.query.filter_by(project_id=project_id).order_by(Task.position, Task.id).all()
+    elif user_role == 'Participante':
+        tasks = Task.query.filter_by(project_id=project_id, assigned_to_id=current_user.id).order_by(Task.position, Task.id).all()
+    elif user_role == 'Cliente' or not current_user.is_internal:
+        from sqlalchemy import or_
+        tasks = Task.query.filter(
+            Task.project_id == project_id,
+            or_(Task.is_internal_only == False, Task.is_internal_only == None)
+        ).order_by(Task.position, Task.id).all()
+    else:
+        tasks = Task.query.filter_by(project_id=project_id, assigned_to_id=current_user.id).order_by(Task.position, Task.id).all()
+    
+    assignees = User.query.filter_by(is_internal=True).order_by(User.first_name).all()
+    metrics = calculate_project_metrics(project_id)
+    
+    # Preparar datos para el Gantt
+    gantt_tasks = []
+    for task in tasks:
+        # Necesitamos start_date y due_date para mostrar en el Gantt
+        start = task.start_date
+        end = task.due_date
+        
+        # Si no hay fechas, usar valores por defecto
+        if not start and not end:
+            continue  # Omitir tareas sin fechas en el Gantt
+        
+        if not start:
+            start = end
+        if not end:
+            # Estimar duración basada en horas estimadas o usar 1 día por defecto
+            from datetime import timedelta
+            days = int(task.estimated_hours / 8) if task.estimated_hours else 1
+            end = start + timedelta(days=max(1, days))
+        
+        # Construir lista de dependencias (predecessors)
+        dependencies = ','.join([str(p.id) for p in task.predecessors]) if task.predecessors else ''
+        
+        gantt_tasks.append({
+            'id': str(task.id),
+            'name': task.title,
+            'start': start.strftime('%Y-%m-%d') if hasattr(start, 'strftime') else str(start)[:10],
+            'end': end.strftime('%Y-%m-%d') if hasattr(end, 'strftime') else str(end)[:10],
+            'progress': 100 if task.status == 'COMPLETED' else (50 if task.status in ['IN_PROGRESS', 'IN_REVIEW'] else 0),
+            'dependencies': dependencies,
+            'status': task.status,
+            'priority': task.priority,
+            'assignee': task.assigned_to.first_name if task.assigned_to else None,
+            'parent_id': task.parent_task_id
+        })
+    
+    return render_template('gantt.html', project=project, tasks=tasks, gantt_tasks=gantt_tasks,
                           metrics=metrics, users=assignees, now=datetime.now())
 
 
@@ -759,10 +852,13 @@ def create_task():
         if estimated_hours and estimated_hours.strip():
             task.estimated_hours = float(estimated_hours)
 
-        # Assign to a user if provided
-        assigned_to_id = request.form.get('assigned_to_id')
-        if assigned_to_id and assigned_to_id.strip():
-            task.assigned_to_id = int(assigned_to_id)
+        # Assign to a user(s) if provided (multi-select)
+        assignee_ids = [int(x) for x in request.form.getlist('assignees') if x and x.strip()]
+        if assignee_ids:
+            users = User.query.filter(User.id.in_(assignee_ids)).all()
+            task.assignees = users
+            # Keep compatibility with single assigned_to_id: use first selected if any
+            task.assigned_to_id = users[0].id if users else None
 
         # Parent task (hierarchy)
         parent_task_id = request.form.get('parent_task_id')
@@ -786,7 +882,15 @@ def create_task():
             task.validate_predecessor_ids(predecessor_ids)
             preds = Task.query.filter(Task.id.in_(predecessor_ids)).all()
             task.predecessors = preds
-        
+
+        # If assignees were provided via form, notify them (and persist)
+        assignee_ids = [int(x) for x in request.form.getlist('assignees') if x and x.strip()]
+        if assignee_ids:
+            users = User.query.filter(User.id.in_(assignee_ids)).all()
+            task.assignees = users
+            # Keep compat with single assigned_to_id
+            task.assigned_to_id = users[0].id if users else None
+
         # Registrar auditoría de creación
         audit = AuditLog(
             entity_type='Task',
@@ -833,17 +937,37 @@ def create_task():
         send_email_setting = SystemSettings.get('notify_task_assigned', 'true')
         send_email = send_email_setting == 'true' or send_email_setting == True
         email_sent = False
-        
-        # Notificar al usuario interno asignado (si es diferente al creador)
-        if task.assigned_to_id and task.assigned_to_id != current_user.id:
-            NotificationService.notify_task_assigned(
-                task=task,
-                assigned_by_user=current_user,
-                send_email=send_email,
-                notify_client=False
-            )
-            email_sent = True
-        
+
+        # If we created with multiple assignees via form, notify each (excluding creator)
+        if assignee_ids:
+            project_obj = Project.query.get(task.project_id) if task.project_id else None
+            for uid in set(assignee_ids):
+                if uid != getattr(current_user, 'id', None):
+                    try:
+                        NotificationService.notify(
+                            user_id=uid,
+                            title='Nueva tarea asignada',
+                            message=f"Se te ha asignado la tarea '{task.title}'{(' en el proyecto '+project_obj.name) if project_obj else ''}",
+                            notification_type=NotificationService.TASK_ASSIGNED,
+                            related_entity_type='task',
+                            related_entity_id=task.id,
+                            send_email=send_email,
+                            email_context={'task': task, 'project': project_obj, 'assigned_by': current_user}
+                        )
+                        email_sent = True
+                    except Exception:
+                        current_app.logger.exception('Failed to notify new assignee %s for task %s', uid, task.id)
+        else:
+            # Backwards compatibility: notify single assigned_to_id if provided
+            if task.assigned_to_id and task.assigned_to_id != current_user.id:
+                NotificationService.notify_task_assigned(
+                    task=task,
+                    assigned_by_user=current_user,
+                    send_email=send_email,
+                    notify_client=False
+                )
+                email_sent = True
+
         # Notificar al cliente asignado (si existe y es diferente al creador)
         if task.assigned_client_id and task.assigned_client_id != current_user.id:
             NotificationService.notify_task_assigned(
@@ -853,7 +977,7 @@ def create_task():
                 notify_client=True
             )
             email_sent = True
-        
+
         if email_sent and send_email:
             flash('Se ha enviado una notificación por correo al usuario asignado.', 'info')
 
@@ -2197,8 +2321,8 @@ def task_detail(task_id):
         can_view = True
         can_edit = True
     elif user_role == 'Participante':
-        # Participante puede ver/editar si es su tarea asignada
-        if task.assigned_to_id == current_user.id:
+        # Participante puede ver/editar si es su tarea asignada (incluye multi-asignados)
+        if task.assigned_to_id == current_user.id or (getattr(task, 'assignees', None) and any(u.id == current_user.id for u in task.assignees)):
             can_view = True
             can_edit = True
     elif user_role == 'Cliente' or not current_user.is_internal:
@@ -2330,6 +2454,7 @@ def edit_task(task_id):
             old_assigned_to_id = task.assigned_to_id
             old_assigned_client_id = task.assigned_client_id
             old_parent_id = task.parent_task_id
+            old_assignees = set([u.id for u in task.assignees]) if getattr(task, 'assignees', None) else set()
             old_values = {
                 'title': task.title,
                 'status': task.status,
@@ -2342,15 +2467,14 @@ def edit_task(task_id):
             
             task.title = request.form.get('title') or task.title
             task.description = request.form.get('description')
-            # Validate status change before assignment
-            new_status_from_form = request.form.get('status') or task.status
-            # Validate status change using can_advance_status
-            new_status_from_form = request.form.get('status')
-            if new_status_from_form and new_status_from_form != task.status:
-                can_advance, error_msg, blockers = task.can_advance_status(new_status_from_form)
+            # Handle optional status change: only update if provided and valid
+            status_from_form = request.form.get('status')
+            if status_from_form and status_from_form != task.status:
+                can_advance, error_msg, blockers = task.can_advance_status(status_from_form)
                 if not can_advance:
                     raise ValueError(error_msg)
-            task.status = new_status_from_form
+                task.status = status_from_form
+            # If no status provided, keep existing task.status unchanged
             task.priority = request.form.get('priority') or task.priority
             task.is_internal_only = request.form.get('is_internal_only') == 'on'
 
@@ -2389,10 +2513,21 @@ def edit_task(task_id):
             else:
                 task.estimated_hours = None
 
-            # Update assignee
-            assigned_to_id = request.form.get('assigned_to_id')
-            new_assigned_to_id = int(assigned_to_id) if assigned_to_id and assigned_to_id.strip() else None
-            task.assigned_to_id = new_assigned_to_id
+            # Update assignees (multi-select). Keep assigned_to_id for compatibility (first selected)
+            current_app.logger.debug('edit_task: raw assignees payload = %s', request.form.getlist('assignees'))
+            assignee_ids = [int(x) for x in request.form.getlist('assignees') if x and x.strip()]
+            from ..models import task_assignees
+            # Remove existing associations for this task (clean slate)
+            db.session.execute(task_assignees.delete().where(task_assignees.c.task_id == task.id))
+            if assignee_ids:
+                # Load selected users and assign via relationship so SQLAlchemy manages inserts
+                users = User.query.filter(User.id.in_(assignee_ids)).all()
+                task.assignees = users
+                task.assigned_to_id = users[0].id if users else None
+            else:
+                # If no assignees selected, clear assignees and assigned_to_id
+                task.assignees = []
+                task.assigned_to_id = None
 
             # Update assigned client (separate field)
             assigned_client_id = request.form.get('assigned_client_id')
@@ -2461,17 +2596,29 @@ def edit_task(task_id):
             send_email_setting = SystemSettings.get('notify_task_assigned', 'true')
             send_email = send_email_setting == 'true' or send_email_setting == True
             email_sent = False
-            
-            # Notificar si se asignó a un nuevo usuario interno
-            if new_assigned_to_id and new_assigned_to_id != old_assigned_to_id and new_assigned_to_id != current_user.id:
-                NotificationService.notify_task_assigned(
-                    task=task,
-                    assigned_by_user=current_user,
-                    send_email=send_email,
-                    notify_client=False
-                )
-                email_sent = True
-            
+
+            # Notify newly added assignees (for multi-assign)
+            new_assignees = set([u.id for u in task.assignees]) if getattr(task, 'assignees', None) else set()
+            added = new_assignees - old_assignees
+            if added:
+                project_obj = Project.query.get(task.project_id) if task.project_id else None
+                for uid in added:
+                    if uid != getattr(current_user, 'id', None):
+                        try:
+                            NotificationService.notify(
+                                user_id=uid,
+                                title='Nueva tarea asignada',
+                                message=f"Se te ha asignado la tarea '{task.title}'{(' en el proyecto '+project_obj.name) if project_obj else ''}",
+                                notification_type=NotificationService.TASK_ASSIGNED,
+                                related_entity_type='task',
+                                related_entity_id=task.id,
+                                send_email=send_email,
+                                email_context={'task': task, 'project': project_obj, 'assigned_by': current_user}
+                            )
+                            email_sent = True
+                        except Exception:
+                            current_app.logger.exception('Failed to notify new assignee %s for task %s', uid, task.id)
+
             # Notificar si se asignó a un nuevo cliente
             if new_assigned_client_id and new_assigned_client_id != old_assigned_client_id and new_assigned_client_id != current_user.id:
                 NotificationService.notify_task_assigned(
@@ -2481,14 +2628,14 @@ def edit_task(task_id):
                     notify_client=True
                 )
                 email_sent = True
-            
+
             if email_sent and send_email:
-                flash('Se ha enviado una notificación por correo al usuario asignado.', 'info')
-            
+                flash('Se ha enviado una notificación por correo al usuario asignado.', 'info')            
             flash('Tarea actualizada.', 'success')
             return redirect(url_for('main.project_detail', project_id=project.id))
         except Exception as e:
             db.session.rollback()
+            current_app.logger.exception('Error updating task %s: %s', task.id if task else None, e)
             flash(f'Error al actualizar: {str(e)}', 'danger')
 
     # Provide user list for assignment
@@ -2633,7 +2780,7 @@ def profile():
     
     # Obtener estadísticas del usuario
     stats = {
-        'tasks_assigned': Task.query.filter_by(assigned_to_id=current_user.id).count(),
+        'tasks_assigned': Task.query.filter((Task.assigned_to_id == current_user.id) | (Task.assignees.any(User.id == current_user.id))).count(),
         'tasks_completed': Task.query.filter_by(assigned_to_id=current_user.id, status='DONE').count(),
         'projects_managed': Project.query.filter_by(manager_id=current_user.id).count() if current_user.is_internal else 0,
         'total_hours': db.session.query(func.sum(TimeEntry.hours)).filter_by(user_id=current_user.id).scalar() or 0

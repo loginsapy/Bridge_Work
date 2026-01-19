@@ -227,6 +227,9 @@
     <button class="toolbar-btn active" title="Vista Kanban">
       <i class="fa-solid fa-columns"></i> Kanban
     </button>
+      <a href="{{ url_for('main.project_gantt', project_id=project.id) }}" class="toolbar-btn" title="Vista Gantt">
+        <i class="fa-solid fa-chart-gantt"></i> Gantt
+      </a>
   </div>
 </div>
 
@@ -239,18 +242,28 @@
     </div>
     <div class="column-tasks" data-status="BACKLOG">
       {% for task in tasks_by_status.BACKLOG %}
-      <div class="kanban-card priority-{{ task.priority }}" data-task-id="{{ task.id }}" draggable="true">
+      <div class="kanban-card priority-{{ task.priority }}" data-task-id="{{ task.id }}" data-assignees="{{ task.assignees|map(attribute='id')|join(',') }}" draggable="true">
         <div class="card-title">
           <a href="{{ url_for('main.task_detail', task_id=task.id) }}">{{ task.title }}</a>
         </div>
         <div class="card-meta">
           <div class="card-assignee">
-            {% if task.assigned_to %}
-            <div class="mini-avatar">{{ (task.assigned_to.first_name or task.assigned_to.email)[0]|upper }}</div>
-            <span>{{ task.assigned_to.first_name or task.assigned_to.email.split('@')[0] }}</span>
+            {% if task.assignees and task.assignees|length > 0 %}
+              <div class="d-flex align-items-center">
+                {% for a in task.assignees[:2] %}
+                  <div class="mini-avatar" title="{{ a.first_name or a.email }}">{{ (a.first_name or a.email)[0]|upper }}</div>
+                {% endfor %}
+                {% if task.assignees|length > 2 %}
+                  <span class="text-muted ms-1 small">+{{ task.assignees|length - 2 }}</span>
+                {% endif %}
+              </div>
+            {% elif task.assigned_to %}
+              <div class="mini-avatar">{{ (task.assigned_to.first_name or task.assigned_to.email)[0]|upper }}</div>
+              <span>{{ task.assigned_to.first_name or task.assigned_to.email.split('@')[0] }}</span>
             {% else %}
-            <span class="text-muted">Sin asignar</span>
-            {% endif %}            {% if task.assigned_client %}
+              <span class="text-muted">Sin asignar</span>
+            {% endif %}
+            {% if task.assigned_client %}
             <div class="d-flex align-items-center ms-2">
               <div class="mini-avatar" style="background:#e6f9ec;color:#138a3a;">{{ (task.assigned_client.first_name or task.assigned_client.email)[0]|upper }}</div>
               <span class="text-muted ms-1 small">{{ task.assigned_client.first_name or task.assigned_client.email.split('@')[0] }}</span>

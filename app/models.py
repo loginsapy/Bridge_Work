@@ -69,6 +69,12 @@ task_predecessors = db.Table('task_predecessors',
     db.Column('predecessor_id', db.Integer, db.ForeignKey('tasks.id'), primary_key=True)
 )
 
+# Association table for Task assignees (many-to-many: tasks <-> users)
+task_assignees = db.Table('task_assignees',
+    db.Column('task_id', db.Integer, db.ForeignKey('tasks.id'), primary_key=True),
+    db.Column('user_id', db.Integer, db.ForeignKey('users.id'), primary_key=True)
+)
+
 
 # Core domain
 class Project(db.Model):
@@ -125,7 +131,18 @@ class Task(db.Model):
 
     project = db.relationship('Project', backref='tasks')
     assigned_to = db.relationship('User', foreign_keys=[assigned_to_id], backref='tasks')
+    # Multiple assigned internal users (many-to-many)
+    assignees = db.relationship('User', secondary=task_assignees, backref='assigned_tasks', lazy='select')
     approved_by = db.relationship('User', foreign_keys=[approved_by_id], backref='approved_tasks')
+
+    @property
+    def assignee_list(self):
+        """Returns a list of assigned users: prefer explicit `assignees` but fallback to the legacy `assigned_to`."""
+        if getattr(self, 'assignees', None):
+            return list(self.assignees)
+        if getattr(self, 'assigned_to', None):
+            return [self.assigned_to]
+        return []
 
     # Hierarchical parent/children relationship (WBS)
     parent = db.relationship('Task', remote_side=[id], backref=db.backref('children', lazy='select'))

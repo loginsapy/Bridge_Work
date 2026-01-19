@@ -204,13 +204,22 @@
 
           <div class="row">
             <div class="col-md-6 mb-3">
-              <label class="form-label fw-semibold">Asignado a</label>
-              <select class="form-select" name="assigned_to_id">
-                <option value="">-- Sin asignar --</option>
+              <label class="form-label fw-semibold">Asignados (Internos)</label>
+              <div class="p-2" style="max-height:160px; overflow:auto; border:1px solid var(--monday-border); border-radius:6px; background:#fff;">
                 {% for u in users %}
-                  <option value="{{ u.id }}" {% if task.assigned_to and task.assigned_to.id == u.id %}selected{% endif %}>{{ u.first_name or u.email }}</option>
+                  {% set checked = false %}
+                  {% if task.assignees and u in task.assignees %}
+                    {% set checked = true %}
+                  {% elif task.assigned_to and task.assigned_to.id == u.id and (not task.assignees or task.assignees|length == 0) %}
+                    {% set checked = true %}
+                  {% endif %}
+                  <div class="form-check">
+                    <input class="form-check-input" type="checkbox" name="assignees" id="edit-assignee-{{ u.id }}" value="{{ u.id }}" {% if checked %}checked{% endif %}>
+                    <label class="form-check-label" for="edit-assignee-{{ u.id }}">{{ u.first_name or u.email }}</label>
+                  </div>
                 {% endfor %}
-              </select>
+              </div>
+              <small class="text-muted d-block">Selecciona uno o varios usuarios marcando las casillas.</small>
             </div>
             <div class="col-md-6 mb-3">
               <label class="form-label fw-semibold">Asignado a (Cliente)</label>
