@@ -23,6 +23,14 @@ def test_task_reorder_endpoint(client, db, create_project, create_task, create_u
     assert str(t2['id']) in data['wbs']
     assert str(t3['id']) in data['wbs']
 
+    # Render the board page and confirm WBS is reflected in HTML
+    rv2 = client.get(f"/project/{p['id']}")
+    assert rv2.status_code == 200
+    html = rv2.data.decode()
+    assert data['wbs'][str(t1['id'])] in html
+    assert data['wbs'][str(t2['id'])] in html
+    assert data['wbs'][str(t3['id'])] in html
+
 
 def test_task_reorder_requires_internal(client, db, create_project, create_task, create_user, login):
     # create a non-internal user

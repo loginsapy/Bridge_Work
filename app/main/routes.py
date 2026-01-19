@@ -1781,24 +1781,13 @@ def tasks():
         # PMP/Admin ve todas las tareas
         pass
     elif user_role == 'Participante':
-        # Participante solo ve sus tareas asignadas o tareas de proyectos donde es miembro
-        member_project_ids = db.session.query(Project.id).filter(
-            Project.members.contains(current_user)
-        ).subquery()
+        # Participante: solo ver tareas donde está asignado (incluye multi-asignados)
         query = query.filter(
-            (Task.assigned_to_id == current_user.id) | 
-            (Task.project_id.in_(member_project_ids))
+            (Task.assigned_to_id == current_user.id) | (Task.assignees.any(User.id == current_user.id))
         )
     elif user_role == 'Cliente' or not current_user.is_internal:
-        # Cliente: mostrar SOLO las tareas de sus proyectos que sean visibles externamente o estén asignadas al cliente
-        client_project_ids = db.session.query(Project.id).filter(
-            Project.clients.contains(current_user)
-        ).subquery()
-        query = query.filter(
-            Task.project_id.in_(client_project_ids)
-        ).filter(
-            (Task.is_external_visible == True) | (Task.assigned_client_id == current_user.id)
-        )
+        # Cliente: solo ver tareas que estén asignadas al cliente explícitamente
+        query = query.filter(Task.assigned_client_id == current_user.id)
     else:
         # Cualquier otro rol: no ve nada
         query = query.filter(Task.id == -1)  # Query que no devuelve nada

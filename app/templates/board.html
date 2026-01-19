@@ -2054,7 +2054,19 @@ function persistTaskOrder() {
     if (!r.ok) throw new Error('Failed to persist order');
     return r.json();
   })
-  .then(data => console.debug('Order saved'))
+  .then(data => {
+    console.debug('Order saved');
+    if (data && data.wbs) {
+      Object.entries(data.wbs).forEach(([id, wbs]) => {
+        const row = document.querySelector(`#tasksBody tr[data-task-id='${id}']`);
+        if (!row) return;
+        const wbsBadge = row.querySelector('span[title="Número WBS"]');
+        if (wbsBadge) wbsBadge.textContent = wbs || '—';
+      });
+    }
+    // Reload to ensure full consistency across nested rows and other derived fields
+    setTimeout(() => location.reload(), 350);
+  })
   .catch(err => { console.error(err); alert('Error al guardar el orden de tareas'); });
 }
 
