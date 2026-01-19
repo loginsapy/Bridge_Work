@@ -2554,11 +2554,8 @@ def edit_task(task_id):
             # Update assignees (multi-select). Keep assigned_to_id for compatibility (first selected)
             current_app.logger.debug('edit_task: raw assignees payload = %s', request.form.getlist('assignees'))
             assignee_ids = [int(x) for x in request.form.getlist('assignees') if x and x.strip()]
-            from ..models import task_assignees
-            # Remove existing associations for this task (clean slate)
-            db.session.execute(task_assignees.delete().where(task_assignees.c.task_id == task.id))
+            # Use ORM relationship management only (avoid direct SQL deletes that confuse the ORM unit-of-work)
             if assignee_ids:
-                # Load selected users and assign via relationship so SQLAlchemy manages inserts
                 users = User.query.filter(User.id.in_(assignee_ids)).all()
                 task.assignees = users
                 task.assigned_to_id = users[0].id if users else None

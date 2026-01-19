@@ -1660,8 +1660,45 @@ function setPriority(priority) {
 }
 
 function setAssignee(userId) {
-  updateTask(currentTaskId, 'assigned_to_id', userId);
+  // Ensure both the single-assignee field and the multi-assignee list stay in sync.
+  // If userId is null -> clear both assigned_to_id and assignees; otherwise set both to the single user.
+  const payload = {
+    assigned_to_id: userId,
+    assignees: userId ? [userId] : []
+  };
+  updateTaskFields(currentTaskId, payload);
   document.getElementById('personDropdown').style.display = 'none';
+}
+
+function updateTaskFields(taskId, payload) {
+  fetch(`/api/tasks/${taskId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  })
+  .then(async r => {
+    if (!r.ok) {
+      const json = await r.json().catch(()=>null);
+      if (json && json.incomplete_predecessors) {
+        showPredecessorModal(taskId, json.incomplete_predecessors);
+        return Promise.reject('predecessors_incomplete');
+      }
+      if (json && json.incomplete_children) {
+        showDescendantModal(taskId, json.incomplete_children);
+        return Promise.reject('children_incomplete');
+      }
+      throw new Error('Update failed');
+    }
+    return r.json();
+  })
+  .then(data => {
+    location.reload();
+  })
+  .catch(err => {
+    if (err === 'predecessors_incomplete' || err === 'children_incomplete') return;
+    console.error(err);
+    alert('Error al actualizar');
+  });
 }
 
 function updateTask(taskId, field, value) {
