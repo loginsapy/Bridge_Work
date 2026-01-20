@@ -30,7 +30,7 @@ def test_complete_parent_blocked_by_children(client, create_user, create_project
     child = create_task(project_id=p['id'], title='ChildComplete', parent_task_id=parent['id'])
 
     # Attempt to mark parent as done via API
-    rv = client.patch(f"/api/tasks/{parent['id']}", json={'status': 'DONE'})
+    rv = client.patch(f"/api/tasks/{parent['id']}", json={'status': 'COMPLETED'})
     assert rv.status_code == 400
     j = rv.get_json()
     assert 'incomplete_children' in j

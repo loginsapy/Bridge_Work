@@ -209,7 +209,7 @@ class Task(db.Model):
         Una tarea NO puede iniciar/completarse hasta que sus predecesoras estén completas.
         Esto es diferente a la jerarquía padre-hijo.
         """
-        return [p for p in getattr(self, 'predecessors', []) or [] if p.status not in ('DONE', 'COMPLETED')]
+        return [p for p in getattr(self, 'predecessors', []) or [] if p.status != 'COMPLETED']
 
     def incomplete_children(self):
         """Return list of direct child tasks (via parent_task_id) that are not completed.
@@ -217,7 +217,7 @@ class Task(db.Model):
         HIJOS = Jerarquía WBS (subtareas).
         Una tarea padre NO puede completarse hasta que todas sus subtareas estén completas.
         """
-        return [c for c in getattr(self, 'children', []) or [] if c.status not in ('DONE', 'COMPLETED')]
+        return [c for c in getattr(self, 'children', []) or [] if c.status != 'COMPLETED']
 
     def incomplete_hierarchical_descendants(self):
         """Return list of ALL hierarchical descendant tasks (children recursively via parent_task_id) that are not completed."""
@@ -229,7 +229,7 @@ class Task(db.Model):
                 if c.id in visited or c.id == self.id:
                     continue
                 visited.add(c.id)
-                if c.status not in ('DONE', 'COMPLETED'):
+                if c.status != 'COMPLETED':
                     result.append(c)
                 dfs(c)
 
@@ -253,7 +253,7 @@ class Task(db.Model):
                 dfs(c)
 
         dfs(self)
-        return [c for c in result if c.status not in ('DONE', 'COMPLETED')]
+        return [c for c in result if c.status != 'COMPLETED']
 
     def can_complete(self):
         """Check if this task can be marked as completed.
@@ -296,6 +296,20 @@ class Task(db.Model):
             'incomplete_predecessors': [{'id': p.id, 'title': p.title} for p in incomplete_preds],
             'incomplete_children': [{'id': c.id, 'title': c.title} for c in incomplete_kids]
         }
+
+    @staticmethod
+    def normalize_status(status: str) -> str:
+        """Normalize status values to canonical set.
+        Accept legacy synonyms like 'DONE' and normalize to 'COMPLETED'."""
+        if status is None:
+            return None
+        if isinstance(status, str) and status.upper() == 'DONE':
+            return 'COMPLETED'
+        return status
+
+    def set_status(self, new_status: str):
+        """Set task status normalizing legacy values."""
+        self.status = Task.normalize_status(new_status)
     
     def is_blocked(self):
         """Check if task is blocked by incomplete predecessors.

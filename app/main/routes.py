@@ -1801,11 +1801,10 @@ def tasks():
         query = query.filter(Task.id == -1)  # Query que no devuelve nada
     
     if status_filter:
-        # Treat COMPLETED filter as including both 'COMPLETED' and legacy 'DONE' statuses
-        if status_filter == 'COMPLETED':
-            query = query.filter(Task.status.in_(['COMPLETED', 'DONE']))
-        else:
-            query = query.filter(Task.status == status_filter)
+        # Normalize legacy filter 'DONE' to canonical 'COMPLETED'
+        if status_filter == 'DONE':
+            status_filter = 'COMPLETED'
+        query = query.filter(Task.status == status_filter)
     
     if priority_filter:
         query = query.filter(Task.priority == priority_filter)
@@ -2350,7 +2349,7 @@ def update_task_status(task_id):
                     **(blockers or {})
                 }), 400
 
-        task.status = new_status
+        task.set_status(new_status)
         db.session.commit()
         return redirect(url_for('main.project_detail', project_id=project.id))
     except Exception as e:
@@ -2425,7 +2424,9 @@ def move_task(task_id):
         }), 400
 
     try:
-        task.status = new_status
+        # Normalize and set status
+        task.set_status(new_status)
+        normalized_new = task.status
         
         # Registrar auditoría de cambio de estado (use session-bound user)
         audit = AuditLog(
@@ -2433,15 +2434,15 @@ def move_task(task_id):
             entity_id=task.id,
             action='UPDATE',
             user_id=user.id,
-            changes={'status': {'old': old_status, 'new': new_status}}
+            changes={'status': {'old': old_status, 'new': normalized_new}}
         )
         db.session.add(audit)
         
         # Si la tarea se completa, notificar a los clientes
-        if new_status == 'COMPLETED' and old_status != 'COMPLETED':
+        if normalized_new == 'COMPLETED' and old_status != 'COMPLETED':
             notify_clients_task_completed(task, completed_by_user=user)
         # Notificar cambio de estado al asignado (solo in-app, sin email)
-        elif old_status != new_status and task.assigned_to_id:
+        elif old_status != normalized_new and task.assigned_to_id:
             NotificationService.notify_task_status_changed(
                 task=task,
                 old_status=old_status,
@@ -2540,7 +2541,7 @@ def edit_task(task_id):
                 can_advance, error_msg, blockers = task.can_advance_status(status_from_form)
                 if not can_advance:
                     raise ValueError(error_msg)
-                task.status = status_from_form
+                task.set_status(status_from_form)
             # If no status provided, keep existing task.status unchanged
             task.priority = request.form.get('priority') or task.priority
             task.is_internal_only = request.form.get('is_internal_only') == 'on'
@@ -2834,7 +2835,7 @@ def profile():
     # Obtener estadísticas del usuario
     stats = {
         'tasks_assigned': Task.query.filter((Task.assigned_to_id == current_user.id) | (Task.assignees.any(User.id == current_user.id))).count(),
-        'tasks_completed': Task.query.filter_by(assigned_to_id=current_user.id, status='DONE').count(),
+        'tasks_completed': Task.query.filter_by(assigned_to_id=current_user.id, status='COMPLETED').count(),
         'projects_managed': Project.query.filter_by(manager_id=current_user.id).count() if current_user.is_internal else 0,
         'total_hours': db.session.query(func.sum(TimeEntry.hours)).filter_by(user_id=current_user.id).scalar() or 0
     }

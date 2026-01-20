@@ -202,7 +202,10 @@ def list_tasks():
         except ValueError:
             return jsonify({"error": "invalid assignee_id"}), 400
     if 'status' in request.args:
-        q = q.filter(Task.status == request.args['status'])
+        status = request.args['status']
+        if status == 'DONE':
+            status = 'COMPLETED'
+        q = q.filter(Task.status == status)
 
     # Visibility filter: unless user is internal, return only externally visible tasks
     from flask import session as _session
@@ -315,9 +318,11 @@ def update_task(task_id):
     t = Task.query.get_or_404(task_id)
     data = request.get_json() or {}
     
-    # Validate status transition using can_advance_status
+    # Validate status transition using can_advance_status (normalize legacy values)
     if 'status' in data:
-        can_advance, error_msg, blockers = t.can_advance_status(data['status'])
+        from app.models import Task as TaskModel
+        status_val = TaskModel.normalize_status(data['status'])
+        can_advance, error_msg, blockers = t.can_advance_status(status_val)
         if not can_advance:
             return jsonify({
                 'error': error_msg,
@@ -334,7 +339,11 @@ def update_task(task_id):
             if field in ["start_date", "due_date"]:
                 setattr(t, field, parse_datetime(data[field]))
             else:
-                setattr(t, field, data[field])
+                if field == 'status':
+                    # Normalize and set canonical status
+                    t.set_status(data[field])
+                else:
+                    setattr(t, field, data[field])
 
     # Handle 'assignees' (list of user ids) explicitly
     if 'assignees' in data:

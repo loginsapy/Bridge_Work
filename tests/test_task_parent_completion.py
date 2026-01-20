@@ -15,16 +15,16 @@ def test_parent_blocked_until_child_completed(client, create_user, create_projec
     child_obj = Task.query.get(child['id'])
 
     # Act: try to complete parent via API
-    rv = client.patch(f"/api/tasks/{parent_obj.id}", json={'status': 'DONE'})
+    rv = client.patch(f"/api/tasks/{parent_obj.id}", json={'status': 'COMPLETED'})
     assert rv.status_code == 400
     j = rv.get_json()
     assert 'incomplete_children' in j
 
     # Now complete child and try again
-    rv2 = client.patch(f"/api/tasks/{child_obj.id}", json={'status': 'DONE'})
+    rv2 = client.patch(f"/api/tasks/{child_obj.id}", json={'status': 'COMPLETED'})
     assert rv2.status_code == 200
 
-    rv3 = client.patch(f"/api/tasks/{parent_obj.id}", json={'status': 'DONE'})
+    rv3 = client.patch(f"/api/tasks/{parent_obj.id}", json={'status': 'COMPLETED'})
     assert rv3.status_code == 200
     j3 = rv3.get_json()
     assert 'incomplete_children' not in j3
@@ -54,11 +54,11 @@ def test_predecessor_blocked_until_successor_completed(client, create_user, crea
     _db.session.commit()
 
     # The successor (child) CAN be completed first - no blockers
-    rv_child = client.patch(f"/api/tasks/{succ_obj.id}", json={'status': 'DONE'})
+    rv_child = client.patch(f"/api/tasks/{succ_obj.id}", json={'status': 'COMPLETED'})
     assert rv_child.status_code == 200, f"Child should be completable first: {rv_child.get_json()}"
 
     # Now the predecessor (parent) can be completed since child is done
-    rv_parent = client.patch(f"/api/tasks/{pred_obj.id}", json={'status': 'DONE'})
+    rv_parent = client.patch(f"/api/tasks/{pred_obj.id}", json={'status': 'COMPLETED'})
     assert rv_parent.status_code == 200
 
 

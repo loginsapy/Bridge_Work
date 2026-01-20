@@ -56,7 +56,7 @@ def test_mark_complete_blocks_if_predecessors_incomplete(client, db, create_user
     _db.session.commit()
 
     # Attempt to mark t2 as done via route
-    rv = client.post(f"/task/{t2_obj.id}/status", data={'status': 'DONE'})
+    rv = client.post(f"/task/{t2_obj.id}/status", data={'status': 'COMPLETED'})
     assert rv.status_code == 400
     assert b'predecesoras' in rv.data or b'incomplete_predecessors' in rv.data
 

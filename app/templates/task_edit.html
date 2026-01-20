@@ -188,7 +188,7 @@
                 <option value="IN_PROGRESS" {% if task.status == 'IN_PROGRESS' %}selected{% endif %} {% if is_blocked %}disabled{% endif %}>En Progreso</option>
                 <option value="REVIEW" {% if task.status == 'REVIEW' %}selected{% endif %} {% if is_blocked %}disabled{% endif %}>Revisión</option>
                 <option value="QA" {% if task.status == 'QA' %}selected{% endif %} {% if is_blocked %}disabled{% endif %}>QA</option>
-                <option value="DONE" {% if task.status == 'DONE' %}selected{% endif %} {% if is_blocked %}disabled{% endif %}>Completada</option>
+                <option value="COMPLETED" {% if task.status == 'COMPLETED' %}selected{% endif %} {% if is_blocked %}disabled{% endif %}>Completada</option>
               </select>
             </div>
             <div class="col-md-6 mb-3">
@@ -258,7 +258,7 @@
               <label class="form-label fw-semibold">Predecesoras (Dependencias)</label>
               <select class="form-select" name="predecessor_ids" multiple size="5">
                 {% for t in candidate_predecessors if t.id != task.id %}
-                  <option value="{{ t.id }}" {% if t in task.predecessors %}selected{% endif %}>{{ t.title }} (#{{ t.id }}) {% if t.status in ['DONE', 'COMPLETED'] %}✓{% endif %}</option>
+                  <option value="{{ t.id }}" {% if t in task.predecessors %}selected{% endif %}>{{ t.title }} (#{{ t.id }}) {% if t.status == 'COMPLETED' %}✓{% endif %}</option>
                 {% endfor %}
               </select>
               <small class="text-muted d-block">Tareas que deben completarse antes de esta (bloquean completar).</small>

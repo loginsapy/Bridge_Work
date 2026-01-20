@@ -385,7 +385,7 @@
   </div>
   <div class="stat-item">
     <span class="dot" style="background: var(--monday-green);"></span>
-    <span class="count">{{ (tasks|selectattr('status', 'equalto', 'COMPLETED')|list|length) + (tasks|selectattr('status', 'equalto', 'DONE')|list|length) }}</span>
+    <span class="count">{{ tasks|selectattr('status', 'equalto', 'COMPLETED')|list|length }}</span>
     {{ _('completed') }}
   </div>
   <div class="stat-item">
@@ -404,10 +404,10 @@
   
   <form method="GET" id="filterForm">
     <div class="filter-buttons" role="tablist" aria-label="Filtro por estado">
-      {% set states = ['TODO','BACKLOG','IN_PROGRESS','IN_REVIEW','COMPLETED','DONE'] %}
+      {% set states = ['TODO','BACKLOG','IN_PROGRESS','IN_REVIEW','COMPLETED'] %}
       <button type="button" class="filter-button {% if not status_filter %}active{% endif %}" data-status="">Todas</button>
       {% for s in states %}
-      <button type="button" class="filter-button {% if status_filter == s %}active{% endif %}" data-status="{{ s }}">{{ s if s in ['TODO','DONE'] else _(s.lower()) }}</button>
+      <button type="button" class="filter-button {% if status_filter == s %}active{% endif %}" data-status="{{ s }}">{{ s if s == 'TODO' else _(s.lower()) }}</button>
       {% endfor %}
     </div>
     <input type="hidden" name="status" id="statusInput" value="{{ status_filter }}">
@@ -434,7 +434,7 @@
 
 <!-- Monday-style Board -->
 {% set total_tasks = tasks|length %}
-{% set completed_tasks = (tasks|selectattr('status','in',['COMPLETED','DONE'])|list|length) %}
+{% set completed_tasks = (tasks|selectattr('status','equalto','COMPLETED')|list|length) %}
 {% set percent_complete = (completed_tasks / total_tasks * 100)|round(0) if total_tasks > 0 else 0 %}
 
 <div class="project-board-header">
@@ -485,7 +485,7 @@
       </div>
       <div class="status-cell">
         <span class="monday-status {{ task.status|lower|replace('_', '-') }}">
-          {{ {'BACKLOG': _('backlog'), 'IN_PROGRESS': _('in_progress'), 'IN_REVIEW': _('in_review'), 'COMPLETED': _('completed'), 'DONE': _('completed')}.get(task.status, task.status) }}
+          {{ {'BACKLOG': _('backlog'), 'IN_PROGRESS': _('in_progress'), 'IN_REVIEW': _('in_review'), 'COMPLETED': _('completed')}.get(task.status, task.status) }}
         </span>
       </div>
       <div class="priority-cell">
@@ -556,7 +556,7 @@
 {{ super() }}
 <script>
 function toggleComplete(taskId, currentStatus) {
-  const newStatus = (currentStatus === 'COMPLETED' || currentStatus === 'DONE') ? 'BACKLOG' : 'COMPLETED';
+  const newStatus = (currentStatus === 'COMPLETED') ? 'BACKLOG' : 'COMPLETED';
   fetch(`/api/tasks/${taskId}`, {
     method: 'PATCH',
     headers: {'Content-Type': 'application/json'},

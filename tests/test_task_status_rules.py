@@ -15,7 +15,7 @@ def test_complete_child_allowed_with_predecessor_parent(client, create_user, cre
     child = create_task(project_id=p['id'], title='ChildSR', parent_task_id=parent['id'])
 
     # Completing child should be allowed even if parent is incomplete
-    rv = client.patch(f"/api/tasks/{child['id']}", json={'status': 'DONE'})
+    rv = client.patch(f"/api/tasks/{child['id']}", json={'status': 'COMPLETED'})
     assert rv.status_code == 200
 
     # If child has explicit predecessor, child can STILL be completed (predecessor doesn't block)
@@ -26,7 +26,7 @@ def test_complete_child_allowed_with_predecessor_parent(client, create_user, cre
     db.session.commit()
 
     # Child can be completed - predecessors don't block in tree model
-    rv = client.patch(f"/api/tasks/{child['id']}", json={'status': 'DONE'})
+    rv = client.patch(f"/api/tasks/{child['id']}", json={'status': 'COMPLETED'})
     assert rv.status_code == 200, f"Child should complete: {rv.get_json()}"
 
 

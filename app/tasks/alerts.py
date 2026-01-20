@@ -43,7 +43,7 @@ def generate_alerts(cutoff_days=None, idempotency_hours=24):
         Task.query
         .filter(Task.due_date != None)
         .filter(Task.due_date <= cutoff)
-        .filter(Task.status.notin_(['DONE', 'COMPLETED']))
+        .filter(Task.status != 'COMPLETED')
         .all()
     )
 

@@ -18,7 +18,7 @@ def test_api_child_can_complete_before_predecessor_parent(client, db, create_pro
     _db.session.commit()
 
     # t2 (child) CAN be marked as done even though t1 (parent) is incomplete
-    rv = client.patch(f"/api/tasks/{t2_obj.id}", json={'status': 'DONE'})
+    rv = client.patch(f"/api/tasks/{t2_obj.id}", json={'status': 'COMPLETED'})
     assert rv.status_code == 200, f"Child should complete first: {rv.get_json()}"
 
 
@@ -39,8 +39,8 @@ def test_api_prevent_complete_when_has_incomplete_descendants(client, db, create
     t2_obj.predecessors = [t1_obj]
     _db.session.commit()
 
-    # Attempt to mark parent as done via API (should be blocked due to incomplete descendant)
-    rv = client.patch(f"/api/tasks/{t1_obj.id}", json={'status': 'DONE'})
+    # Attempt to mark parent as completed via API (should be blocked due to incomplete descendant)
+    rv = client.patch(f"/api/tasks/{t1_obj.id}", json={'status': 'COMPLETED'})
     assert rv.status_code == 400
     j = rv.get_json()
     assert 'incomplete_children' in j
