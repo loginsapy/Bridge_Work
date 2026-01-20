@@ -237,6 +237,17 @@
 .gantt-tooltip .tooltip-label {
   color: #6c757d;
 }
+
+/* Ensure toolbar icons match Board style */
+.toolbar-btn { display: inline-flex; align-items: center; justify-content: center; }
+.toolbar-btn i { font-size: 18px; }
+
+/* Match Board hover/active behavior */
+.toolbar-btn:hover, .toolbar-btn.active {
+  background: var(--monday-light-grey);
+  border-color: var(--monday-blue);
+  color: var(--monday-blue);
+}
 </style>
 {% endblock %}
 
@@ -258,15 +269,18 @@
     <span class="badge bg-info">{{ gantt_tasks|length }} con fechas</span>
     {% endif %}
   </div>
-  <div class="toolbar-right">
-    <a href="{{ url_for('main.project_detail', project_id=project.id) }}" class="toolbar-btn" title="Vista Board">
-      <i class="fa-solid fa-table-cells"></i> Board
-    </a>
-    <a href="{{ url_for('main.project_kanban', project_id=project.id) }}" class="toolbar-btn" title="Vista Kanban">
-      <i class="fa-solid fa-columns"></i> Kanban
-    </a>
-    <button class="toolbar-btn active" title="Vista Gantt">
-      <i class="fa-solid fa-chart-gantt"></i> Gantt
+  <div class="toolbar-right" style="display:flex;gap:8px;align-items:center;">
+    <button class="toolbar-btn" onclick="toggleView('board')" title="Vista Board" aria-label="Vista Board">
+      <i class="fa-solid fa-table-cells"></i>
+      <span class="visually-hidden">Board</span>
+    </button>
+    <button class="toolbar-btn" onclick="toggleView('kanban')" title="Vista Kanban" aria-label="Vista Kanban">
+      <i class="fa-solid fa-columns"></i>
+      <span class="visually-hidden">Kanban</span>
+    </button>
+    <button class="toolbar-btn active" title="Vista Gantt" aria-label="Vista Gantt">
+      <i class="fa-solid fa-chart-gantt"></i>
+      <span class="visually-hidden">Gantt</span>
     </button>
     
     {% if gantt_tasks %}
@@ -322,6 +336,17 @@
 {% if gantt_tasks %}
 <script>
 const projectId = {{ project.id }};
+
+// Shared view switcher (Board / Kanban / Gantt)
+window.toggleView = function(view) {
+  if (view === 'board') {
+    window.location.href = `/project/${projectId}`;
+  } else if (view === 'kanban') {
+    window.location.href = `/project/${projectId}/kanban`;
+  } else if (view === 'gantt') {
+    window.location.href = `/project/${projectId}/gantt`;
+  }
+};
 
 // Datos de tareas para el Gantt
 const ganttData = {{ gantt_tasks|tojson|safe }};

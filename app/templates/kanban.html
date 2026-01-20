@@ -221,15 +221,15 @@
     <span class="badge bg-secondary">{{ tasks_by_status.BACKLOG|length + tasks_by_status.IN_PROGRESS|length + tasks_by_status.IN_REVIEW|length + tasks_by_status.COMPLETED|length }} tareas</span>
   </div>
   <div class="toolbar-right">
-    <a href="{{ url_for('main.project_detail', project_id=project.id) }}" class="toolbar-btn" title="Vista Board">
+    <button class="toolbar-btn" onclick="toggleView('board')" title="Vista Board" aria-label="Vista Board">
       <i class="fa-solid fa-table-cells"></i> Board
-    </a>
-    <button class="toolbar-btn active" title="Vista Kanban">
+    </button>
+    <button class="toolbar-btn active" title="Vista Kanban" aria-label="Vista Kanban">
       <i class="fa-solid fa-columns"></i> Kanban
     </button>
-      <a href="{{ url_for('main.project_gantt', project_id=project.id) }}" class="toolbar-btn" title="Vista Gantt">
-        <i class="fa-solid fa-chart-gantt"></i> Gantt
-      </a>
+    <button class="toolbar-btn" onclick="toggleView('gantt')" title="Vista Gantt" aria-label="Vista Gantt">
+      <i class="fa-solid fa-chart-gantt"></i> Gantt
+    </button>
   </div>
 </div>
 
@@ -502,5 +502,16 @@ function addTask(status) {
     alert('Error al crear tarea');
   });
 }
+
+// Shared view switcher (Board / Kanban / Gantt)
+window.toggleView = function(view) {
+  if (view === 'board') {
+    window.location.href = `/project/${projectId}`;
+  } else if (view === 'kanban') {
+    window.location.href = `/project/${projectId}/kanban`;
+  } else if (view === 'gantt') {
+    window.location.href = `/project/${projectId}/gantt`;
+  }
+};
 </script>
 {% endblock %}

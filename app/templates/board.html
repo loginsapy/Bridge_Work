@@ -2191,8 +2191,12 @@ window.filterByPerson = function(userId) {
 };
 
 window.toggleView = function(view) {
-  if (view === 'kanban') {
+  if (view === 'board') {
+    window.location.href = `/project/${projectId}`;
+  } else if (view === 'kanban') {
     window.location.href = `/project/${projectId}/kanban`;
+  } else if (view === 'gantt') {
+    window.location.href = `/project/${projectId}/gantt`;
   }
 };
 </script>
