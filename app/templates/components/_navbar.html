@@ -51,11 +51,9 @@
         <div class="dropdown-menu dropdown-menu-end notification-dropdown">
           <div class="dropdown-header d-flex justify-content-between align-items-center">
             <span class="fw-semibold">Notificaciones</span>
-            {% if unread_notifications_count > 0 %}
-            <button class="btn btn-link btn-sm p-0 text-primary" onclick="markAllAsRead()">
+            <button id="markAllBtn" class="btn btn-link btn-sm p-0 text-primary" onclick="markAllAsRead()" title="Marcar todas como leídas" {% if unread_notifications_count <= 0 %}disabled aria-disabled="true"{% endif %}>
               Marcar leídas
             </button>
-            {% endif %}
           </div>
           <div id="notificationList" class="notification-list">
             <div class="text-center py-4 text-muted">
@@ -302,6 +300,48 @@ document.addEventListener('DOMContentLoaded', function() {
     dropdown.addEventListener('show.bs.dropdown', loadNotifications);
   }
 
+  // Initialize previous unread count from server-rendered value
+  window.prevUnreadCount = {{ unread_notifications_count or 0 }};
+
+  // Create toast container for notification alerts
+  let toastContainer = document.getElementById('notificationToastContainer');
+  if (!toastContainer) {
+    toastContainer = document.createElement('div');
+    toastContainer.id = 'notificationToastContainer';
+    toastContainer.style.position = 'fixed';
+    toastContainer.style.top = '1rem';
+    toastContainer.style.right = '1rem';
+    toastContainer.style.zIndex = 1060;
+    document.body.appendChild(toastContainer);
+  }
+
+  // Helper to show a bootstrap toast for a notification
+  function showNotificationToast(n) {
+    const title = n && n.title ? n.title : 'Notificación';
+    const msg = n && n.message ? n.message : 'Tienes una nueva notificación';
+    const toast = document.createElement('div');
+    toast.className = 'toast align-items-center text-white bg-primary border-0 mb-2';
+    toast.setAttribute('role', 'alert');
+    toast.setAttribute('aria-live', 'assertive');
+    toast.setAttribute('aria-atomic', 'true');
+    toast.innerHTML = `
+      <div class="d-flex">
+        <div class="toast-body">
+          <strong>${title}</strong>
+          <div class="small">${msg}</div>
+        </div>
+        <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+      </div>
+    `;
+    toastContainer.appendChild(toast);
+    const bsToast = new bootstrap.Toast(toast, { delay: 8000 });
+    bsToast.show();
+    toast.addEventListener('hidden.bs.toast', () => toast.remove());
+  }
+
+  // Update badge on page load
+  updateNotificationBadge();
+
   // Auto-refresh notifications every 30 seconds
   setInterval(function() {
     // Only update the badge count, not the full list (to avoid interrupting user)
@@ -310,24 +350,26 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 // Function to update only the notification badge count
-function updateNotificationBadge() {
+function updateNotificationBadge(callback) {
   fetch('{{ url_for("main.recent_notifications") }}')
     .then(r => r.json())
     .then(data => {
       const badge = document.querySelector('.notification-badge');
       const btn = document.getElementById('notificationBtn');
       const badgeDot = btn ? btn.querySelector('.badge-dot') : null;
+      const newCount = data.unread_count || 0;
+      const oldCount = (typeof window.prevUnreadCount === 'number') ? window.prevUnreadCount : 0;
 
-      if (data.unread_count > 0) {
+      if (newCount > 0) {
         // Update or create badge
         if (badge) {
-          badge.textContent = data.unread_count < 100 ? data.unread_count : '99+';
+          badge.textContent = newCount < 100 ? newCount : '99+';
           badge.style.display = 'inline-block';
-        } else {
+        } else if (btn) {
           const newBadge = document.createElement('span');
           newBadge.className = 'position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger notification-badge';
           newBadge.style.fontSize = '0.65rem';
-          newBadge.textContent = data.unread_count < 100 ? data.unread_count : '99+';
+          newBadge.textContent = newCount < 100 ? newCount : '99+';
           btn.appendChild(newBadge);
         }
 
@@ -340,6 +382,32 @@ function updateNotificationBadge() {
         if (badge) badge.style.display = 'none';
         if (badgeDot) badgeDot.style.display = 'none';
       }
+
+      // Update "Marcar leídas" button enabled state
+      const markAllBtn = document.getElementById('markAllBtn');
+      if (markAllBtn) {
+        if (newCount > 0) {
+          markAllBtn.disabled = false;
+          markAllBtn.removeAttribute('aria-disabled');
+        } else {
+          markAllBtn.disabled = true;
+          markAllBtn.setAttribute('aria-disabled', 'true');
+        }
+      }
+
+      // If there's an increase in unread count, show a toast (only if dropdown not open)
+      if (newCount > oldCount) {
+        const dropdownEl = document.getElementById('notificationDropdown');
+        const isOpen = dropdownEl && dropdownEl.classList.contains('show');
+        if (!isOpen) {
+          const latest = (data.notifications && data.notifications.length) ? data.notifications[0] : null;
+          if (latest) showNotificationToast(latest);
+        }
+      }
+
+      window.prevUnreadCount = newCount;
+
+      if (typeof callback === 'function') callback(data);
     })
     .catch(err => console.error('Error updating notification badge:', err));
 }

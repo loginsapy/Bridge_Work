@@ -128,9 +128,10 @@
                     </span>
                   {% endif %}
                   {% if task.predecessors|length > 0 %}
-                    <span class="badge bg-info text-white ms-1" title="Predecesoras: {% for p in task.predecessors %}{{ p.wbs_number|default('#'+p.id|string) }} {{ p.title }}{% if not loop.last %}, {% endif %}{% endfor %}">
+                    {% set first_pred = task.predecessors[0] %}
+                    <a href="{{ url_for('main.task_detail', task_id=first_pred.id) }}" class="badge bg-info text-white ms-1" style="text-decoration:none;" onclick="event.stopPropagation();" title="Predecesoras: {% for p in task.predecessors %}{{ p.wbs_number|default('#'+p.id|string) }} {{ p.title }}{% if not loop.last %}, {% endif %}{% endfor %}">
                       <i class="fa-solid fa-link"></i> {{ task.predecessors|length }}
-                    </span>
+                    </a>
                   {% endif %}
                 </div>
               </div>
@@ -187,9 +188,10 @@
               {% set incomplete_children = task.all_incomplete_children() %}
               
               {% if incomplete_preds %}
-                <span class="badge bg-warning text-dark" title="Predecesoras incompletas: {{ incomplete_preds|map(attribute='title')|join(', ') }}">
+                {% set first_incomplete = incomplete_preds[0] %}
+                <a href="{{ url_for('main.task_detail', task_id=first_incomplete.id) }}" class="badge bg-warning text-dark" style="text-decoration:none;" onclick="event.stopPropagation();" title="Predecesoras incompletas: {{ incomplete_preds|map(attribute='title')|join(', ') }}">
                   <i class="fa-solid fa-lock"></i> {{ incomplete_preds|length }} pred.
-                </span>
+                </a>
               {% endif %}
               
               {% if incomplete_children %}
@@ -199,9 +201,10 @@
               {% endif %}
               
               {% if task.predecessors|length > 0 and not incomplete_preds %}
-                <span class="badge bg-success" title="Predecesoras completadas">
+                {% set first_pred_done = task.predecessors[0] %}
+                <a href="{{ url_for('main.task_detail', task_id=first_pred_done.id) }}" class="badge bg-success" style="text-decoration:none;" onclick="event.stopPropagation();" title="Predecesoras completadas">
                   <i class="fa-solid fa-check"></i> {{ task.predecessors|length }} dep.
-                </span>
+                </a>
               {% endif %}
               
               {% if not incomplete_preds and not incomplete_children and task.predecessors|length == 0 and task.children|length == 0 %}

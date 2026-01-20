@@ -820,10 +820,11 @@ tr.table-warning:hover {
                 
                 <!-- Predecessor indicator with order -->
                 {% if task.predecessor_order %}
-                <span class="badge bg-info text-white ms-1" style="font-size: 0.65rem;" 
+                {% set first_pred = task.predecessor_order[0][1] %}
+                <a href="{{ url_for('main.task_detail', task_id=first_pred.id) }}" class="badge bg-info text-white ms-1" style="font-size: 0.65rem; text-decoration:none;" onclick="event.stopPropagation();" 
                       title="Depende de: {% for idx, pred in task.predecessor_order %}{{ idx }}. {{ pred.title }} ({{ pred.wbs_number|default('#'+pred.id|string) }}) {% if pred.status in ['DONE','COMPLETED'] %}✓{% else %}⏳{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}">
                   <i class="fa-solid fa-link"></i> {{ task.predecessor_order|length }}
-                </span>
+                </a>
                 {% endif %}
               </div>
             </td>
@@ -836,10 +837,16 @@ tr.table-warning:hover {
                   {{ {'BACKLOG':'Backlog','IN_PROGRESS':'En Progreso','IN_REVIEW':'En Revisión','COMPLETED':'Completado'}.get(task.status, task.status) }}
                 </span>
                 {% if is_blocked %}
-                  <span class="badge bg-warning text-dark ms-1" style="font-size: 0.65rem;" 
-                        title="Predecesoras pendientes: {% for p in task.incomplete_predecessors()[:5] %}{{ p.title }}{% if not loop.last %}, {% endif %}{% endfor %}">
-                    <i class="fa-solid fa-lock"></i> Bloqueada
-                  </span>
+                  {% set first_incomplete = task.incomplete_predecessors()[0] if task.incomplete_predecessors() else None %}
+                  {% if first_incomplete %}
+                    <a href="{{ url_for('main.task_detail', task_id=first_incomplete.id) }}" class="badge bg-warning text-dark ms-1" style="font-size: 0.65rem; text-decoration:none;" onclick="event.stopPropagation();" title="Predecesoras pendientes: {% for p in task.incomplete_predecessors()[:5] %}{{ p.title }}{% if not loop.last %}, {% endif %}{% endfor %}">
+                      <i class="fa-solid fa-lock"></i> Bloqueada
+                    </a>
+                  {% else %}
+                    <span class="badge bg-warning text-dark ms-1" style="font-size: 0.65rem;" title="Predecesoras pendientes">
+                      <i class="fa-solid fa-lock"></i> Bloqueada
+                    </span>
+                  {% endif %}
                 {% elif task.has_incomplete_subtasks() %}
                   <span class="badge bg-info text-white ms-1" style="font-size: 0.65rem;" 
                         title="Tiene subtareas incompletas (no puede completarse)">

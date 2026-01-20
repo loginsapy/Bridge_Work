@@ -2522,6 +2522,19 @@ def edit_task(task_id):
             task.title = request.form.get('title') or task.title
             task.description = request.form.get('description')
             # Handle optional status change: only update if provided and valid
+            # Handle predecessors (many-to-many) EARLY: validate and assign BEFORE status validation
+            predecessor_ids = [int(x) for x in request.form.getlist('predecessor_ids') if x and x.strip()]
+            try:
+                # validate before assignment
+                task.validate_predecessor_ids(predecessor_ids)
+                if predecessor_ids:
+                    preds = Task.query.filter(Task.id.in_(predecessor_ids)).all()
+                else:
+                    preds = []
+                task.predecessors = preds
+            except ValueError as ve:
+                raise ve
+
             status_from_form = request.form.get('status')
             if status_from_form and status_from_form != task.status:
                 can_advance, error_msg, blockers = task.can_advance_status(status_from_form)
@@ -2585,18 +2598,8 @@ def edit_task(task_id):
             new_assigned_client_id = int(assigned_client_id) if assigned_client_id and assigned_client_id.strip() else None
             task.assigned_client_id = new_assigned_client_id
 
-            # Handle predecessors (many-to-many)
-            predecessor_ids = [int(x) for x in request.form.getlist('predecessor_ids') if x and x.strip()]
-            try:
-                # validate before assignment
-                task.validate_predecessor_ids(predecessor_ids)
-                if predecessor_ids:
-                    preds = Task.query.filter(Task.id.in_(predecessor_ids)).all()
-                else:
-                    preds = []
-                task.predecessors = preds
-            except ValueError as ve:
-                raise ve
+            # Predecessor handling moved earlier to occur BEFORE status validation to ensure
+            # that status changes take the new predecessors into account. See above.
 
             # Handle file attachments
             files = request.files.getlist('attachments')

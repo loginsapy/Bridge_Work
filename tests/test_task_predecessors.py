@@ -103,3 +103,31 @@ def test_advance_to_in_progress_blocks_if_predecessors_incomplete(client, db, cr
 
     t2_obj = db.session.get(Task, t2['id'])
     assert t2_obj.status == 'IN_PROGRESS'
+
+
+def test_edit_task_blocks_if_predecessor_added_and_status_set(client, db, create_user, create_project, create_task, login):
+    """If a user adds a predecessor and attempts to set status to COMPLETED in the same edit, it should be blocked."""
+    u = create_user(email='edit_block2@example.com', is_internal=True)
+    login(u)
+
+    p = create_project(name='P-edit-block')
+    t1 = create_task(project_id=p['id'], title='Pred')
+    t2 = create_task(project_id=p['id'], title='ToEdit')
+
+    from app.models import Task, db as _db
+    t1_obj = Task.query.get(t1['id'])
+    t2_obj = Task.query.get(t2['id'])
+
+    # Attempt to edit t2: add t1 as predecessor and set status to COMPLETED
+    rv = client.post(f"/task/{t2_obj.id}/edit", data={
+        'title': t2_obj.title,
+        'status': 'COMPLETED',
+        'predecessor_ids': str(t1_obj.id)
+    }, follow_redirects=True)
+
+    # Save should not have allowed completion
+    t2_obj = _db.session.get(Task, t2_obj.id)
+    assert t2_obj.status != 'COMPLETED'
+    # Page should contain an error mentioning predecessors
+    assert b'predecesoras' in rv.data or b'No se puede avanzar la tarea' in rv.data or b'predecessor' in rv.data.lower()
+
