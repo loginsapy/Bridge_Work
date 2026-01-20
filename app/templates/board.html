@@ -1373,15 +1373,15 @@ tr.table-warning:hover {
               
               <div class="property-item">
                 <label class="property-label">
-                  <i class="fa-solid fa-user"></i>
-                  Asignado (Interno)
+                  <i class="fa-solid fa-users"></i>
+                  Asignados (Internos) — Múltiples
                 </label>
-                <select name="assigned_to_id" class="form-select">
-                  <option value="">👤 Sin asignar</option>
+                <select name="assignees" class="form-select" multiple size="4">
                   {% for u in users %}
                   <option value="{{ u.id }}">{{ u.first_name or u.email }}</option>
                   {% endfor %}
                 </select>
+                <div class="form-text">Mantén Ctrl/Cmd para seleccionar múltiples usuarios</div>
               </div>
               
               <div class="property-item">
@@ -1683,10 +1683,9 @@ function setPriority(priority) {
 }
 
 function setAssignee(userId) {
-  // Ensure both the single-assignee field and the multi-assignee list stay in sync.
-  // If userId is null -> clear both assigned_to_id and assignees; otherwise set both to the single user.
+  // When selecting a person quickly from the dropdown, update the task's assignees list.
+  // This will set the task to have a single assignee (but the assignees list allows multiple users elsewhere).
   const payload = {
-    assigned_to_id: userId,
     assignees: userId ? [userId] : []
   };
   updateTaskFields(currentTaskId, payload);

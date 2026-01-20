@@ -291,15 +291,6 @@
           
           <div class="row">
             <div class="col-md-6 mb-3">
-              <label class="form-label">Asignar a (Interno)</label>
-              <select class="form-select" name="assigned_to_id">
-                <option value="">-- Sin asignar --</option>
-                {% for u in assignees %}
-                  <option value="{{ u.id }}">{{ u.first_name or u.email }}</option>
-                {% endfor %}
-              </select>
-            </div>
-            <div class="col-md-6 mb-3">
               <label class="form-label">Asignar a (Cliente)</label>
               <select class="form-select" name="assigned_client_id">
                 <option value="">-- Sin asignar --</option>
@@ -308,6 +299,15 @@
                 {% endfor %}
               </select>
             </div>
+            <div class="col-md-12 mb-3">
+              <label class="form-label">Asignados (Internos) — Múltiples</label>
+              <select class="form-select" name="assignees" multiple size="4">
+                {% for u in assignees %}
+                  <option value="{{ u.id }}">{{ u.first_name or u.email }}</option>
+                {% endfor %}
+              </select>
+              <div class="form-text">Mantén Ctrl/Cmd para seleccionar múltiples usuarios</div>
+            </div> 
             <div class="col-md-6 mb-3">
               <label class="form-label">Prioridad</label>
               <select class="form-select" name="priority">
