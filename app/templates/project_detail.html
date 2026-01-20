@@ -319,7 +319,11 @@
             </div>
             <div class="col-md-6 mb-3">
               <label class="form-label">Vencimiento</label>
+              {% if current_user.is_authenticated and current_user.is_internal and current_user.role and current_user.role.name in ('PMP','Admin') %}
               <input type="datetime-local" class="form-control" name="due_date">
+              {% else %}
+              <input type="datetime-local" class="form-control" name="due_date" disabled title="Solo PMP/Admin puede editar fechas">
+              {% endif %}
             </div>
           </div>
           

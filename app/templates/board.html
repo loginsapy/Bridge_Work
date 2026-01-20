@@ -881,7 +881,7 @@ tr.table-warning:hover {
             </td>
             <td>
               <div class="cell date-cell">
-                {% if current_user.is_internal %}
+                {% if current_user.is_authenticated and current_user.is_internal and current_user.role and current_user.role.name in ('PMP', 'Admin') %}
                 <input type="date" value="{{ task.start_date.strftime('%Y-%m-%d') if task.start_date else '' }}" 
                        onchange="updateTask({{ task.id }}, 'start_date', this.value)">
                 {% else %}
@@ -891,7 +891,7 @@ tr.table-warning:hover {
             </td>
             <td>
               <div class="cell date-cell">
-                {% if current_user.is_internal %}
+                {% if current_user.is_authenticated and current_user.is_internal and current_user.role and current_user.role.name in ('PMP', 'Admin') %}
                 <input type="date" value="{{ task.due_date.strftime('%Y-%m-%d') if task.due_date else '' }}" 
                        class="{% if task.due_date and task.due_date.date() < now.date() and task.status != 'COMPLETED' %}date-overdue{% endif %}"
                        onchange="updateTask({{ task.id }}, 'due_date', this.value)">
@@ -1411,7 +1411,11 @@ tr.table-warning:hover {
                   <i class="fa-solid fa-play"></i>
                   Fecha de Inicio
                 </label>
+                {% if current_user.is_authenticated and current_user.is_internal and current_user.role and current_user.role.name in ('PMP','Admin') %}
                 <input type="date" name="start_date" class="form-control">
+                {% else %}
+                <input type="date" name="start_date" class="form-control" disabled title="Solo PMP/Admin puede editar fechas">
+                {% endif %}
               </div>
               
               <div class="property-item">
@@ -1419,7 +1423,11 @@ tr.table-warning:hover {
                   <i class="fa-solid fa-flag-checkered"></i>
                   Fecha de Vencimiento
                 </label>
+                {% if current_user.is_authenticated and current_user.is_internal and current_user.role and current_user.role.name in ('PMP','Admin') %}
                 <input type="date" name="due_date" class="form-control">
+                {% else %}
+                <input type="date" name="due_date" class="form-control" disabled title="Solo PMP/Admin puede editar fechas">
+                {% endif %}
               </div>
               
               <div class="property-item">

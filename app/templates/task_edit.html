@@ -164,6 +164,17 @@
     <div class="card shadow-sm">
       <div class="card-body p-4">
         <form method="POST" enctype="multipart/form-data" novalidate>
+          {% if is_limited_editor %}
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Título</label>
+            <p class="form-control-plaintext">{{ task.title }}</p>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Descripción</label>
+            <div class="form-control-plaintext" style="white-space:pre-wrap;">{{ task.description or '' }}</div>
+          </div>
+          {% else %}
           <div class="mb-3">
             <label class="form-label fw-semibold">Título</label>
             <input type="text" class="form-control" name="title" value="{{ task.title }}" required>
@@ -173,6 +184,7 @@
             <label class="form-label fw-semibold">Descripción</label>
             <textarea class="form-control" name="description" rows="4">{{ task.description or '' }}</textarea>
           </div>
+          {% endif %}
 
           <div class="row">
             <div class="col-md-6 mb-3">
@@ -193,18 +205,35 @@
             </div>
             <div class="col-md-6 mb-3">
               <label class="form-label fw-semibold">Prioridad</label>
+              {% if is_limited_editor %}
+                <p class="form-control-plaintext">{{ {'LOW':'Baja','MEDIUM':'Media','HIGH':'Alta','CRITICAL':'Crítica'}.get(task.priority, task.priority) }}</p>
+              {% else %}
               <select class="form-select" name="priority">
                 <option value="LOW" {% if task.priority == 'LOW' %}selected{% endif %}>Baja</option>
                 <option value="MEDIUM" {% if task.priority == 'MEDIUM' %}selected{% endif %}>Media</option>
                 <option value="HIGH" {% if task.priority == 'HIGH' %}selected{% endif %}>Alta</option>
                 <option value="CRITICAL" {% if task.priority == 'CRITICAL' %}selected{% endif %}>Crítica</option>
               </select>
+              {% endif %}
             </div>
           </div>
 
           <div class="row">
             <div class="col-md-6 mb-3">
               <label class="form-label fw-semibold">Asignados (Internos)</label>
+              {% if is_limited_editor %}
+                <div class="p-2" style="max-height:160px; overflow:auto; border:1px solid var(--monday-border); border-radius:6px; background:#fff;">
+                  {% for u in task.assignee_list %}
+                    <div class="d-flex align-items-center">
+                      <div class="person-avatar small me-2">{{ (u.first_name or u.email)[0]|upper }}</div>
+                      <div>{{ u.first_name or u.email }}</div>
+                    </div>
+                  {% endfor %}
+                  {% if (task.assignee_list|length) == 0 %}
+                    <div class="text-muted">—</div>
+                  {% endif %}
+                </div>
+              {% else %}
               <div class="p-2" style="max-height:160px; overflow:auto; border:1px solid var(--monday-border); border-radius:6px; background:#fff;">
                 {% for u in users %}
                   {% set checked = false %}
@@ -220,24 +249,63 @@
                 {% endfor %}
               </div>
               <small class="text-muted d-block">Selecciona uno o varios usuarios marcando las casillas.</small>
+              {% endif %}
             </div>
             <div class="col-md-6 mb-3">
               <label class="form-label fw-semibold">Asignado a (Cliente)</label>
+              {% if is_limited_editor %}
+                <p class="form-control-plaintext">{{ task.assigned_client.first_name if task.assigned_client else '—' }}</p>
+              {% else %}
               <select class="form-select" name="assigned_client_id">
                 <option value="">-- Sin asignar --</option>
                 {% for c in project.clients %}
                   <option value="{{ c.id }}" {% if task.assigned_client_id and task.assigned_client_id == c.id %}selected{% endif %}>{{ c.first_name or c.email }}</option>
                 {% endfor %}
               </select>
+              {% endif %}
             </div>
             <div class="col-md-6 mb-3">
               <label class="form-label fw-semibold">Fecha de Inicio</label>
+              {% if current_user.is_authenticated and current_user.is_internal and current_user.role and current_user.role.name in ('PMP','Admin') %}
               <input type="datetime-local" class="form-control" name="start_date" value="{% if task.start_date %}{{ task.start_date.strftime('%Y-%m-%dT%H:%M') }}{% endif %}">
+              {% else %}
+              <input type="datetime-local" class="form-control" name="start_date" value="{% if task.start_date %}{{ task.start_date.strftime('%Y-%m-%dT%H:%M') }}{% endif %}" disabled title="Solo PMP/Admin puede editar fechas">
+              {% endif %}
             </div>
             <div class="col-md-6 mb-3">
               <label class="form-label fw-semibold">Fecha de Vencimiento</label>
+              {% if current_user.is_authenticated and current_user.is_internal and current_user.role and current_user.role.name in ('PMP','Admin') %}
               <input type="datetime-local" class="form-control" name="due_date" value="{% if task.due_date %}{{ task.due_date.strftime('%Y-%m-%dT%H:%M') }}{% endif %}">
+              {% else %}
+              <input type="datetime-local" class="form-control" name="due_date" value="{% if task.due_date %}{{ task.due_date.strftime('%Y-%m-%dT%H:%M') }}{% endif %}" disabled title="Solo PMP/Admin puede editar fechas">
+              {% endif %}
             </div>
+            {% if is_limited_editor %}
+            <div class="col-md-6 mb-3">
+              <label class="form-label fw-semibold">Horas Estimadas</label>
+              <p class="form-control-plaintext">{{ task.estimated_hours if task.estimated_hours is not none else '—' }}</p>
+            </div>
+
+            <div class="col-md-6 mb-3">
+              <label class="form-label fw-semibold">Tarea Padre</label>
+              <p class="form-control-plaintext">{% if task.parent %}{{ task.parent.title }} (#{{ task.parent.id }}){% else %}—{% endif %}</p>
+              <small class="text-muted d-block">(Solo lectura)</small>
+            </div>
+
+            <div class="col-md-6 mb-3">
+              <label class="form-label fw-semibold">Predecesoras (Dependencias)</label>
+              <div class="form-control-plaintext" style="white-space:normal;">
+                {% if task.predecessors and task.predecessors|length > 0 %}
+                  {% for p in task.predecessors %}
+                    <div>{{ p.title }} (#{{ p.id }}) {% if p.status == 'COMPLETED' %}✓{% endif %}</div>
+                  {% endfor %}
+                {% else %}
+                  <div class="text-muted">—</div>
+                {% endif %}
+              </div>
+              <small class="text-muted d-block">(Solo lectura)</small>
+            </div>
+            {% else %}
             <div class="col-md-6 mb-3">
               <label class="form-label fw-semibold">Horas Estimadas</label>
               <input type="number" class="form-control" name="estimated_hours" step="0.5" value="{{ task.estimated_hours or '' }}">
@@ -263,7 +331,7 @@
               </select>
               <small class="text-muted d-block">Tareas que deben completarse antes de esta (bloquean completar).</small>
             </div>
-          </div>
+            {% endif %}          </div>
 
           <!-- Alertas de Bloqueo -->
           {% set blockers = task.get_completion_blockers() %}
@@ -324,6 +392,12 @@
           </div>
           {% endif %}
 
+          {% if is_limited_editor %}
+          <div class="mb-3 form-check">
+            <p class="form-control-plaintext">{% if task.is_internal_only %}Sí (Solo interno){% else %}No{% endif %}</p>
+            <small class="d-block text-muted mt-1">(Solo lectura)</small>
+          </div>
+          {% else %}
           <div class="mb-3 form-check">
             <input type="checkbox" class="form-check-input" name="is_internal_only" id="is_internal_only" {% if task.is_internal_only %}checked{% endif %}>
             <label class="form-check-label" for="is_internal_only">
@@ -331,6 +405,7 @@
             </label>
             <small class="d-block text-muted mt-1">Si está marcada, esta tarea solo será visible para usuarios PMP y Admin. Los clientes no podrán verla.</small>
           </div>
+          {% endif %}
 
           <!-- New Attachments Section -->
           <div class="mb-3">
@@ -429,30 +504,56 @@
 function showSelectedFiles(input) {
   const container = document.getElementById('pendingFiles');
   container.innerHTML = '';
-  
+  const warningEl = document.getElementById('fileWarning');
+  if (warningEl) warningEl.remove();
+
+  let hasInvalid = false;
   if (input.files && input.files.length > 0) {
     Array.from(input.files).forEach((file, index) => {
       const size = (file.size / 1024).toFixed(1);
+      const ext = (file.name.split('.').pop() || '').toLowerCase();
+      const isValid = ALLOWED_EXTENSIONS.length === 0 || ALLOWED_EXTENSIONS.includes(ext);
+
       const div = document.createElement('div');
       div.className = 'pending-file';
       div.innerHTML = `
         <i class="fa-solid fa-file"></i>
         <span class="file-name">${file.name}</span>
         <span class="file-size">${size} KB</span>
-        <span class="badge bg-warning text-dark">Pendiente</span>
+        <span class="badge ${isValid ? 'bg-warning text-dark' : 'bg-danger text-white'}">${isValid ? 'Pendiente' : 'Extensión no permitida'}</span>
       `;
       container.appendChild(div);
+      if (!isValid) hasInvalid = true;
     });
+  }
+
+  // If there are invalid files, show a visible warning and disable save
+  const saveBtn = document.getElementById('btnSaveTask');
+  if (hasInvalid) {
+    const warn = document.createElement('div');
+    warn.id = 'fileWarning';
+    warn.className = 'alert alert-danger mt-2';
+    warn.innerHTML = `Extensiones no permitidas encontradas. Extensiones permitidas: <strong>${ALLOWED_EXTENSIONS.join(', ') || 'ninguna especificada'}</strong>.
+      <button type="button" class="btn btn-sm btn-outline-light ms-2" id="clearFilesBtn">Quitar archivos inválidos</button>`;
+    container.appendChild(warn);
+    if (saveBtn) saveBtn.disabled = true;
+    document.getElementById('clearFilesBtn').addEventListener('click', function(){
+      fileInput.value = '';
+      showSelectedFiles(fileInput);
+      if (saveBtn) saveBtn.disabled = false;
+    });
+  } else {
+    if (saveBtn) saveBtn.disabled = false;
   }
 }
 
 // Drag and drop
 const uploadZone = document.getElementById('uploadZone');
 const fileInput = document.getElementById('fileInput');
-
-['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+  // Allowed extensions from server config
+  const ALLOWED_EXTENSIONS = {{ allowed_extensions | tojson }};
   uploadZone.addEventListener(eventName, (e) => { e.preventDefault(); e.stopPropagation(); });
-});
+
 
 ['dragenter', 'dragover'].forEach(eventName => {
   uploadZone.addEventListener(eventName, () => { uploadZone.classList.add('dragover'); });

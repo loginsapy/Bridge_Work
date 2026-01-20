@@ -573,12 +573,33 @@
       </div>
       <div class="detail-card-body">
         <div class="detail-item">
-          <div class="detail-label">Asignado a</div>
+          <div class="detail-label">Asignados (Internos)</div>
           <div class="detail-value">
-            {% if task.assigned_to %}
+            {% if task.assignees and task.assignees|length > 0 %}
             <div class="assignee-display">
-              <div class="assignee-avatar">{{ (task.assigned_to.first_name or task.assigned_to.email)[0]|upper }}</div>
-              {{ task.assigned_to.first_name or task.assigned_to.email }}
+              {% for a in task.assignees[:2] %}
+              <div class="d-flex align-items-center me-3">
+                <div class="assignee-avatar">{{ (a.first_name or a.email)[0]|upper }}</div>
+                <div class="ms-2">{{ a.first_name or a.email }}</div>
+              </div>
+              {% endfor %}
+              {% if task.assignees|length > 2 %}
+                <small class="text-muted">+{{ task.assignees|length - 2 }} más</small>
+              {% endif %}
+            </div>
+            {% else %}
+              <span class="text-muted">Sin asignar</span>
+            {% endif %}
+          </div>
+        </div>
+
+        <div class="detail-item">
+          <div class="detail-label">Asignado (Cliente)</div>
+          <div class="detail-value">
+            {% if task.assigned_client %}
+            <div class="assignee-display">
+              <div class="assignee-avatar" style="background:#e6f9ec;color:#138a3a;">{{ (task.assigned_client.first_name or task.assigned_client.email)[0]|upper }}</div>
+              {{ task.assigned_client.first_name or task.assigned_client.email }}
             </div>
             {% else %}
             <span class="text-muted">Sin asignar</span>

@@ -293,6 +293,45 @@ function markAllAsRead() {
     .catch(err => console.error('Error marking all read:', err));
 }
 
+// Ensure there is a toast container and expose helper globally
+function ensureNotificationToastContainer(){
+  let c = document.getElementById('notificationToastContainer');
+  if (!c) {
+    c = document.createElement('div');
+    c.id = 'notificationToastContainer';
+    c.style.position = 'fixed';
+    c.style.top = '1rem';
+    c.style.right = '1rem';
+    c.style.zIndex = 1060;
+    document.body.appendChild(c);
+  }
+  return c;
+}
+
+window.showNotificationToast = function(n){
+  const toastContainer = ensureNotificationToastContainer();
+  const title = n && n.title ? n.title : 'Notificación';
+  const msg = n && n.message ? n.message : 'Tienes una nueva notificación';
+  const toast = document.createElement('div');
+  toast.className = 'toast align-items-center text-white bg-primary border-0 mb-2';
+  toast.setAttribute('role', 'alert');
+  toast.setAttribute('aria-live', 'assertive');
+  toast.setAttribute('aria-atomic', 'true');
+  toast.innerHTML = `
+    <div class="d-flex">
+      <div class="toast-body">
+        <strong>${title}</strong>
+        <div class="small">${msg}</div>
+      </div>
+      <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+    </div>
+  `;
+  toastContainer.appendChild(toast);
+  const bsToast = new bootstrap.Toast(toast, { delay: 8000 });
+  bsToast.show();
+  toast.addEventListener('hidden.bs.toast', () => toast.remove());
+}
+
 // Load notifications when dropdown is opened
 document.addEventListener('DOMContentLoaded', function() {
   const dropdown = document.getElementById('notificationDropdown');
@@ -301,43 +340,7 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 
   // Initialize previous unread count from server-rendered value
-  window.prevUnreadCount = {{ unread_notifications_count or 0 }};
-
-  // Create toast container for notification alerts
-  let toastContainer = document.getElementById('notificationToastContainer');
-  if (!toastContainer) {
-    toastContainer = document.createElement('div');
-    toastContainer.id = 'notificationToastContainer';
-    toastContainer.style.position = 'fixed';
-    toastContainer.style.top = '1rem';
-    toastContainer.style.right = '1rem';
-    toastContainer.style.zIndex = 1060;
-    document.body.appendChild(toastContainer);
-  }
-
-  // Helper to show a bootstrap toast for a notification
-  function showNotificationToast(n) {
-    const title = n && n.title ? n.title : 'Notificación';
-    const msg = n && n.message ? n.message : 'Tienes una nueva notificación';
-    const toast = document.createElement('div');
-    toast.className = 'toast align-items-center text-white bg-primary border-0 mb-2';
-    toast.setAttribute('role', 'alert');
-    toast.setAttribute('aria-live', 'assertive');
-    toast.setAttribute('aria-atomic', 'true');
-    toast.innerHTML = `
-      <div class="d-flex">
-        <div class="toast-body">
-          <strong>${title}</strong>
-          <div class="small">${msg}</div>
-        </div>
-        <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
-      </div>
-    `;
-    toastContainer.appendChild(toast);
-    const bsToast = new bootstrap.Toast(toast, { delay: 8000 });
-    bsToast.show();
-    toast.addEventListener('hidden.bs.toast', () => toast.remove());
-  }
+  window.prevUnreadCount = {{ unread_notifications_count or 0 }};;
 
   // Update badge on page load
   updateNotificationBadge();

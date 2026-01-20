@@ -280,6 +280,13 @@ def create_task():
     except ValidationError as e:
         return jsonify({"errors": e.messages}), 400
 
+    from flask_login import current_user
+
+    # Prevent non-PMP/Admin users from setting dates
+    if (validated.get('start_date') or validated.get('due_date')):
+        if not (getattr(current_user, 'is_authenticated', False) and current_user.is_internal and getattr(current_user, 'role', None) and current_user.role.name in ('PMP', 'Admin')):
+            return jsonify({'error': 'No tienes permiso para establecer fechas'}), 403
+
     t = Task(
         project_id=validated.get("project_id"),
         parent_task_id=validated.get("parent_task_id"),
@@ -318,6 +325,18 @@ def update_task(task_id):
     t = Task.query.get_or_404(task_id)
     data = request.get_json() or {}
     
+    # Role-based restrictions: participants and clients may only change 'status' via API
+    from flask_login import current_user
+    is_pmp_admin = (getattr(current_user, 'is_authenticated', False) and getattr(current_user, 'is_internal', False) and getattr(current_user, 'role', None) and current_user.role.name in ('PMP','Admin'))
+    is_participant = (getattr(current_user, 'is_authenticated', False) and getattr(current_user, 'is_internal', False) and getattr(current_user, 'role', None) and current_user.role.name == 'Participante')
+    is_client = (not getattr(current_user, 'is_internal', True)) and (t.project and t.project.client_id == getattr(current_user, 'id', None))
+
+    if is_participant or is_client:
+        allowed_keys = {'status'}
+        extra = set([k for k in data.keys() if k not in allowed_keys])
+        if extra:
+            return jsonify({'error': 'No tienes permiso para modificar campos además de status'}), 403
+
     # Validate status transition using can_advance_status (normalize legacy values)
     if 'status' in data:
         from app.models import Task as TaskModel
@@ -337,6 +356,10 @@ def update_task(task_id):
     for field in ["project_id", "parent_task_id", "title", "description", "assigned_to_id", "assigned_client_id", "status", "priority", "start_date", "due_date", "is_external_visible", "estimated_hours"]:
         if field in data:
             if field in ["start_date", "due_date"]:
+                # Only PMP/Admin users may modify date fields
+                from flask_login import current_user
+                if not (getattr(current_user, 'is_authenticated', False) and current_user.is_internal and getattr(current_user, 'role', None) and current_user.role.name in ('PMP', 'Admin')):
+                    return jsonify({'error': 'No tienes permiso para modificar fechas'}), 403
                 setattr(t, field, parse_datetime(data[field]))
             else:
                 if field == 'status':

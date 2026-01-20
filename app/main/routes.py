@@ -2,7 +2,8 @@ from datetime import datetime, timedelta
 import os
 import uuid
 import mimetypes
-from flask import render_template, jsonify, request, redirect, url_for, flash, abort, current_app, send_from_directory
+from flask import render_template, jsonify, request, redirect, url_for, flash, abort, current_app, send_from_directory, send_file
+from io import BytesIO
 from flask_login import current_user, login_required
 from sqlalchemy import func
 from werkzeug.utils import secure_filename
@@ -2155,7 +2156,157 @@ def reports():
     ).join(TimeEntry).filter(
         TimeEntry.date >= thirty_days_ago
     ).group_by(User.id, User.email).all()
-    
+
+    # Projects list for selector
+    projects = Project.query.order_by(Project.name).all()
+
+    # Optional: build project-specific summary rows if a project is selected
+    project = None
+    task_rows = None
+    project_id = request.args.get('project_id')
+    if project_id:
+        project = Project.query.get(project_id)
+        if not project:
+            abort(404)
+
+        # Paginated task query for project summary (10 items per page)
+        tasks_query = Task.query.filter_by(project_id=project.id).order_by(Task.id)
+        project_total_tasks = tasks_query.count()
+
+        # Pagination params
+        try:
+            page = max(1, int(request.args.get('page', 1)))
+        except Exception:
+            page = 1
+        per_page = 10
+
+        # Load tasks: all if exporting, otherwise page slice
+        if request.args.get('export') == 'xlsx':
+            tasks = tasks_query.all()
+        else:
+            tasks = tasks_query.limit(per_page).offset((page - 1) * per_page).all()
+
+        task_rows = []
+        today = datetime.now().date()
+        for t in tasks:
+            assignees = [u.name for u in t.assignee_list]
+            client_name = t.assigned_client.name if t.assigned_client else ''
+            hours_logged = db.session.query(func.coalesce(func.sum(TimeEntry.hours), 0)).filter(TimeEntry.task_id == t.id).scalar() or 0
+
+            # Calculate days overdue (Option 1): for non-completed tasks only
+            if t.due_date:
+                due_val = t.due_date.date() if hasattr(t.due_date, 'date') else t.due_date
+                if t.status == 'COMPLETED':
+                    days_overdue = 0
+                else:
+                    days_overdue = max(0, (today - due_val).days)
+            else:
+                days_overdue = 0
+
+            task_rows.append({
+                'id': t.id,
+                'title': t.title,
+                'status': t.status,
+                'priority': t.priority,
+                'assignees': assignees,
+                'client': client_name,
+                'start_date': t.start_date.date() if t.start_date else None,
+                'due_date': t.due_date.date() if t.due_date else None,
+                'estimated_hours': t.estimated_hours,
+                'hours_logged': float(hours_logged),
+                'days_overdue': int(days_overdue)
+            })
+
+        # Compute pagination metadata for template (only when not exporting)
+        pagination = None
+        if request.args.get('export') != 'xlsx':
+            total_pages = (project_total_tasks + per_page - 1) // per_page if project_total_tasks else 1
+            pagination = {'page': page, 'per_page': per_page, 'total': project_total_tasks, 'pages': total_pages}
+
+        # Override KPI cards with project-scoped metrics when a project is selected
+        try:
+            project_completed_tasks = sum(1 for t in tasks_query if (t.status or '').upper() == 'COMPLETED')
+            project_total_budget = project.budget_hours or 0
+            project_total_hours_spent = db.session.query(func.coalesce(func.sum(TimeEntry.hours), 0)).join(Task).filter(Task.project_id == project.id).scalar() or 0
+
+            # % usage
+            project_budget_usage = (float(project_total_hours_spent) / float(project_total_budget) * 100) if project_total_budget and float(project_total_budget) > 0 else 0
+
+            # Hours by user limited to this project
+            project_user_hours = db.session.query(
+                User.email,
+                func.sum(TimeEntry.hours).label('total_hours')
+            ).join(TimeEntry).join(Task).filter(
+                Task.project_id == project.id,
+                TimeEntry.date >= thirty_days_ago
+            ).group_by(User.id, User.email).all()
+
+            # Override variables used in template
+            total_projects = 1
+            total_tasks = project_total_tasks
+            completed_tasks = project_completed_tasks
+            total_budget = project_total_budget
+            total_hours_spent = project_total_hours_spent
+            budget_usage_percent = project_budget_usage
+            user_hours = project_user_hours
+        except Exception:
+            # If anything goes wrong, fall back to global values already computed
+            pass
+
+        if request.args.get('export') == 'xlsx':
+            try:
+                import openpyxl
+                from openpyxl.utils import get_column_letter
+            except Exception:
+                abort(500, 'openpyxl not installed')
+
+            wb = openpyxl.Workbook()
+            ws = wb.active
+            ws.title = f"Project-{project.id}-Summary"
+
+            headers = ['Task ID', 'Title', 'Status', 'Priority', 'Assignees', 'Assigned Client', 'Start Date', 'Due Date', 'Atraso (días)', 'Estimated Hours', 'Hours Logged']
+            ws.append(headers)
+            for row in task_rows:
+                ws.append([
+                    row['id'],
+                    row['title'],
+                    row['status'],
+                    row['priority'],
+                    ', '.join(row['assignees']) if row['assignees'] else '',
+                    row['client'] or '',
+                    row['start_date'].isoformat() if row['start_date'] else '',
+                    row['due_date'].isoformat() if row['due_date'] else '',
+                    int(row.get('days_overdue', 0)),
+                    float(row['estimated_hours']) if row['estimated_hours'] is not None else '',
+                    row['hours_logged']
+                ])
+
+            # Auto width
+            for i, column_cells in enumerate(ws.columns, 1):
+                length = max(len(str(cell.value or '')) for cell in column_cells)
+                ws.column_dimensions[get_column_letter(i)].width = min(max(length + 2, 10), 50)
+
+            bio = BytesIO()
+            wb.save(bio)
+            bio.seek(0)
+            filename = f"project_{project.id}_summary.xlsx"
+            return send_file(bio, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', as_attachment=True, download_name=filename)
+
+        # Otherwise render the report section with task_rows
+        return render_template('reports.html',
+            total_projects=total_projects,
+            total_tasks=total_tasks,
+            completed_tasks=completed_tasks,
+            total_budget=total_budget,
+            total_hours_spent=total_hours_spent,
+            budget_usage_percent=budget_usage_percent,
+            user_hours=user_hours,
+            projects=projects,
+            selected_project=project,
+            task_rows=task_rows,
+            pagination=pagination
+        )
+
     return render_template('reports.html',
         total_projects=total_projects,
         total_tasks=total_tasks,
@@ -2163,7 +2314,8 @@ def reports():
         total_budget=total_budget,
         total_hours_spent=total_hours_spent,
         budget_usage_percent=budget_usage_percent,
-        user_hours=user_hours
+        user_hours=user_hours,
+        projects=projects
     )
 
 
@@ -2351,7 +2503,7 @@ def update_task_status(task_id):
 
         task.set_status(new_status)
         db.session.commit()
-        return redirect(url_for('main.project_detail', project_id=project.id))
+        return redirect(url_for('main.task_detail', task_id=task.id))
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': str(e)}), 400
@@ -2501,7 +2653,7 @@ def edit_task(task_id):
     can_edit = current_user.is_internal or project.client_id == current_user.id
     if not can_edit:
         flash('No tienes permiso para editar esta tarea.', 'danger')
-        return redirect(url_for('main.project_detail', project_id=project.id))
+        return redirect(url_for('main.task_detail', task_id=task.id))
 
     if request.method == 'POST':
         try:
@@ -2519,22 +2671,38 @@ def edit_task(task_id):
                 'predecessor_ids': sorted([p.id for p in task.predecessors]),
                 'parent_task_id': task.parent_task_id
             }
-            
+
+            # Role checks: only PMP/Admin can modify most fields. Participants and Clients may only change status and upload files.
+            is_pmp_admin = (current_user.is_authenticated and current_user.is_internal and current_user.role and current_user.role.name in ('PMP','Admin'))
+            is_participant = (current_user.is_authenticated and current_user.is_internal and current_user.role and current_user.role.name == 'Participante')
+            is_client = (not current_user.is_internal) and (project.client_id == current_user.id)
+            is_limited_editor = is_participant or is_client
+
+            if is_limited_editor:
+                # Only allow status in form. If any other form fields are present, reject and redirect.
+                allowed = {'status'}
+                extra = set([k for k in request.form.keys() if k not in allowed and not k.startswith('_')])
+                if extra:
+                    flash('No tienes permiso para modificar campos además de estado y archivos.', 'danger')
+                    return redirect(url_for('main.edit_task', task_id=task.id))
+
+            # Process fields (PMP/Admin or allowed status for limited editors)
             task.title = request.form.get('title') or task.title
             task.description = request.form.get('description')
-            # Handle optional status change: only update if provided and valid
-            # Handle predecessors (many-to-many) EARLY: validate and assign BEFORE status validation
-            predecessor_ids = [int(x) for x in request.form.getlist('predecessor_ids') if x and x.strip()]
-            try:
-                # validate before assignment
-                task.validate_predecessor_ids(predecessor_ids)
-                if predecessor_ids:
-                    preds = Task.query.filter(Task.id.in_(predecessor_ids)).all()
-                else:
-                    preds = []
-                task.predecessors = preds
-            except ValueError as ve:
-                raise ve
+
+            # Handle predecessors (many-to-many) EARLY: only if provided in form, validate and assign BEFORE status validation
+            if 'predecessor_ids' in request.form:
+                predecessor_ids = [int(x) for x in request.form.getlist('predecessor_ids') if x and x.strip()]
+                try:
+                    # validate before assignment
+                    task.validate_predecessor_ids(predecessor_ids)
+                    if predecessor_ids:
+                        preds = Task.query.filter(Task.id.in_(predecessor_ids)).all()
+                    else:
+                        preds = []
+                    task.predecessors = preds
+                except ValueError as ve:
+                    raise ve
 
             status_from_form = request.form.get('status')
             if status_from_form and status_from_form != task.status:
@@ -2543,69 +2711,89 @@ def edit_task(task_id):
                     raise ValueError(error_msg)
                 task.set_status(status_from_form)
             # If no status provided, keep existing task.status unchanged
-            task.priority = request.form.get('priority') or task.priority
-            task.is_internal_only = request.form.get('is_internal_only') == 'on'
 
+            task.priority = request.form.get('priority') or task.priority
+            # Only update is_internal_only if provided in form (checkboxes absent when not submitted)
+            if 'is_internal_only' in request.form:
+                task.is_internal_only = request.form.get('is_internal_only') == 'on'
             start_date_str = request.form.get('start_date')
+            due_date_str = request.form.get('due_date')
+
+            # Only PMP/Admin may modify dates
+            if (start_date_str or due_date_str) and not is_pmp_admin:
+                flash('No tienes permiso para modificar fechas de la tarea.', 'danger')
+                return redirect(url_for('main.edit_task', task_id=task.id))
+
             if start_date_str:
                 task.start_date = datetime.fromisoformat(start_date_str)
             else:
                 task.start_date = None
 
-            due_date_str = request.form.get('due_date')
             if due_date_str:
                 task.due_date = datetime.fromisoformat(due_date_str)
             else:
                 task.due_date = None
 
             # Update parent task (validate no cycles)
-            parent_task_id = request.form.get('parent_task_id')
-            if parent_task_id and parent_task_id.strip():
-                new_parent_id = int(parent_task_id)
-                if new_parent_id == task.id:
-                    raise ValueError('La tarea no puede ser su propia tarea padre')
-                parent_task = Task.query.get(new_parent_id)
-                if not parent_task or parent_task.project_id != project.id:
-                    raise ValueError('Tarea padre inválida')
-                # Ensure not assigning a descendant as parent (would create cycle)
-                descendant_ids = [d.id for d in task.descendants()]
-                if new_parent_id in descendant_ids:
-                    raise ValueError('No se puede asignar una subtarea como tarea padre')
-                task.parent_task_id = new_parent_id
-            else:
-                task.parent_task_id = None
+            # Update parent task only if provided in form
+            if 'parent_task_id' in request.form:
+                parent_task_id = request.form.get('parent_task_id')
+                if parent_task_id and parent_task_id.strip():
+                    new_parent_id = int(parent_task_id)
+                    if new_parent_id == task.id:
+                        raise ValueError('La tarea no puede ser su propia tarea padre')
+                    parent_task = Task.query.get(new_parent_id)
+                    if not parent_task or parent_task.project_id != project.id:
+                        raise ValueError('Tarea padre inválida')
+                    # Ensure not assigning a descendant as parent (would create cycle)
+                    descendant_ids = [d.id for d in task.descendants()]
+                    if new_parent_id in descendant_ids:
+                        raise ValueError('No se puede asignar una subtarea como tarea padre')
+                    task.parent_task_id = new_parent_id
+                else:
+                    task.parent_task_id = None
 
-            estimated_hours = request.form.get('estimated_hours')
-            if estimated_hours and estimated_hours.strip():
-                task.estimated_hours = float(estimated_hours)
-            else:
-                task.estimated_hours = None
+            # Update estimated_hours only if provided in form
+            if 'estimated_hours' in request.form:
+                estimated_hours = request.form.get('estimated_hours')
+                if estimated_hours and estimated_hours.strip():
+                    task.estimated_hours = float(estimated_hours)
+                else:
+                    task.estimated_hours = None
 
             # Update assignees (multi-select). Keep assigned_to_id for compatibility (first selected)
             current_app.logger.debug('edit_task: raw assignees payload = %s', request.form.getlist('assignees'))
-            assignee_ids = [int(x) for x in request.form.getlist('assignees') if x and x.strip()]
-            # Use ORM relationship management only (avoid direct SQL deletes that confuse the ORM unit-of-work)
-            if assignee_ids:
-                users = User.query.filter(User.id.in_(assignee_ids)).all()
-                task.assignees = users
-                task.assigned_to_id = users[0].id if users else None
-            else:
-                # If no assignees selected, clear assignees and assigned_to_id
-                task.assignees = []
-                task.assigned_to_id = None
+            if 'assignees' in request.form:
+                assignee_ids = [int(x) for x in request.form.getlist('assignees') if x and x.strip()]
+                # Use ORM relationship management only (avoid direct SQL deletes that confuse the ORM unit-of-work)
+                if assignee_ids:
+                    users = User.query.filter(User.id.in_(assignee_ids)).all()
+                    task.assignees = users
+                    task.assigned_to_id = users[0].id if users else None
+                else:
+                    # Explicitly clearing assignees requested
+                    task.assignees = []
+                    task.assigned_to_id = None
 
-            # Update assigned client (separate field)
-            assigned_client_id = request.form.get('assigned_client_id')
-            new_assigned_client_id = int(assigned_client_id) if assigned_client_id and assigned_client_id.strip() else None
-            task.assigned_client_id = new_assigned_client_id
-
+            # Update assigned client (separate field) only if present in form
+            assigned_client_provided = False
+            new_assigned_client_id = None
+            if 'assigned_client_id' in request.form:
+                assigned_client_provided = True
+                assigned_client_id = request.form.get('assigned_client_id')
+                new_assigned_client_id = int(assigned_client_id) if assigned_client_id and assigned_client_id.strip() else None
+                task.assigned_client_id = new_assigned_client_id
             # Predecessor handling moved earlier to occur BEFORE status validation to ensure
             # that status changes take the new predecessors into account. See above.
 
             # Handle file attachments
             files = request.files.getlist('attachments')
+            invalid_files = []
             for file in files:
-                if file and file.filename and allowed_file(file.filename):
+                if file and file.filename:
+                    if not allowed_file(file.filename):
+                        invalid_files.append(file.filename)
+                        continue
                     filename = secure_filename(file.filename)
                     # get_unique_filename returns (stored_filename, task_folder)
                     stored_filename, task_folder = get_unique_filename(task.id, filename)
@@ -2623,6 +2811,9 @@ def edit_task(task_id):
                         uploaded_by_id=current_user.id
                     )
                     db.session.add(attachment)
+
+            if invalid_files:
+                flash('Algunos archivos no fueron subidos porque su extensión no está permitida: ' + ', '.join(invalid_files), 'warning')
 
             # Registrar auditoría de cambios en tarea
             new_values = {
@@ -2673,20 +2864,23 @@ def edit_task(task_id):
                     except Exception:
                         current_app.logger.exception('Failed to notify new assignee %s for task %s', uid, task.id)
 
-            # Notificar si se asignó a un nuevo cliente
-            if new_assigned_client_id and new_assigned_client_id != old_assigned_client_id and new_assigned_client_id != current_user.id:
-                NotificationService.notify_task_assigned(
-                    task=task,
-                    assigned_by_user=current_user,
-                    send_email=send_email,
-                    notify_client=True
-                )
-                email_sent = True
+            # Notificar si se asignó a un nuevo cliente (solo si fue provisto en el formulario)
+            if assigned_client_provided and new_assigned_client_id is not None and new_assigned_client_id != old_assigned_client_id and new_assigned_client_id != current_user.id:
+                try:
+                    NotificationService.notify_task_assigned(
+                        task=task,
+                        assigned_by_user=current_user,
+                        send_email=send_email,
+                        notify_client=True
+                    )
+                    email_sent = True
+                except Exception:
+                    current_app.logger.exception('Failed to notify assigned client %s for task %s', new_assigned_client_id, task.id)
 
             if email_sent and send_email:
                 flash('Se ha enviado una notificación por correo al usuario asignado.', 'info')            
             flash('Tarea actualizada.', 'success')
-            return redirect(url_for('main.project_detail', project_id=project.id))
+            return redirect(url_for('main.task_detail', task_id=task.id))
         except Exception as e:
             db.session.rollback()
             current_app.logger.exception('Error updating task %s: %s', task.id if task else None, e)
@@ -2696,7 +2890,14 @@ def edit_task(task_id):
     users = User.query.filter_by(is_internal=True, is_active=True).order_by(User.first_name).all()
     # Candidate predecessors: tasks within the same project (exclude self)
     candidate_predecessors = Task.query.filter(Task.project_id == project.id, Task.id != task.id).order_by(Task.title).all()
-    return render_template('task_edit.html', task=task, project=project, users=users, candidate_predecessors=candidate_predecessors)
+
+    # Role flags for template: limit edit capabilities for Participants and Clients
+    is_pmp_admin = (current_user.is_authenticated and current_user.is_internal and current_user.role and current_user.role.name in ('PMP','Admin'))
+    is_participant = (current_user.is_authenticated and current_user.is_internal and current_user.role and current_user.role.name == 'Participante')
+    is_client = (not current_user.is_internal) and (project.client_id == current_user.id)
+    is_limited_editor = is_participant or is_client
+
+    return render_template('task_edit.html', task=task, project=project, users=users, candidate_predecessors=candidate_predecessors, is_pmp_admin=is_pmp_admin, is_limited_editor=is_limited_editor, allowed_extensions=list(current_app.config.get('ALLOWED_EXTENSIONS', [])))
 
 
 @main_bp.route('/task/<int:task_id>/client_accept', methods=['POST'])
