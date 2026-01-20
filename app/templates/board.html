@@ -136,6 +136,8 @@
   gap: 8px;
 }
 
+.person-avatars { display: inline-flex; gap: 6px; align-items: center; }
+
 .person-avatar {
   width: 28px;
   height: 28px;
@@ -148,6 +150,21 @@
   font-size: 12px;
   font-weight: 600;
 }
+
+.person-avatar.small-avatar {
+  width: 20px;
+  height: 20px;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.person-avatar.more-badge {
+  background: #f1f5f9;
+  color: #374151;
+  border: 1px solid #e6e8eb;
+}
+
+.person-avatar.client-avatar { background:#e6f9ec;color:#138a3a; }
 
 .person-name {
   font-size: 13px;
@@ -840,11 +857,13 @@ tr.table-warning:hover {
                   {% set first_incomplete = task.incomplete_predecessors()[0] if task.incomplete_predecessors() else None %}
                   {% if first_incomplete %}
                     <a href="{{ url_for('main.task_detail', task_id=first_incomplete.id) }}" class="badge bg-warning text-dark ms-1" style="font-size: 0.65rem; text-decoration:none;" onclick="event.stopPropagation();" title="Predecesoras pendientes: {% for p in task.incomplete_predecessors()[:5] %}{{ p.title }}{% if not loop.last %}, {% endif %}{% endfor %}">
-                      <i class="fa-solid fa-lock"></i> Bloqueada
+                      <i class="fa-solid fa-lock" aria-hidden="true"></i>
+                      <span class="visually-hidden">Bloqueada</span>
                     </a>
                   {% else %}
                     <span class="badge bg-warning text-dark ms-1" style="font-size: 0.65rem;" title="Predecesoras pendientes">
-                      <i class="fa-solid fa-lock"></i> Bloqueada
+                      <i class="fa-solid fa-lock" aria-hidden="true"></i>
+                      <span class="visually-hidden">Bloqueada</span>
                     </span>
                   {% endif %}
                 {% elif task.has_incomplete_subtasks() %}
@@ -864,16 +883,24 @@ tr.table-warning:hover {
             </td>
             <td>
               <div class="cell person-cell" data-assignee-id="{{ task.assigned_to_id or '' }}" {% if current_user.is_internal %}onclick="showPersonDropdown(event, {{ task.id }})"{% endif %}>
-                {% if task.assigned_to %}
-                <div class="person-avatar">{{ (task.assigned_to.first_name or task.assigned_to.email)[0]|upper }}</div>
-                <span class="person-name">{{ task.assigned_to.first_name or task.assigned_to.email }}</span>
+                {% set assignees = task.assignee_list %}
+                {% if assignees and assignees|length > 0 %}
+                <div class="person-avatars">
+                  {% for u in assignees[:3] %}
+                    {% set fullname = (u.first_name ~ (' ' ~ u.last_name if u.last_name else '')) if u.first_name else u.email %}
+                    <div class="person-avatar small-avatar" title="{{ fullname }}" aria-label="{{ fullname }}">{{ (u.first_name or u.email)[0]|upper }}</div>
+                  {% endfor %}
+                  {% if assignees|length > 3 %}
+                    <div class="person-avatar small-avatar more-badge" title="{{ assignees|length - 3 }} more">+{{ assignees|length - 3 }}</div>
+                  {% endif %}
+                </div>
                 {% else %}
                 <span class="text-muted">{% if current_user.is_internal %}+ Asignar{% else %}—{% endif %}</span>
                 {% endif %}
 
                 {% if task.assigned_client %}
                 <div class="d-flex align-items-center mt-1">
-                  <div class="person-avatar" style="background:#e6f9ec;color:#138a3a;">{{ (task.assigned_client.first_name or task.assigned_client.email)[0]|upper }}</div>
+                  <div class="person-avatar client-avatar" style="background:#e6f9ec;color:#138a3a;" title="{{ task.assigned_client.first_name or task.assigned_client.email }}">{{ (task.assigned_client.first_name or task.assigned_client.email)[0]|upper }}</div>
                   <span class="person-name text-muted small">Cliente: {{ task.assigned_client.first_name or task.assigned_client.email }}</span>
                 </div>
                 {% endif %}

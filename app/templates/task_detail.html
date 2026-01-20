@@ -329,8 +329,9 @@
       <h1 class="task-title">
         {{ task.title }}
         {% if is_blocked %}
-        <span class="badge bg-warning text-dark ms-2" style="font-size: 0.5em; vertical-align: middle;">
-          <i class="fa-solid fa-lock"></i> Bloqueada
+        <span class="badge bg-warning text-dark ms-2" style="font-size: 0.5em; vertical-align: middle;" title="Bloqueada">
+          <i class="fa-solid fa-lock" aria-hidden="true"></i>
+          <span class="visually-hidden">Bloqueada</span>
         </span>
         {% endif %}
       </h1>
