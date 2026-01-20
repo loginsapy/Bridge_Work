@@ -495,7 +495,7 @@
             <td>{{ r.status }}</td>
             <td>{{ r.priority }}</td>
             <td>{{ r.assignees|join(', ') }}</td>
-            <td>{{ r.client or '-' }}</td>
+            <td>{% if r.client %}<span class="client-icon me-1" title="{{ r.client }} (Cliente Externo)" aria-label="{{ r.client }} (Cliente Externo)"><i class="fa-solid fa-building"></i></span> {{ r.client }}{% else %}-{% endif %}</td>
             <td>{{ r.start_date|fecha_es('corto_año') if r.start_date else '-' }}</td>
             <td>{{ r.due_date|fecha_es('corto_año') if r.due_date else '-' }}</td>
             <td>{{ r.days_overdue }}</td>

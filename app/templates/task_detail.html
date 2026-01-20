@@ -465,9 +465,11 @@
               <td class="fw-bold">{{ entry.hours }}h</td>
               <td><small class="text-muted">{{ entry.description or '—' }}</small></td>
               <td class="text-end">
+                {% if (entry.user_id == current_user.id) or (current_user.role and current_user.role.name in ['PMP','Admin']) %}
                 <a href="{{ url_for('main.edit_time_entry', entry_id=entry.id) }}" class="btn btn-sm btn-outline-primary">
                   <i class="fa-solid fa-pen"></i>
                 </a>
+                {% endif %}
               </td>
             </tr>
             {% endfor %}

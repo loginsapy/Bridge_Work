@@ -83,7 +83,7 @@
           </div>
           {% endif %}
 
-          {% if current_user.role and current_user.role.name == 'PMP' %}
+          {% if current_user.role and current_user.role.name in ['PMP','Admin'] %}
           <div class="form-check mb-4">
             <input class="form-check-input" type="checkbox" name="is_billable" id="is_billable" 
               {% if entry and entry.is_billable %}checked{% endif %}>
@@ -95,7 +95,7 @@
             </small>
           </div>
           {% else %}
-          <!-- For non-PMP users, show billable status read-only -->
+          <!-- For non-PMP/Admin users, show billable status read-only -->
           <div class="mb-4">
             <label class="form-label">Facturado</label>
             <div>
@@ -105,7 +105,7 @@
                 <span class="badge bg-secondary">No</span>
               {% endif %}
             </div>
-            <small class="form-text text-muted d-block mt-2">Solo los usuarios PMP pueden marcar horas como facturadas</small>
+            <small class="form-text text-muted d-block mt-2">Solo los usuarios PMP/Admin pueden marcar horas como facturadas</small>
           </div>
           {% endif %}
 

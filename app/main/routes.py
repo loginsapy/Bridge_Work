@@ -2190,7 +2190,10 @@ def reports():
         today = datetime.now().date()
         for t in tasks:
             assignees = [u.name for u in t.assignee_list]
-            client_name = t.assigned_client.name if t.assigned_client else ''
+            # Use first_name when available, otherwise fall back to name or email
+            client_name = ''
+            if t.assigned_client:
+                client_name = t.assigned_client.first_name or getattr(t.assigned_client, 'name', None) or t.assigned_client.email
             hours_logged = db.session.query(func.coalesce(func.sum(TimeEntry.hours), 0)).filter(TimeEntry.task_id == t.id).scalar() or 0
 
             # Calculate days overdue (Option 1): for non-completed tasks only
@@ -2273,7 +2276,7 @@ def reports():
                     row['status'],
                     row['priority'],
                     ', '.join(row['assignees']) if row['assignees'] else '',
-                    row['client'] or '',
+                    (row['client'] + ' (Cliente Externo)') if row.get('client') else '',
                     row['start_date'].isoformat() if row['start_date'] else '',
                     row['due_date'].isoformat() if row['due_date'] else '',
                     int(row.get('days_overdue', 0)),
@@ -2375,14 +2378,40 @@ def create_time_entry():
     from ..auth.decorators import _get_user_from_session
     user = _get_user_from_session()
     user_role = user.role.name if (user and user.role) else None
+    # Respect role: PMP/Admin see all tasks, others should see tasks they are assigned to (either legacy assigned_to or in assignees many-to-many)
     if user_role in ['PMP', 'Admin']:
         tasks = Task.query.order_by(Task.title).all()
     else:
-        tasks = Task.query.filter_by(assigned_to_id=user.id if user else -1).order_by(Task.title).all()
-    
+        from ..models import User
+        tasks = Task.query.filter(
+            (Task.assigned_to_id == user.id) | (Task.assignees.any(User.id == user.id))
+        ).order_by(Task.title).all()
+
     # Marcar tareas bloqueadas por predecesoras
     for t in tasks:
         t.has_incomplete_predecessors = len(t.incomplete_predecessors()) > 0
+
+    # Preserve selected task id if link passed it (e.g., from task detail) so the select pre-selects it
+    selected_task_id = request.args.get('task_id', type=int)
+
+    # If a selected_task_id was provided but not in the tasks list (could happen), try to include it
+    if selected_task_id and not any(t.id == selected_task_id for t in tasks):
+        try:
+            sel_t = Task.query.get(int(selected_task_id))
+            # only add if the current user should be able to log time for it (PMP/Admin or assigned)
+            can_attach = False
+            if user_role in ['PMP', 'Admin']:
+                can_attach = True
+            else:
+                if sel_t and (sel_t.assigned_to_id == user.id or (getattr(sel_t, 'assignees', None) and any(u.id == user.id for u in sel_t.assignees))):
+                    can_attach = True
+            if can_attach and sel_t:
+                sel_t.has_incomplete_predecessors = len(sel_t.incomplete_predecessors()) > 0
+                tasks = tasks + [sel_t]
+        except Exception:
+            pass
+
+    return render_template('time_entry_edit.html', entry=None, tasks=tasks, selected_task_id=selected_task_id, now=datetime.now())
 
     selected_task_id = request.args.get('task_id', type=int)
     return render_template('time_entry_edit.html', tasks=tasks, now=datetime.now(), selected_task_id=selected_task_id)
@@ -2393,12 +2422,12 @@ def create_time_entry():
 def edit_time_entry(entry_id):
     entry = TimeEntry.query.get_or_404(entry_id)
     
-    # Solo el propietario o PMP puede editar (PMP puede marcar facturado)
+    # Solo el propietario, PMP o Admin puede editar (PMP/Admin pueden marcar facturado)
     is_owner = entry.user_id == current_user.id
     from ..auth.decorators import _get_user_from_session
     user = _get_user_from_session()
     role_name = user.role.name if (user and user.role) else None
-    if not (is_owner or role_name == 'PMP'):
+    if not (is_owner or role_name in ('PMP', 'Admin')):
         flash('No tienes permiso para editar este registro.', 'danger')
         return redirect(url_for('main.time_entries'))
     
@@ -2406,13 +2435,13 @@ def edit_time_entry(entry_id):
         try:
             old_values = {'date': str(entry.date), 'hours': float(entry.hours), 'is_billable': entry.is_billable}
             
-            # Only owners can modify date/hours/description
-            if is_owner:
+            # Owners, PMP or Admin can modify date/hours/description
+            if is_owner or role_name in ('PMP', 'Admin'):
                 entry.date = datetime.fromisoformat(request.form.get('date')).date()
                 entry.hours = float(request.form.get('hours'))
                 entry.description = request.form.get('description')
-            # Only PMP users can change the 'is_billable' flag
-            if role_name == 'PMP':
+            # PMP and Admin users can change the 'is_billable' flag
+            if role_name in ('PMP', 'Admin'):
                 entry.is_billable = request.form.get('is_billable') == 'on'
             else:
                 # preserve existing value (ignore any tampering in form)
