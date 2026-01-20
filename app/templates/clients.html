@@ -28,6 +28,52 @@
   color: var(--monday-yellow);
 }
 
+/* Filter Bar */
+.clients-filter-bar {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.clients-filter-bar .search-box {
+  flex: 1;
+  min-width: 250px;
+  position: relative;
+}
+
+.clients-filter-bar .search-box input {
+  width: 100%;
+  padding: 10px 16px 10px 40px;
+  border: 1px solid var(--monday-border);
+  border-radius: 8px;
+  font-size: 14px;
+  transition: all 0.2s;
+}
+
+.clients-filter-bar .search-box input:focus {
+  border-color: var(--monday-blue);
+  box-shadow: 0 0 0 3px rgba(0, 115, 234, 0.1);
+  outline: none;
+}
+
+.clients-filter-bar .search-box i {
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--monday-text-secondary);
+}
+
+.clients-filter-bar select {
+  padding: 10px 16px;
+  border: 1px solid var(--monday-border);
+  border-radius: 8px;
+  font-size: 14px;
+  min-width: 150px;
+}
+
 /* Monday Table for Clients */
 .monday-clients-table {
   background: white;
@@ -53,8 +99,17 @@
   border-bottom: 1px solid var(--monday-border);
 }
 
+.monday-clients-table th.sortable {
+  cursor: pointer;
+  user-select: none;
+}
+
+.monday-clients-table th.sortable:hover {
+  background: #e8e8e8;
+}
+
 .monday-clients-table td {
-  padding: 16px;
+  padding: 14px 16px;
   border-bottom: 1px solid var(--monday-border);
   vertical-align: middle;
 }
@@ -96,6 +151,53 @@
 .client-info .email {
   font-size: 12px;
   color: var(--monday-text-secondary);
+}
+
+.client-info .company {
+  font-size: 11px;
+  color: var(--monday-text-secondary);
+  font-style: italic;
+}
+
+/* Status Badge */
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.status-badge.active {
+  background: rgba(0, 200, 117, 0.15);
+  color: var(--monday-green);
+}
+
+.status-badge.inactive {
+  background: rgba(226, 68, 92, 0.15);
+  color: var(--monday-red);
+}
+
+/* Auth Badge */
+.auth-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.auth-badge.local {
+  background: rgba(0, 200, 117, 0.15);
+  color: var(--monday-green);
+}
+
+.auth-badge.azure {
+  background: rgba(0, 115, 234, 0.15);
+  color: var(--monday-blue);
 }
 
 /* Project Status Mini Pills */
@@ -156,6 +258,65 @@
   color: var(--monday-text-secondary);
 }
 
+/* Action Buttons */
+.action-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+.btn-action {
+  padding: 6px 10px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: all 0.2s;
+}
+
+.btn-action.edit {
+  background: rgba(0, 115, 234, 0.1);
+  color: var(--monday-blue);
+}
+
+.btn-action.edit:hover {
+  background: rgba(0, 115, 234, 0.2);
+}
+
+.btn-action.delete {
+  background: rgba(226, 68, 92, 0.1);
+  color: var(--monday-red);
+}
+
+.btn-action.delete:hover {
+  background: rgba(226, 68, 92, 0.2);
+}
+
+.btn-action.toggle {
+  background: rgba(253, 171, 61, 0.1);
+  color: #e68a00;
+}
+
+.btn-action.toggle:hover {
+  background: rgba(253, 171, 61, 0.2);
+}
+
+/* Pagination */
+.pagination-wrapper {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 20px;
+  padding: 16px;
+  background: white;
+  border-radius: 8px;
+  border: 1px solid var(--monday-border);
+}
+
+.pagination-info {
+  color: var(--monday-text-secondary);
+  font-size: 13px;
+}
+
 /* Empty State */
 .monday-empty-clients {
   text-align: center;
@@ -179,6 +340,90 @@
   color: var(--monday-text-secondary);
   margin: 0;
 }
+
+/* Modal Styles */
+.modal-header {
+  border-bottom: 1px solid var(--monday-border);
+  padding: 20px 24px;
+}
+
+.modal-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--monday-dark);
+}
+
+.modal-body {
+  padding: 24px;
+}
+
+.modal-footer {
+  border-top: 1px solid var(--monday-border);
+  padding: 16px 24px;
+}
+
+.form-label {
+  font-weight: 500;
+  color: var(--monday-dark);
+  margin-bottom: 6px;
+}
+
+.form-control, .form-select {
+  border: 1px solid var(--monday-border);
+  border-radius: 8px;
+  padding: 10px 14px;
+}
+
+.form-control:focus, .form-select:focus {
+  border-color: var(--monday-blue);
+  box-shadow: 0 0 0 3px rgba(0, 115, 234, 0.1);
+}
+
+/* Stats Cards */
+.clients-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.stat-card {
+  background: white;
+  border-radius: 8px;
+  border: 1px solid var(--monday-border);
+  padding: 20px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.stat-card .icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+}
+
+.stat-card .icon.blue { background: rgba(0, 115, 234, 0.1); color: var(--monday-blue); }
+.stat-card .icon.green { background: rgba(0, 200, 117, 0.1); color: var(--monday-green); }
+.stat-card .icon.yellow { background: rgba(253, 171, 61, 0.1); color: var(--monday-yellow); }
+.stat-card .icon.red { background: rgba(226, 68, 92, 0.1); color: var(--monday-red); }
+
+.stat-card .info .value {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--monday-dark);
+  line-height: 1;
+}
+
+.stat-card .info .label {
+  font-size: 13px;
+  color: var(--monday-text-secondary);
+  margin-top: 4px;
+}
 </style>
 {% endblock %}
 
@@ -189,6 +434,67 @@
     <i class="fa-solid fa-building-user"></i>
     {{ _('clients_header') }}
   </h1>
+  <button type="button" class="monday-btn monday-btn-primary" data-bs-toggle="modal" data-bs-target="#createClientModal">
+    <i class="fa-solid fa-plus"></i> Nuevo Cliente
+  </button>
+</div>
+
+<!-- Stats Cards -->
+<div class="clients-stats">
+  <div class="stat-card">
+    <div class="icon blue">
+      <i class="fa-solid fa-users"></i>
+    </div>
+    <div class="info">
+      <div class="value">{{ clients|length }}</div>
+      <div class="label">Total Clientes</div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="icon green">
+      <i class="fa-solid fa-user-check"></i>
+    </div>
+    <div class="info">
+      <div class="value">{{ clients|selectattr('is_active')|list|length }}</div>
+      <div class="label">Activos</div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="icon yellow">
+      <i class="fa-solid fa-folder-open"></i>
+    </div>
+    <div class="info">
+      <div class="value">{{ clients|sum(attribute='total_projects') }}</div>
+      <div class="label">Proyectos Totales</div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="icon red">
+      <i class="fa-solid fa-clock"></i>
+    </div>
+    <div class="info">
+      <div class="value">{{ clients|sum(attribute='pending_approvals') }}</div>
+      <div class="label">Aprobaciones Pendientes</div>
+    </div>
+  </div>
+</div>
+
+<!-- Filter Bar -->
+<div class="clients-filter-bar">
+  <div class="search-box">
+    <i class="fa-solid fa-search"></i>
+    <input type="text" id="clientSearch" placeholder="Buscar por nombre, email o empresa...">
+  </div>
+  <select id="filterStatus">
+    <option value="">Todos los estados</option>
+    <option value="active">Activos</option>
+    <option value="inactive">Inactivos</option>
+  </select>
+  <select id="filterAuth">
+    <option value="">Tipo autenticación</option>
+    <option value="local">Local</option>
+    <option value="azure">Entra ID</option>
+  </select>
 </div>
 
 <!-- Monday-style Clients Table -->
@@ -196,26 +502,52 @@
   <table>
     <thead>
       <tr>
-        <th>{{ _('client') }}</th>
-        <th>{{ _('projects') }}</th>
-        <th>{{ _('status_breakdown') }}</th>
-        <th>{{ _('pending_approvals') }}</th>
+        <th class="sortable" data-sort="name">Cliente <i class="fa-solid fa-sort ms-1"></i></th>
+        <th>Autenticación</th>
+        <th>Estado</th>
+        <th class="sortable" data-sort="projects">Proyectos <i class="fa-solid fa-sort ms-1"></i></th>
+        <th>Desglose Estado</th>
+        <th>Pendientes</th>
+        <th>Acciones</th>
       </tr>
     </thead>
-    <tbody>
+    <tbody id="clientsTableBody">
       {% if clients %}
         {% for client in clients %}
-        <tr>
+        <tr class="client-row" 
+            data-name="{{ (client.first_name ~ ' ' ~ client.last_name)|lower }}" 
+            data-email="{{ client.email|lower }}"
+            data-company="{{ (client.company or '')|lower }}"
+            data-status="{{ 'active' if client.is_active else 'inactive' }}"
+            data-auth="{{ 'azure' if client.azure_oid else 'local' }}"
+            data-projects="{{ client.total_projects }}">
           <td>
             <div class="client-cell">
               <div class="client-avatar-lg" style="background: {{ ['#0073ea', '#00c875', '#fdab3d', '#e2445c', '#a25ddc', '#579bfc', '#ff7575', '#cab641'][loop.index0 % 8] }};">
                 {{ (client.first_name or client.email)[0]|upper }}
               </div>
               <div class="client-info">
-                <div class="name">{{ client.first_name or client.email.split('@')[0] }}</div>
+                <div class="name">{{ client.first_name or '' }} {{ client.last_name or '' }}</div>
                 <div class="email">{{ client.email }}</div>
+                {% if client.company %}
+                <div class="company">{{ client.company }}</div>
+                {% endif %}
               </div>
             </div>
+          </td>
+          <td>
+            {% if client.azure_oid %}
+              <span class="auth-badge azure"><i class="fa-brands fa-microsoft"></i> Entra ID</span>
+            {% else %}
+              <span class="auth-badge local"><i class="fa-solid fa-key"></i> Local</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if client.is_active %}
+              <span class="status-badge active"><i class="fa-solid fa-circle fa-xs me-1"></i> Activo</span>
+            {% else %}
+              <span class="status-badge inactive"><i class="fa-solid fa-circle fa-xs me-1"></i> Inactivo</span>
+            {% endif %}
           </td>
           <td>
             <div class="project-count">
@@ -225,17 +557,17 @@
           </td>
           <td>
             <div class="project-status-mini">
-              {% if client.project_by_status.get('active', 0) > 0 %}
-              <span class="mini-status active">{{ client.project_by_status.get('active', 0) }} {{ _('active') }}</span>
+              {% if client.project_by_status.get('ACTIVE', 0) > 0 %}
+              <span class="mini-status active">{{ client.project_by_status.get('ACTIVE', 0) }} Activos</span>
               {% endif %}
-              {% if client.project_by_status.get('planning', 0) > 0 %}
-              <span class="mini-status planning">{{ client.project_by_status.get('planning', 0) }} {{ _('planning') }}</span>
+              {% if client.project_by_status.get('PLANNING', 0) > 0 %}
+              <span class="mini-status planning">{{ client.project_by_status.get('PLANNING', 0) }} Planificación</span>
               {% endif %}
-              {% if client.project_by_status.get('on_hold', 0) > 0 %}
-              <span class="mini-status on_hold">{{ client.project_by_status.get('on_hold', 0) }} {{ _('on_hold') }}</span>
+              {% if client.project_by_status.get('ON_HOLD', 0) > 0 %}
+              <span class="mini-status on_hold">{{ client.project_by_status.get('ON_HOLD', 0) }} En espera</span>
               {% endif %}
-              {% if client.project_by_status.get('completed', 0) > 0 %}
-              <span class="mini-status completed">{{ client.project_by_status.get('completed', 0) }} {{ _('completed') }}</span>
+              {% if client.project_by_status.get('COMPLETED', 0) > 0 %}
+              <span class="mini-status completed">{{ client.project_by_status.get('COMPLETED', 0) }} Completados</span>
               {% endif %}
               {% if client.total_projects == 0 %}
               <span class="no-pending">—</span>
@@ -246,21 +578,36 @@
             {% if client.pending_approvals > 0 %}
             <span class="pending-approval-badge">
               <i class="fa-solid fa-clock"></i>
-              {{ client.pending_approvals }} {{ _('pending') }}
+              {{ client.pending_approvals }}
             </span>
             {% else %}
-            <span class="no-pending">{{ _('none') }}</span>
+            <span class="no-pending">—</span>
             {% endif %}
+          </td>
+          <td>
+            <div class="action-buttons">
+              <button type="button" class="btn-action edit" onclick="editClient({{ client.id }})" title="Editar">
+                <i class="fa-solid fa-pen"></i>
+              </button>
+              <button type="button" class="btn-action toggle" onclick="toggleClientStatus({{ client.id }}, {{ 'true' if client.is_active else 'false' }})" title="{{ 'Desactivar' if client.is_active else 'Activar' }}">
+                <i class="fa-solid fa-{{ 'toggle-on' if client.is_active else 'toggle-off' }}"></i>
+              </button>
+              {% if client.total_projects == 0 %}
+              <button type="button" class="btn-action delete" onclick="deleteClient({{ client.id }}, '{{ client.email }}')" title="Eliminar">
+                <i class="fa-solid fa-trash"></i>
+              </button>
+              {% endif %}
+            </div>
           </td>
         </tr>
         {% endfor %}
       {% else %}
-        <tr>
-          <td colspan="4">
+        <tr id="emptyRow">
+          <td colspan="7">
             <div class="monday-empty-clients">
               <i class="fa-solid fa-building-user"></i>
-              <h3>{{ _('no_clients') }}</h3>
-              <p>{{ _('no_clients_message') }}</p>
+              <h3>No hay clientes registrados</h3>
+              <p>Haz clic en "Nuevo Cliente" para agregar el primero</p>
             </div>
           </td>
         </tr>
@@ -269,4 +616,370 @@
   </table>
 </div>
 
+<!-- Pagination -->
+<div class="pagination-wrapper">
+  <div class="pagination-info">
+    Mostrando <span id="showingStart">1</span> a <span id="showingEnd">{{ clients|length }}</span> de <span id="totalClients">{{ clients|length }}</span> clientes
+  </div>
+  <nav>
+    <ul class="pagination mb-0" id="clientsPagination">
+    </ul>
+  </nav>
+</div>
+
+<!-- Create Client Modal -->
+<div class="modal fade" id="createClientModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <form method="POST" action="{{ url_for('main.create_client') }}">
+        <div class="modal-header">
+          <h5 class="modal-title"><i class="fa-solid fa-user-plus me-2"></i>Nuevo Cliente</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="row g-3">
+            <div class="col-6">
+              <label class="form-label">Nombre *</label>
+              <input type="text" name="first_name" class="form-control" required>
+            </div>
+            <div class="col-6">
+              <label class="form-label">Apellido</label>
+              <input type="text" name="last_name" class="form-control">
+            </div>
+            <div class="col-12">
+              <label class="form-label">Email *</label>
+              <input type="email" name="email" class="form-control" required>
+            </div>
+            <div class="col-12">
+              <label class="form-label">Contraseña *</label>
+              <input type="password" name="password" class="form-control" required minlength="6">
+              <small class="text-muted">Mínimo 6 caracteres</small>
+            </div>
+            <div class="col-12">
+              <label class="form-label">Empresa</label>
+              <input type="text" name="company" class="form-control" placeholder="Nombre de la empresa">
+            </div>
+            <div class="col-12">
+              <label class="form-label">Teléfono</label>
+              <input type="tel" name="phone" class="form-control" placeholder="+1 234 567 8900">
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="monday-btn monday-btn-primary">
+            <i class="fa-solid fa-check me-1"></i> Crear Cliente
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Edit Client Modal -->
+<div class="modal fade" id="editClientModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <form method="POST" action="{{ url_for('main.update_client') }}">
+        <input type="hidden" name="client_id" id="editClientId">
+        <input type="hidden" id="editIsAzure" value="0">
+        <div class="modal-header">
+          <h5 class="modal-title"><i class="fa-solid fa-user-pen me-2"></i>Editar Cliente</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div id="azureClientAlert" class="alert alert-info d-none">
+            <i class="fa-brands fa-microsoft me-2"></i>
+            Este cliente usa Azure Entra ID. Solo se puede modificar información adicional.
+          </div>
+          <div class="row g-3">
+            <div class="col-6" id="editFirstNameField">
+              <label class="form-label">Nombre</label>
+              <input type="text" name="first_name" id="editFirstName" class="form-control">
+            </div>
+            <div class="col-6" id="editLastNameField">
+              <label class="form-label">Apellido</label>
+              <input type="text" name="last_name" id="editLastName" class="form-control">
+            </div>
+            <div class="col-12" id="editEmailField">
+              <label class="form-label">Email</label>
+              <input type="email" name="email" id="editEmail" class="form-control">
+            </div>
+            <div class="col-12" id="editPasswordField">
+              <label class="form-label">Nueva Contraseña</label>
+              <input type="password" name="password" class="form-control" minlength="6">
+              <small class="text-muted">Dejar vacío para mantener la actual</small>
+            </div>
+            <div class="col-12">
+              <label class="form-label">Empresa</label>
+              <input type="text" name="company" id="editCompany" class="form-control">
+            </div>
+            <div class="col-12">
+              <label class="form-label">Teléfono</label>
+              <input type="tel" name="phone" id="editPhone" class="form-control">
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="monday-btn monday-btn-primary">
+            <i class="fa-solid fa-check me-1"></i> Guardar Cambios
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Delete Confirmation Modal -->
+<div class="modal fade" id="deleteClientModal" tabindex="-1">
+  <div class="modal-dialog modal-sm">
+    <div class="modal-content">
+      <form method="POST" action="{{ url_for('main.delete_client') }}">
+        <input type="hidden" name="client_id" id="deleteClientId">
+        <div class="modal-header">
+          <h5 class="modal-title text-danger"><i class="fa-solid fa-exclamation-triangle me-2"></i>Eliminar Cliente</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <p>¿Estás seguro de eliminar el cliente <strong id="deleteClientEmail"></strong>?</p>
+          <p class="text-muted small mb-0">Esta acción no se puede deshacer.</p>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn btn-danger btn-sm">
+            <i class="fa-solid fa-trash me-1"></i> Eliminar
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+// ==================== CLIENTS TABLE MANAGEMENT ====================
+const CLIENTS_PER_PAGE = 10;
+let currentPage = 1;
+let currentSort = { field: 'name', direction: 'asc' };
+let filteredRows = [];
+
+function initClientsTable() {
+  const allRows = Array.from(document.querySelectorAll('.client-row'));
+  filteredRows = allRows;
+  
+  // Event listeners for filters
+  document.getElementById('clientSearch').addEventListener('input', applyFilters);
+  document.getElementById('filterStatus').addEventListener('change', applyFilters);
+  document.getElementById('filterAuth').addEventListener('change', applyFilters);
+  
+  // Event listeners for sorting
+  document.querySelectorAll('.sortable').forEach(th => {
+    th.addEventListener('click', () => {
+      const field = th.dataset.sort;
+      if (currentSort.field === field) {
+        currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
+      } else {
+        currentSort.field = field;
+        currentSort.direction = 'asc';
+      }
+      applyFilters();
+    });
+  });
+  
+  applyFilters();
+}
+
+function applyFilters() {
+  const search = document.getElementById('clientSearch').value.toLowerCase();
+  const status = document.getElementById('filterStatus').value;
+  const auth = document.getElementById('filterAuth').value;
+  
+  const allRows = Array.from(document.querySelectorAll('.client-row'));
+  
+  filteredRows = allRows.filter(row => {
+    const name = row.dataset.name;
+    const email = row.dataset.email;
+    const company = row.dataset.company || '';
+    const rowStatus = row.dataset.status;
+    const rowAuth = row.dataset.auth;
+    
+    if (search && !name.includes(search) && !email.includes(search) && !company.includes(search)) return false;
+    if (status && rowStatus !== status) return false;
+    if (auth && rowAuth !== auth) return false;
+    
+    return true;
+  });
+  
+  // Sort
+  filteredRows.sort((a, b) => {
+    let valA, valB;
+    switch (currentSort.field) {
+      case 'name':
+        valA = a.dataset.name;
+        valB = b.dataset.name;
+        break;
+      case 'projects':
+        valA = parseInt(a.dataset.projects) || 0;
+        valB = parseInt(b.dataset.projects) || 0;
+        return currentSort.direction === 'asc' ? valA - valB : valB - valA;
+      default:
+        valA = a.dataset.name;
+        valB = b.dataset.name;
+    }
+    
+    const cmp = valA.localeCompare(valB);
+    return currentSort.direction === 'asc' ? cmp : -cmp;
+  });
+  
+  currentPage = 1;
+  renderTable();
+}
+
+function renderTable() {
+  const total = filteredRows.length;
+  const totalPages = Math.ceil(total / CLIENTS_PER_PAGE);
+  const start = (currentPage - 1) * CLIENTS_PER_PAGE;
+  const end = Math.min(start + CLIENTS_PER_PAGE, total);
+  
+  // Hide all rows first
+  document.querySelectorAll('.client-row').forEach(row => row.style.display = 'none');
+  
+  // Show only rows for current page
+  for (let i = start; i < end; i++) {
+    filteredRows[i].style.display = '';
+  }
+  
+  // Update showing info
+  document.getElementById('showingStart').textContent = total > 0 ? start + 1 : 0;
+  document.getElementById('showingEnd').textContent = end;
+  document.getElementById('totalClients').textContent = total;
+  
+  // Render pagination
+  const pagination = document.getElementById('clientsPagination');
+  pagination.innerHTML = '';
+  
+  if (totalPages > 1) {
+    // Previous
+    const prevLi = document.createElement('li');
+    prevLi.className = `page-item ${currentPage === 1 ? 'disabled' : ''}`;
+    prevLi.innerHTML = `<a class="page-link" href="#" onclick="goToPage(${currentPage - 1}); return false;">«</a>`;
+    pagination.appendChild(prevLi);
+    
+    // Page numbers
+    for (let i = 1; i <= totalPages; i++) {
+      if (i === 1 || i === totalPages || (i >= currentPage - 1 && i <= currentPage + 1)) {
+        const li = document.createElement('li');
+        li.className = `page-item ${i === currentPage ? 'active' : ''}`;
+        li.innerHTML = `<a class="page-link" href="#" onclick="goToPage(${i}); return false;">${i}</a>`;
+        pagination.appendChild(li);
+      } else if (i === currentPage - 2 || i === currentPage + 2) {
+        const li = document.createElement('li');
+        li.className = 'page-item disabled';
+        li.innerHTML = '<span class="page-link">...</span>';
+        pagination.appendChild(li);
+      }
+    }
+    
+    // Next
+    const nextLi = document.createElement('li');
+    nextLi.className = `page-item ${currentPage === totalPages ? 'disabled' : ''}`;
+    nextLi.innerHTML = `<a class="page-link" href="#" onclick="goToPage(${currentPage + 1}); return false;">»</a>`;
+    pagination.appendChild(nextLi);
+  }
+  
+  // Update sort indicators
+  document.querySelectorAll('.sortable i').forEach(icon => {
+    icon.className = 'fa-solid fa-sort ms-1';
+  });
+  const activeHeader = document.querySelector(`.sortable[data-sort="${currentSort.field}"] i`);
+  if (activeHeader) {
+    activeHeader.className = `fa-solid fa-sort-${currentSort.direction === 'asc' ? 'up' : 'down'} ms-1`;
+  }
+}
+
+function goToPage(page) {
+  const totalPages = Math.ceil(filteredRows.length / CLIENTS_PER_PAGE);
+  if (page < 1 || page > totalPages) return;
+  currentPage = page;
+  renderTable();
+}
+
+// ==================== EDIT CLIENT ====================
+function editClient(clientId) {
+  fetch(`/api/users/${clientId}`)
+    .then(r => r.json())
+    .then(client => {
+      const isAzure = client.is_azure;
+      
+      document.getElementById('editClientId').value = client.id;
+      document.getElementById('editIsAzure').value = isAzure ? '1' : '0';
+      document.getElementById('editFirstName').value = client.first_name || '';
+      document.getElementById('editLastName').value = client.last_name || '';
+      document.getElementById('editEmail').value = client.email;
+      document.getElementById('editCompany').value = client.company || '';
+      document.getElementById('editPhone').value = client.phone || '';
+      
+      // Show/hide fields based on auth type
+      const azureAlert = document.getElementById('azureClientAlert');
+      const firstNameField = document.getElementById('editFirstNameField');
+      const lastNameField = document.getElementById('editLastNameField');
+      const emailField = document.getElementById('editEmailField');
+      const passwordField = document.getElementById('editPasswordField');
+      
+      if (isAzure) {
+        azureAlert.classList.remove('d-none');
+        firstNameField.querySelector('input').disabled = true;
+        lastNameField.querySelector('input').disabled = true;
+        emailField.querySelector('input').disabled = true;
+        passwordField.style.display = 'none';
+      } else {
+        azureAlert.classList.add('d-none');
+        firstNameField.querySelector('input').disabled = false;
+        lastNameField.querySelector('input').disabled = false;
+        emailField.querySelector('input').disabled = false;
+        passwordField.style.display = '';
+      }
+      
+      new bootstrap.Modal(document.getElementById('editClientModal')).show();
+    })
+    .catch(err => {
+      alert('Error al cargar cliente');
+    });
+}
+
+// ==================== TOGGLE CLIENT STATUS ====================
+function toggleClientStatus(clientId, isActive) {
+  const action = isActive ? 'desactivar' : 'activar';
+  if (!confirm(`¿Estás seguro de que deseas ${action} este cliente?`)) return;
+  
+  fetch(`/api/users/${clientId}/toggle-status`, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'}
+  })
+  .then(r => r.json())
+  .then(data => {
+    if (data.success) {
+      location.reload();
+    } else {
+      alert('Error: ' + data.error);
+    }
+  })
+  .catch(err => {
+    alert('Error al actualizar estado');
+  });
+}
+
+// ==================== DELETE CLIENT ====================
+function deleteClient(clientId, clientEmail) {
+  document.getElementById('deleteClientId').value = clientId;
+  document.getElementById('deleteClientEmail').textContent = clientEmail;
+  new bootstrap.Modal(document.getElementById('deleteClientModal')).show();
+}
+
+// Initialize on page load
+document.addEventListener('DOMContentLoaded', initClientsTable);
+</script>
 {% endblock %}

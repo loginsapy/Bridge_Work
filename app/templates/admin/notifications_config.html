@@ -53,7 +53,12 @@
               <input type="text" name="email_from_name" class="form-control" value="{{ settings.email_from_name }}" placeholder="BridgeWork">
             </div>
           </div>
-        </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Base URL (para enlaces en emails)</label>
+            <input type="text" name="base_url" id="baseUrlInput" class="form-control" value="{{ settings.base_url }}" placeholder="https://app.yourcompany.com">
+            <div id="baseUrlHelp" class="form-text text-muted">Si se configura, los enlaces en los correos (ej. Ver Tarea) usarán esta URL como prefijo.</div>
+            <div id="baseUrlError" class="invalid-feedback" style="display:none;">La Base URL debe comenzar con http:// o https://</div>
+          </div>        </div>
       </div>
       
       <!-- Eventos de Notificación -->
@@ -76,6 +81,14 @@
                   <strong>{{ _('task_assigned_event') }}</strong>
                   <small class="d-block text-muted">{{ _('task_assigned_desc') }}</small>
                 </label>
+              </div>
+
+              <div class="alert alert-sm alert-info small">
+                <i class="fa-solid fa-info-circle me-2"></i>
+                <strong>Comportamiento de envío:</strong> Cuando esta opción está activa, la aplicación intentará enviar un correo al usuario interno y/o al cliente asignado al crear o actualizar una tarea. El envío solo tendrá efecto si hay un proveedor de correo configurado (SMTP o SendGrid) y una dirección de remitente válida.
+                <div class="mt-2">
+                  <small class="text-muted">Consejo: verifica que "Proveedor de email" y "Email remitente" estén configurados en la sección superior.</small>
+                </div>
               </div>
               
               <div class="form-check mb-3">
@@ -136,6 +149,16 @@
             <div class="alert alert-info small mb-0">
               <i class="fa-solid fa-server me-2"></i>
               <strong>{{ _('smtp_configured') }}</strong>
+              <div class="mt-2 small text-muted">
+                {% set smtp_ok = settings.smtp_host and settings.email_from %}
+                <div>Host: <strong>{{ settings.smtp_host or '-' }}</strong></div>
+                <div>Remitente: <strong>{{ settings.email_from or '-' }}</strong></div>
+                {% if smtp_ok %}
+                  <div class="text-success mt-1"><i class="fa-solid fa-check-circle me-1"></i> Configuración mínima presente</div>
+                {% else %}
+                  <div class="text-warning mt-1"><i class="fa-solid fa-exclamation-triangle me-1"></i> Falta host SMTP y/o email remitente válido</div>
+                {% endif %}
+              </div>
             </div>
           {% endif %}
         </div>
@@ -158,6 +181,21 @@
 <script>
 document.getElementById('emailProvider').addEventListener('change', function(e) {
   document.getElementById('sendgridConfig').style.display = e.target.value === 'sendgrid' ? 'block' : 'none';
+});
+
+// Validate base_url on submit
+document.querySelector('form[action="{{ url_for('main.admin_notifications') }}"]').addEventListener('submit', function(e) {
+  var input = document.getElementById('baseUrlInput');
+  var err = document.getElementById('baseUrlError');
+  if (input && input.value && !/^https?:\/\//i.test(input.value.trim())) {
+    e.preventDefault();
+    err.style.display = 'block';
+    input.classList.add('is-invalid');
+    input.scrollIntoView({behavior: 'smooth', block: 'center'});
+  } else if (input) {
+    err.style.display = 'none';
+    input.classList.remove('is-invalid');
+  }
 });
 </script>
 {% endblock %}

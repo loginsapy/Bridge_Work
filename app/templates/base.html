@@ -26,6 +26,11 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='css/monday.css') }}">
   <!-- App styles (overrides) -->
   <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
+  <!-- Brand-specific overrides using logo palette -->
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/brand-overrides.css') }}">
+
+  <!-- Choices.js CSS for improved multi-selects -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/choices.js@10.2.0/public/assets/styles/choices.min.css">
   
   <!-- Dynamic Theme Colors -->
   <style>
@@ -81,7 +86,7 @@
   {% block head %}{% endblock %}
 </head>
 
-<body class="app-body">
+<body class="app-body {% if not current_user.is_authenticated %}guest-page{% endif %}">
   <div id="loading-overlay" class="loading-overlay">
     <div class="spinner-border text-primary" role="status">
       <span class="visually-hidden">Cargando...</span>
@@ -122,7 +127,7 @@
 
   <!-- Footer -->
   {% if current_user.is_authenticated %}
-  <footer class="bg-dark text-white py-3 mt-auto" style="margin-left: 280px;">
+  <footer class="app-footer bg-dark text-white py-3 mt-auto">
     <div class="container-fluid px-4">
       <div class="row align-items-center">
         <div class="col-md-6">
@@ -131,13 +136,15 @@
           {% endif %}
         </div>
         <div class="col-md-6 text-md-end">
-          <small class="text-white-50">{{ sys_copyright_text }}</small>
+          <small class="text-white-50">{{ sys_copyright_text }} 1.3</small>
           {% if sys_support_email %}
             <span class="mx-2 text-white-50">|</span>
             <a href="mailto:{{ sys_support_email }}" class="text-white-50 text-decoration-none small">
               <i class="fa-solid fa-envelope me-1"></i>{{ sys_support_email }}
             </a>
           {% endif %}
+                    <small class="text-white-50"><a href="https://www.login.com.py" target="_blank">Login S.A.</a></small>
+
         </div>
       </div>
     </div>
@@ -148,6 +155,10 @@
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+
+  <!-- Choices.js (multi-select tag UI) -->
+  <script src="https://cdn.jsdelivr.net/npm/choices.js@10.2.0/public/assets/scripts/choices.min.js"></script>
+
   {% block scripts %}{% endblock %}
   <script>
     // Global script for loading overlay and flash messages auto-dismiss
@@ -195,6 +206,41 @@
       </div>
     </div>
   </div>
+
+  <!-- Initialize Choices.js for multi-assignee selects -->
+  <script>
+    document.addEventListener('DOMContentLoaded', function(){
+      function initAssigneesControl(containerSelector){
+        const container = document.querySelector(containerSelector);
+        if(!container) return;
+        const select = container.querySelector('select[name="assignees"]');
+        if(!select) return;
+        const choices = new Choices(select, { removeItemButton: true, placeholderValue: 'Selecciona usuarios...' });
+
+        // Ensure before submit we copy selected assignees into hidden inputs
+        const form = container.closest('form');
+        if(form){
+          form.addEventListener('submit', function(){
+            // Remove existing hidden inputs for assignees
+            form.querySelectorAll('input[name="assignees"]').forEach(n=>n.remove());
+            const selected = choices.getValue(true) || [];
+            selected.forEach(v => {
+              const h = document.createElement('input');
+              h.type = 'hidden';
+              h.name = 'assignees';
+              h.value = v;
+              form.appendChild(h);
+            });
+          });
+        }
+      }
+
+      // Initialize in both modals (board and project detail)
+      initAssigneesControl('#newTaskModal');
+      initAssigneesControl('#createTaskModal');
+
+    });
+  </script>
 </body>
 
 </html>

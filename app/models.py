@@ -19,6 +19,8 @@ class User(UserMixin, db.Model):
     role = db.relationship('Role', backref='users')
     first_name = db.Column(db.String(128))
     last_name = db.Column(db.String(128))
+    company = db.Column(db.String(255), nullable=True)  # For clients
+    phone = db.Column(db.String(50), nullable=True)  # Contact phone
 
     created_at = db.Column(db.DateTime, default=datetime.now)
 
@@ -67,6 +69,12 @@ task_predecessors = db.Table('task_predecessors',
     db.Column('predecessor_id', db.Integer, db.ForeignKey('tasks.id'), primary_key=True)
 )
 
+# Association table for Task assignees (many-to-many: tasks <-> users)
+task_assignees = db.Table('task_assignees',
+    db.Column('task_id', db.Integer, db.ForeignKey('tasks.id'), primary_key=True),
+    db.Column('user_id', db.Integer, db.ForeignKey('users.id'), primary_key=True)
+)
+
 
 # Core domain
 class Project(db.Model):
@@ -94,7 +102,8 @@ class Task(db.Model):
     __tablename__ = 'tasks'
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     project_id = db.Column(db.Integer, db.ForeignKey('projects.id'), nullable=False)
-    parent_task_id = db.Column(db.Integer, db.ForeignKey('tasks.id'), nullable=True)
+    # Hierarchical parent pointer (WBS)
+    parent_task_id = db.Column(db.Integer, db.ForeignKey('tasks.id', ondelete='SET NULL'), nullable=True)
     title = db.Column(db.String(255), nullable=False)
     description = db.Column(db.Text, nullable=True)
     assigned_to_id = db.Column(db.BigInteger, db.ForeignKey('users.id'), nullable=True)
@@ -105,8 +114,10 @@ class Task(db.Model):
     # Relationships for convenience
     assigned_client = db.relationship('User', foreign_keys=[assigned_client_id], backref='client_assigned_tasks')
     priority = db.Column(db.String(16), nullable=False, default='MEDIUM')
+    start_date = db.Column(db.DateTime, nullable=True)
     due_date = db.Column(db.DateTime, nullable=True)
     is_external_visible = db.Column(db.Boolean, default=False, index=True)
+    is_internal_only = db.Column(db.Boolean, default=False, index=True)  # Solo visible para PMP/Admin
     estimated_hours = db.Column(db.Numeric, nullable=True)
     # Position within project for manual ordering
     position = db.Column(db.Integer, nullable=True, index=True)
@@ -120,7 +131,21 @@ class Task(db.Model):
 
     project = db.relationship('Project', backref='tasks')
     assigned_to = db.relationship('User', foreign_keys=[assigned_to_id], backref='tasks')
+    # Multiple assigned internal users (many-to-many)
+    assignees = db.relationship('User', secondary=task_assignees, backref='assigned_tasks', lazy='select')
     approved_by = db.relationship('User', foreign_keys=[approved_by_id], backref='approved_tasks')
+
+    @property
+    def assignee_list(self):
+        """Returns a list of assigned users: prefer explicit `assignees` but fallback to the legacy `assigned_to`."""
+        if getattr(self, 'assignees', None):
+            return list(self.assignees)
+        if getattr(self, 'assigned_to', None):
+            return [self.assigned_to]
+        return []
+
+    # Hierarchical parent/children relationship (WBS)
+    parent = db.relationship('Task', remote_side=[id], backref=db.backref('children', lazy='select'))
 
     # Self-referential many-to-many for task predecessors/successors
     predecessors = db.relationship(
@@ -154,39 +179,200 @@ class Task(db.Model):
         return False
 
     def descendants(self):
-        """Return list of all descendant tasks reachable via successors (predecessor edges) OR via hierarchical parent-child (parent_task_id). Excludes self."""
+        """Return list of all descendant tasks reachable via hierarchy (children) and dependency (successors)."""
         result = []
         visited = set()
+
         def dfs(node):
-            # successors via predecessors table
-            try:
-                succs = node.successors
-            except Exception:
-                succs = []
-            for s in succs:
-                if s.id in visited or s.id == self.id:
-                    continue
-                visited.add(s.id)
-                result.append(s)
-                dfs(s)
-            # hierarchical children (parent_task_id)
-            try:
-                children = Task.query.filter_by(parent_task_id=node.id).all()
-            except Exception:
-                children = []
-            for c in children:
+            # traverse hierarchical children first
+            for c in getattr(node, 'children', []) or []:
                 if c.id in visited or c.id == self.id:
                     continue
                 visited.add(c.id)
                 result.append(c)
                 dfs(c)
+            # then traverse successor dependency edges
+            for s in getattr(node, 'successors', []) or []:
+                if s.id in visited or s.id == self.id:
+                    continue
+                visited.add(s.id)
+                result.append(s)
+                dfs(s)
+
         dfs(self)
         return result
+
+    def incomplete_predecessors(self):
+        """Return list of predecessor Task objects that are not completed.
+        
+        PREDECESORAS = Dependencias de secuencia (no jerarquía).
+        Una tarea NO puede iniciar/completarse hasta que sus predecesoras estén completas.
+        Esto es diferente a la jerarquía padre-hijo.
+        """
+        return [p for p in getattr(self, 'predecessors', []) or [] if p.status != 'COMPLETED']
+
+    def incomplete_children(self):
+        """Return list of direct child tasks (via parent_task_id) that are not completed.
+        
+        HIJOS = Jerarquía WBS (subtareas).
+        Una tarea padre NO puede completarse hasta que todas sus subtareas estén completas.
+        """
+        return [c for c in getattr(self, 'children', []) or [] if c.status != 'COMPLETED']
+
+    def incomplete_hierarchical_descendants(self):
+        """Return list of ALL hierarchical descendant tasks (children recursively via parent_task_id) that are not completed."""
+        result = []
+        visited = set()
+
+        def dfs(node):
+            for c in getattr(node, 'children', []) or []:
+                if c.id in visited or c.id == self.id:
+                    continue
+                visited.add(c.id)
+                if c.status != 'COMPLETED':
+                    result.append(c)
+                dfs(c)
+
+        dfs(self)
+        return result
+
+    def all_incomplete_children(self):
+        """Return list of ALL incomplete child tasks (direct + descendants via hierarchy).
+        
+        Combina hijos directos e indirectos para validación de cierre.
+        """
+        result = []
+        visited = set()
+
+        def dfs(node):
+            for c in getattr(node, 'children', []) or []:
+                if c.id in visited or c.id == self.id:
+                    continue
+                visited.add(c.id)
+                result.append(c)
+                dfs(c)
+
+        dfs(self)
+        return [c for c in result if c.status != 'COMPLETED']
+
+    def can_complete(self):
+        """Check if this task can be marked as completed.
+        
+        Returns (bool, str): (can_complete, reason_if_not)
+        
+        Reglas:
+        1. No se puede completar si tiene predecesoras incompletas (dependencias)
+        2. No se puede completar si tiene subtareas incompletas (jerarquía)
+        """
+        # Verificar predecesoras (dependencias de secuencia)
+        incomplete_preds = self.incomplete_predecessors()
+        if incomplete_preds:
+            titles = ', '.join([p.title for p in incomplete_preds[:3]])
+            if len(incomplete_preds) > 3:
+                titles += f' y {len(incomplete_preds) - 3} más'
+            return False, f'Predecesoras incompletas: {titles}'
+        
+        # Verificar subtareas (jerarquía)
+        incomplete_kids = self.all_incomplete_children()
+        if incomplete_kids:
+            titles = ', '.join([c.title for c in incomplete_kids[:3]])
+            if len(incomplete_kids) > 3:
+                titles += f' y {len(incomplete_kids) - 3} más'
+            return False, f'Subtareas incompletas: {titles}'
+        
+        return True, None
+
+    def get_completion_blockers(self):
+        """Return dict with lists of incomplete tasks that block completion.
+        
+        Sistema de gestión de proyectos:
+        - incomplete_predecessors: Tareas que deben completarse ANTES (dependencias de secuencia)
+        - incomplete_children: Subtareas que deben completarse ANTES (jerarquía WBS)
+        """
+        incomplete_preds = self.incomplete_predecessors()
+        incomplete_kids = self.all_incomplete_children()
+        
+        return {
+            'incomplete_predecessors': [{'id': p.id, 'title': p.title} for p in incomplete_preds],
+            'incomplete_children': [{'id': c.id, 'title': c.title} for c in incomplete_kids]
+        }
+
+    @staticmethod
+    def normalize_status(status: str) -> str:
+        """Normalize status values to canonical set.
+        Accept legacy synonyms like 'DONE' and normalize to 'COMPLETED'."""
+        if status is None:
+            return None
+        if isinstance(status, str) and status.upper() == 'DONE':
+            return 'COMPLETED'
+        return status
+
+    def set_status(self, new_status: str):
+        """Set task status normalizing legacy values."""
+        self.status = Task.normalize_status(new_status)
+    
+    def is_blocked(self):
+        """Check if task is blocked by incomplete predecessors.
+        
+        Una tarea está bloqueada si tiene predecesoras sin completar.
+        """
+        return len(self.incomplete_predecessors()) > 0
+
+    def has_incomplete_subtasks(self):
+        """Check if task has any incomplete child tasks."""
+        return len(self.all_incomplete_children()) > 0
+    
+    def can_advance_status(self, new_status):
+        """Check if task can advance to a new status.
+        
+        Reglas:
+        - Una tarea con predecesoras incompletas NO puede avanzar a ningún estado
+          (debe permanecer en BACKLOG hasta que sus predecesoras se completen)
+        - Una tarea padre NO puede completarse si tiene subtareas incompletas
+        - Siempre se puede retroceder (mover a BACKLOG)
+        
+        Returns:
+            tuple: (can_advance: bool, error_message: str or None, blockers: dict or None)
+        """
+        STATUS_ORDER = {'BACKLOG': 0, 'IN_PROGRESS': 1, 'IN_REVIEW': 2, 'COMPLETED': 3, 'DONE': 3}
+        current_order = STATUS_ORDER.get(self.status, 0)
+        new_order = STATUS_ORDER.get(new_status, 0)
+        
+        # Si está retrocediendo (ej: de IN_PROGRESS a BACKLOG), siempre permitir
+        if new_order <= current_order:
+            return (True, None, None)
+        
+        # Para cualquier avance, verificar predecesoras incompletas
+        incomplete_preds = self.incomplete_predecessors()
+        if incomplete_preds:
+            pred_titles = ', '.join([p.title for p in incomplete_preds[:3]])
+            if len(incomplete_preds) > 3:
+                pred_titles += f' (+{len(incomplete_preds) - 3} más)'
+            return (
+                False,
+                f'No se puede avanzar la tarea: tiene predecesoras incompletas ({pred_titles})',
+                {'incomplete_predecessors': [{'id': p.id, 'title': p.title, 'status': p.status} for p in incomplete_preds]}
+            )
+        
+        # Si intenta completar, también verificar subtareas
+        if new_status in ('COMPLETED', 'DONE'):
+            incomplete_children = self.all_incomplete_children()
+            if incomplete_children:
+                child_titles = ', '.join([c.title for c in incomplete_children[:3]])
+                if len(incomplete_children) > 3:
+                    child_titles += f' (+{len(incomplete_children) - 3} más)'
+                return (
+                    False,
+                    f'No se puede completar: tiene subtareas incompletas ({child_titles})',
+                    {'incomplete_children': [{'id': c.id, 'title': c.title, 'status': c.status} for c in incomplete_children]}
+                )
+        
+        return (True, None, None)
 
     def validate_predecessor_ids(self, predecessor_ids):
         """Validate a list of predecessor IDs before assignment.
 
-        Raises ValueError with a descriptive message if invalid (self-contained or would create cycle).
+        Raises ValueError with a descriptive message if invalid (self-contained, project mismatch, or would create cycles across dependency/hierarchy).
         """
         # cannot be own predecessor
         if self.id in predecessor_ids:
@@ -201,10 +387,26 @@ class Task(db.Model):
             # Must be in same project
             if hasattr(self, 'project_id') and pred.project_id != self.project_id:
                 raise ValueError(f'Predecessor {pred.id} belongs to a different project')
-            # Adding pred as a predecessor for self implies an edge pred -> self
-            # If self can reach pred already, adding this edge would create a cycle
+
+            # Dependency-cycle: if self already reaches pred via successors, adding pred -> self would create a cycle
             if self.reachable_to(pred.id):
                 raise ValueError(f'Adding predecessor {pred.id} would create a cycle')
+
+            # Only check hierarchy (parent/children) for ancestor/descendant; do not conflate with dependency edges.
+            # Check if pred is an ancestor of self by walking parent pointers up from self.
+            cur = getattr(self, 'parent', None)
+            while cur:
+                if cur.id == pred.id:
+                    raise ValueError(f'Predecessor {pred.id} is an ancestor of this task in the hierarchy')
+                cur = getattr(cur, 'parent', None)
+
+            # Check if pred is a descendant of self by walking up from pred and seeing if we reach self.
+            cur = getattr(pred, 'parent', None)
+            while cur:
+                if cur.id == self.id:
+                    raise ValueError(f'Predecessor {pred.id} is a descendant of this task in the hierarchy')
+                cur = getattr(cur, 'parent', None)
+
         return True
 
 

@@ -1,25 +1,26 @@
-def test_api_prevent_complete_when_predecessors_incomplete(client, db, create_project, create_task, create_user, login):
-    # Setup
+def test_api_child_can_complete_before_predecessor_parent(client, db, create_project, create_task, create_user, login):
+    """Test that a task with predecessors (tree children) CAN be completed even if predecessors are incomplete.
+    
+    In our tree model: predecessor = parent, successor = child.
+    Children must be able to close FIRST, then parents.
+    """
     u = create_user(email='u1@example.com', is_internal=True)
     login(u)
     p = create_project(name='P-api')
-    t1 = create_task(project_id=p['id'], title='API-T1')
-    t2 = create_task(project_id=p['id'], title='API-T2')
+    t1 = create_task(project_id=p['id'], title='API-T1')  # parent (predecessor)
+    t2 = create_task(project_id=p['id'], title='API-T2')  # child (successor)
 
     from app.models import Task, db as _db
     t1_obj = Task.query.get(t1['id'])
     t2_obj = Task.query.get(t2['id'])
 
-    t2_obj.predecessors = [t1_obj]
+    t2_obj.predecessors = [t1_obj]  # t2 is child of t1 in tree
     _db.session.commit()
 
-    # Attempt to mark t2 as done via API
-    rv = client.patch(f"/api/tasks/{t2_obj.id}", json={'status': 'DONE'})
-    assert rv.status_code == 400
-    j = rv.get_json()
-    assert 'incomplete_predecessors' in j
-    assert isinstance(j['incomplete_predecessors'], list)
-    assert j['incomplete_predecessors'][0]['id'] == t1_obj.id
+    # t2 (child) CAN be marked as done even though t1 (parent) is incomplete
+    rv = client.patch(f"/api/tasks/{t2_obj.id}", json={'status': 'COMPLETED'})
+    assert rv.status_code == 200, f"Child should complete first: {rv.get_json()}"
+
 
 
 def test_api_prevent_complete_when_has_incomplete_descendants(client, db, create_project, create_task, create_user, login):
@@ -38,13 +39,13 @@ def test_api_prevent_complete_when_has_incomplete_descendants(client, db, create
     t2_obj.predecessors = [t1_obj]
     _db.session.commit()
 
-    # Attempt to mark parent as done via API (should be blocked due to incomplete descendant)
-    rv = client.patch(f"/api/tasks/{t1_obj.id}", json={'status': 'DONE'})
+    # Attempt to mark parent as completed via API (should be blocked due to incomplete descendant)
+    rv = client.patch(f"/api/tasks/{t1_obj.id}", json={'status': 'COMPLETED'})
     assert rv.status_code == 400
     j = rv.get_json()
-    assert 'incomplete_descendants' in j
-    assert isinstance(j['incomplete_descendants'], list)
-    assert j['incomplete_descendants'][0]['id'] == t2_obj.id
+    assert 'incomplete_children' in j
+    assert isinstance(j['incomplete_children'], list)
+    assert j['incomplete_children'][0]['id'] == t2_obj.id
 
 
 def test_api_prevent_complete_when_child_has_parent_link(client, db, create_project, create_task, create_user, login):
@@ -63,9 +64,9 @@ def test_api_prevent_complete_when_child_has_parent_link(client, db, create_proj
     rv = client.patch(f"/api/tasks/{parent_obj.id}", json={'status': 'DONE'})
     assert rv.status_code == 400
     j = rv.get_json()
-    assert 'incomplete_descendants' in j
-    assert isinstance(j['incomplete_descendants'], list)
-    assert j['incomplete_descendants'][0]['id'] == child_obj.id
+    assert 'incomplete_children' in j
+    assert isinstance(j['incomplete_children'], list)
+    assert j['incomplete_children'][0]['id'] == child_obj.id
 
 
 def test_api_prevent_complete_when_has_hierarchical_children(client, db, create_project, create_task, create_user, login):
@@ -84,7 +85,7 @@ def test_api_prevent_complete_when_has_hierarchical_children(client, db, create_
     rv = client.patch(f"/api/tasks/{parent_obj.id}", json={'status': 'DONE'})
     assert rv.status_code == 400
     j = rv.get_json()
-    assert 'incomplete_descendants' in j
-    assert isinstance(j['incomplete_descendants'], list)
-    assert j['incomplete_descendants'][0]['id'] == child_obj.id
+    assert 'incomplete_children' in j
+    assert isinstance(j['incomplete_children'], list)
+    assert j['incomplete_children'][0]['id'] == child_obj.id
 

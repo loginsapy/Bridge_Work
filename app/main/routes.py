@@ -1,8 +1,9 @@
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 import os
 import uuid
 import mimetypes
-from flask import render_template, jsonify, request, redirect, url_for, flash, abort, current_app, send_from_directory
+from flask import render_template, jsonify, request, redirect, url_for, flash, abort, current_app, send_from_directory, send_file
+from io import BytesIO
 from flask_login import current_user, login_required
 from sqlalchemy import func
 from werkzeug.utils import secure_filename
@@ -12,6 +13,7 @@ from .. import db
 from ..models import Project, Task, TimeEntry, User, Role, TaskAttachment, AuditLog, SystemNotification, SystemSettings, HourlyRate, project_clients
 from ..metrics import calculate_project_metrics
 from ..services import NotificationService
+from ..auth.decorators import internal_required
 
 
 def allowed_file(filename):
@@ -59,7 +61,7 @@ def notify_clients_task_completed(task, completed_by_user=None):
             task=task,
             completed_by_user=completed_by_user,
             notify_client=True,
-            send_email=True
+            send_email=SystemSettings.get('notify_task_approved', True)
         )
     else:
         # Notificar al creador del proyecto aunque no requiera aprobación
@@ -67,14 +69,16 @@ def notify_clients_task_completed(task, completed_by_user=None):
             task=task,
             completed_by_user=completed_by_user,
             notify_client=False,
-            send_email=False  # Solo notificación in-app para completados normales
+            send_email=SystemSettings.get('notify_task_completed', True)
         )
 
 
 @main_bp.route('/')
 @login_required
 def index():
-    user_role = current_user.role.name if current_user.role else None
+    from ..auth.decorators import _get_user_from_session
+    user = _get_user_from_session()
+    user_role = user.role.name if (user and user.role) else None
     
     # Usuario sin rol: mostrar dashboard vacío con mensaje
     if not user_role:
@@ -116,9 +120,9 @@ def index():
             'ARCHIVED': Project.query.filter_by(status='ARCHIVED').order_by(Project.end_date.desc()).all()
         }
     elif user_role == 'Participante':
-        # Participante ve solo proyectos donde tiene tareas asignadas
+        # Participante ve solo proyectos donde tiene tareas asignadas (incluyendo multi-asignados)
         user_project_ids = db.session.query(Task.project_id).filter(
-            Task.assigned_to_id == current_user.id
+            (Task.assigned_to_id == current_user.id) | (Task.assignees.any(User.id == current_user.id))
         ).distinct().subquery()
         
         active_projects_count = db.session.query(func.count(Project.id)).filter(
@@ -127,12 +131,12 @@ def index():
         ).scalar()
         tasks_completed_count = db.session.query(func.count(Task.id)).filter(
             Task.status == 'COMPLETED',
-            Task.assigned_to_id == current_user.id
+            (Task.assigned_to_id == current_user.id) | (Task.assignees.any(User.id == current_user.id))
         ).scalar()
         recent_projects = Project.query.filter(Project.id.in_(user_project_ids)).order_by(Project.start_date.desc()).limit(5).all()
         recent_activity = Task.query.filter(
             Task.status == 'COMPLETED',
-            Task.assigned_to_id == current_user.id
+            (Task.assigned_to_id == current_user.id) | (Task.assignees.any(User.id == current_user.id))
         ).order_by(Task.due_date.desc()).limit(5).all()
         projects_by_status = {
             'PLANNING': Project.query.filter(Project.status == 'PLANNING', Project.id.in_(user_project_ids)).order_by(Project.start_date.desc()).all(),
@@ -260,7 +264,9 @@ def edit_project(project_id):
     project = Project.query.get_or_404(project_id)
     
     # Solo PMP o Admin pueden editar proyectos
-    user_role = current_user.role.name if current_user.role else None
+    from ..auth.decorators import _get_user_from_session
+    user = _get_user_from_session()
+    user_role = user.role.name if (user and user.role) else None
     if user_role not in ['PMP', 'Admin']:
         flash('Solo usuarios PMP o Admin pueden editar proyectos.', 'danger')
         return redirect(url_for('main.project_detail', project_id=project.id))
@@ -283,6 +289,7 @@ def edit_project(project_id):
                 'description': project.description,
                 'budget_hours': float(project.budget_hours) if project.budget_hours else None,
                 'status': project.status,
+                'manager_id': project.manager_id,
                 'client_ids': old_client_ids,
                 'member_ids': old_member_ids
             }
@@ -292,6 +299,10 @@ def edit_project(project_id):
             project.description = request.form.get('description')
             project.budget_hours = float(request.form.get('budget_hours')) if request.form.get('budget_hours') and request.form.get('budget_hours').strip() else project.budget_hours
             project.status = request.form.get('status', project.status)
+            
+            # Actualizar responsable del proyecto
+            manager_id = request.form.get('manager_id')
+            project.manager_id = int(manager_id) if manager_id and manager_id.strip() else None
             
             # Actualizar clientes asociados
             client_ids = request.form.getlist('client_ids')
@@ -314,6 +325,7 @@ def edit_project(project_id):
                 'description': project.description,
                 'budget_hours': float(project.budget_hours) if project.budget_hours else None,
                 'status': project.status,
+                'manager_id': project.manager_id,
                 'client_ids': new_client_ids,
                 'member_ids': new_member_ids
             }
@@ -352,8 +364,11 @@ def edit_project(project_id):
 
     # IDs of currently assigned members (for checkbox checked state)
     project_member_ids = [m.id for m in project.members]
+    
+    # Obtener usuarios internos para selector de responsable
+    available_managers = User.query.filter_by(is_internal=True, is_active=True).order_by(User.first_name).all()
 
-    return render_template('project_edit.html', project=project, available_clients=available_clients, available_members=available_members, project_member_ids=project_member_ids)
+    return render_template('project_edit.html', project=project, available_clients=available_clients, available_members=available_members, project_member_ids=project_member_ids, available_managers=available_managers)
 
 
 @main_bp.route('/project/<int:project_id>/delete', methods=['POST'])
@@ -361,9 +376,12 @@ def edit_project(project_id):
 def delete_project(project_id):
     project = Project.query.get_or_404(project_id)
     
-    # Validar permisos
-    if not current_user.is_internal or (project.manager_id and project.manager_id != current_user.id):
-        flash('No tienes permiso para eliminar este proyecto.', 'danger')
+    # Validar permisos - solo Admin y PMP pueden eliminar
+    from ..auth.decorators import _get_user_from_session
+    user = _get_user_from_session()
+    user_role = user.role.name if (user and user.role) else None
+    if user_role not in ['PMP', 'Admin']:
+        flash('Solo usuarios PMP o Admin pueden eliminar proyectos.', 'danger')
         return redirect(url_for('main.projects'))
     
     try:
@@ -393,7 +411,7 @@ def delete_project(project_id):
 @main_bp.route('/api/kpi/velocity')
 def kpi_velocity():
     """Provides data for the velocity chart on the dashboard."""
-    today = datetime.utcnow().date()
+    today = datetime.now().date()
     start_of_week = today - timedelta(days=today.weekday())
     
     # Días en español
@@ -425,7 +443,9 @@ def projects():
     - Cliente: solo proyectos donde es cliente
     - Sin Rol: no puede ver nada
     """
-    user_role = current_user.role.name if current_user.role else None
+    from ..auth.decorators import _get_user_from_session
+    user = _get_user_from_session()
+    user_role = user.role.name if (user and user.role) else None
     
     # Usuario sin rol: mostrar mensaje y lista vacía
     if not user_role:
@@ -461,15 +481,26 @@ def projects():
         else:
             p.progress = 0
             
+    # Obtener usuarios cliente para el modal de creación
+    client_role = Role.query.filter_by(name='Cliente').first()
+    available_clients = User.query.filter_by(role_id=client_role.id).order_by(User.first_name).all() if client_role else []
+    
     # Provide current time context for templates that compare dates
-    return render_template('projects.html', projects=projects, no_role=False, now=datetime.now())
+    return render_template('projects.html', 
+                           projects=projects, 
+                           no_role=False, 
+                           now=datetime.now(),
+                           current_user_role_name=user_role,
+                           available_clients=available_clients)
 
 
 @main_bp.route('/project/<int:project_id>')
 @login_required
 def project_detail(project_id):
     project = Project.query.get_or_404(project_id)
-    user_role = current_user.role.name if current_user.role else None
+    from ..auth.decorators import _get_user_from_session
+    user = _get_user_from_session()
+    user_role = user.role.name if (user and user.role) else None
 
     # Usuario sin rol: no puede ver nada
     if not user_role:
@@ -481,9 +512,12 @@ def project_detail(project_id):
         # PMP/Admin puede ver cualquier proyecto
         pass
     elif user_role == 'Participante':
-        # Participante solo puede ver proyectos donde tiene tareas asignadas
-        has_tasks = Task.query.filter_by(project_id=project_id, assigned_to_id=current_user.id).first()
-        if not has_tasks:
+        # Participante solo puede ver proyectos donde tiene tareas asignadas o es miembro
+        has_tasks = Task.query.filter(Task.project_id == project_id).filter(
+            (Task.assigned_to_id == current_user.id) | (Task.assignees.any(User.id == current_user.id))
+        ).first()
+        is_member = current_user in project.members
+        if not has_tasks and not is_member:
             flash('No tienes permiso para ver este proyecto.', 'danger')
             return redirect(url_for('main.projects'))
     elif user_role == 'Cliente' or not current_user.is_internal:
@@ -500,38 +534,46 @@ def project_detail(project_id):
         # PMP/Admin ve todas las tareas del proyecto
         tasks = Task.query.filter_by(project_id=project_id).order_by(Task.status, Task.priority.desc()).all()
     elif user_role == 'Cliente' or not current_user.is_internal:
-        # Cliente ve solo tareas visibles externamente o asignadas a él dentro del proyecto (solo lectura)
-        tasks = Task.query.filter(Task.project_id == project_id).filter(
-            (Task.is_external_visible == True) | (Task.assigned_client_id == current_user.id)
+        # Cliente ve todas las tareas EXCEPTO las marcadas como solo internas
+        # Usamos or_(is_internal_only == False, is_internal_only == None) para manejar NULL
+        from sqlalchemy import or_
+        tasks = Task.query.filter(
+            Task.project_id == project_id,
+            or_(Task.is_internal_only == False, Task.is_internal_only == None)
         ).order_by(Task.status, Task.priority.desc()).all()
     else:
-        # Participantes solo ven sus tareas asignadas
-        tasks = Task.query.filter_by(project_id=project_id, assigned_to_id=current_user.id).order_by(Task.status, Task.priority.desc()).all()
+        # Participantes solo ven sus tareas asignadas (incluye multi-asignados)
+        tasks = Task.query.filter(Task.project_id == project_id).filter(
+            (Task.assigned_to_id == current_user.id) | (Task.assignees.any(User.id == current_user.id))
+        ).order_by(Task.status, Task.priority.desc()).all()
 
     # Sugeridos para asignación: usuarios internos
-    assignees = User.query.filter_by(is_internal=True).order_by(User.first_name).all()
-    # Candidate predecessors: all tasks in this project
+    assignees = User.query.filter_by(is_internal=True, is_active=True).order_by(User.first_name).all()
+    # Candidate predecessors: all tasks in this project (for parent selection and dependencies)
     candidate_predecessors = Task.query.filter(Task.project_id == project_id).order_by(Task.title).all()
     
-    # Build nested task tree respecting predecessors (only consider visible tasks)
+    # Build nested task tree using parent_task_id (hierarchy, not dependencies)
     def build_task_tree(task_list):
+        """Build a tree structure using parent_task_id (WBS hierarchy).
+        
+        This creates a proper parent-child tree where:
+        - Tasks with no parent_task_id are roots
+        - Tasks with parent_task_id are children of that parent
+        Also assigns WBS numbers (1, 1.1, 1.2, 2, 2.1, etc.)
+        """
         tasks_by_id = {t.id: t for t in task_list}
         children_map = {t.id: [] for t in task_list}
-        root_ids = set(tasks_by_id.keys())
+        root_ids = []
+        
         for t in task_list:
-            # Choose a single primary predecessor from possibly many (to avoid duplicate rendering)
-            preds = [pred for pred in t.predecessors if pred.id in tasks_by_id]
-            if preds:
-                # sort preds to pick deterministic primary
-                status_order = {'BACKLOG': 0, 'IN_PROGRESS': 1, 'IN_REVIEW': 2, 'COMPLETED': 3}
-                priority_order = {'CRITICAL': 3, 'HIGH': 2, 'MEDIUM': 1, 'LOW': 0}
-                def sort_key_obj(x):
-                    return (status_order.get(x.status, 99), -priority_order.get(x.priority, 0), x.title or '')
-                primary = sorted(preds, key=sort_key_obj)[0]
-                children_map[primary.id].append(t)
-                if t.id in root_ids:
-                    root_ids.remove(t.id)
-        # sort function: prefer status, priority, title
+            if t.parent_task_id and t.parent_task_id in tasks_by_id:
+                # Has a valid parent in the visible task list
+                children_map[t.parent_task_id].append(t)
+            else:
+                # No parent or parent not visible - treat as root
+                root_ids.append(t.id)
+        
+        # Sort function: prefer position, then status, priority, title
         status_order = {'BACKLOG': 0, 'IN_PROGRESS': 1, 'IN_REVIEW': 2, 'COMPLETED': 3}
         priority_order = {'CRITICAL': 3, 'HIGH': 2, 'MEDIUM': 1, 'LOW': 0}
         def sort_key(x):
@@ -539,17 +581,43 @@ def project_detail(project_id):
             if getattr(x, 'position', None) is not None:
                 return (0, x.position)
             return (1, status_order.get(x.status, 99), -priority_order.get(x.priority, 0), x.title or '')
-        # build recursive nodes
-        def build_node(tid):
+        
+        # Build recursive nodes with WBS numbering
+        def build_node(tid, depth=0, wbs_prefix='', index=1):
             t = tasks_by_id[tid]
+            t.tree_depth = depth  # Attach depth for indentation
+            
+            # Assign WBS number (e.g., "1", "1.1", "1.2", "2", "2.1.1")
+            if wbs_prefix:
+                t.wbs_number = f"{wbs_prefix}.{index}"
+            else:
+                t.wbs_number = str(index)
+            
             children = sorted(children_map[tid], key=sort_key)
-            return {'task': t, 'children': [build_node(c.id) for c in children]}
+            child_nodes = []
+            for i, c in enumerate(children, 1):
+                child_nodes.append(build_node(c.id, depth + 1, t.wbs_number, i))
+            
+            return {'task': t, 'children': child_nodes}
+        
         roots = [tasks_by_id[rid] for rid in root_ids]
         roots_sorted = sorted(roots, key=sort_key)
-        forest = [build_node(r.id) for r in roots_sorted]
+        forest = []
+        for i, r in enumerate(roots_sorted, 1):
+            forest.append(build_node(r.id, 0, '', i))
+        
         return forest
 
     tasks_tree = build_task_tree(tasks)
+    
+    # Calculate predecessor order info for each task
+    for task in tasks:
+        if task.predecessors:
+            # Sort predecessors by their WBS number if available, otherwise by ID
+            sorted_preds = sorted(task.predecessors, key=lambda p: (getattr(p, 'wbs_number', '999'), p.id))
+            task.predecessor_order = [(i+1, p) for i, p in enumerate(sorted_preds)]
+        else:
+            task.predecessor_order = []
 
     # Calcular métricas del proyecto
     metrics = calculate_project_metrics(project_id)
@@ -566,7 +634,10 @@ def reorder_project_tasks(project_id):
     Body: { "ordered_task_ids": [id1, id2, ...] }
     This sets the `position` field for the tasks according to the list order.
     """
+    # Only internal users with role 'PMP' or 'Admin' can reorder tasks
     if not current_user.is_internal:
+        return jsonify({'error': 'Permission denied'}), 403
+    if not getattr(current_user, 'role', None) or current_user.role.name not in ['PMP', 'Admin']:
         return jsonify({'error': 'Permission denied'}), 403
 
     data = request.get_json() or {}
@@ -586,7 +657,40 @@ def reorder_project_tasks(project_id):
             if t:
                 t.position = idx
         db.session.commit()
-        return jsonify({'status': 'ok'})
+
+        # Recompute WBS numbers for current project view and return mapping so client can update UI
+        tasks_all = Task.query.filter_by(project_id=project_id).all()
+        tasks_by_id = {t.id: t for t in tasks_all}
+        children_map = {t.id: [] for t in tasks_all}
+        root_ids = []
+        for t in tasks_all:
+            if t.parent_task_id and t.parent_task_id in tasks_by_id:
+                children_map[t.parent_task_id].append(t)
+            else:
+                root_ids.append(t.id)
+
+        status_order = {'BACKLOG': 0, 'IN_PROGRESS': 1, 'IN_REVIEW': 2, 'COMPLETED': 3}
+        priority_order = {'CRITICAL': 3, 'HIGH': 2, 'MEDIUM': 1, 'LOW': 0}
+        def sort_key(x):
+            if getattr(x, 'position', None) is not None:
+                return (0, x.position)
+            return (1, status_order.get(x.status, 99), -priority_order.get(x.priority, 0), x.title or '')
+
+        wbs_map = {}
+        def build_and_assign(tid, depth=0, prefix='', index=1):
+            t = tasks_by_id[tid]
+            wbs = f"{prefix}.{index}" if prefix else str(index)
+            wbs_map[tid] = wbs
+            children = sorted(children_map[tid], key=sort_key)
+            for i, c in enumerate(children, 1):
+                build_and_assign(c.id, depth+1, wbs, i)
+
+        roots = [tasks_by_id[rid] for rid in root_ids]
+        roots_sorted = sorted(roots, key=sort_key)
+        for i, r in enumerate(roots_sorted, 1):
+            build_and_assign(r.id, 0, '', i)
+
+        return jsonify({'status': 'ok', 'wbs': wbs_map})
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
@@ -596,7 +700,9 @@ def reorder_project_tasks(project_id):
 @login_required
 def project_kanban(project_id):
     project = Project.query.get_or_404(project_id)
-    user_role = current_user.role.name if current_user.role else None
+    from ..auth.decorators import _get_user_from_session
+    user = _get_user_from_session()
+    user_role = user.role.name if (user and user.role) else None
 
     # Usuario sin rol: no puede ver nada
     if not user_role:
@@ -607,7 +713,9 @@ def project_kanban(project_id):
     if user_role in ['PMP', 'Admin']:
         pass
     elif user_role == 'Participante':
-        has_tasks = Task.query.filter_by(project_id=project_id, assigned_to_id=current_user.id).first()
+        has_tasks = Task.query.filter(Task.project_id == project_id).filter(
+            (Task.assigned_to_id == current_user.id) | (Task.assignees.any(User.id == current_user.id))
+        ).first()
         if not has_tasks:
             flash('No tienes permiso para ver este proyecto.', 'danger')
             return redirect(url_for('main.projects'))
@@ -623,7 +731,9 @@ def project_kanban(project_id):
     if user_role in ['PMP', 'Admin']:
         tasks = Task.query.filter_by(project_id=project_id).all()
     elif user_role == 'Participante':
-        tasks = Task.query.filter_by(project_id=project_id, assigned_to_id=current_user.id).all()
+        tasks = Task.query.filter(Task.project_id == project_id).filter(
+            (Task.assigned_to_id == current_user.id) | (Task.assignees.any(User.id == current_user.id))
+        ).all()
     elif user_role == 'Cliente' or not current_user.is_internal:
         tasks = Task.query.filter(Task.project_id == project_id).filter(
             (Task.is_external_visible == True) | (Task.assigned_client_id == current_user.id)
@@ -631,7 +741,7 @@ def project_kanban(project_id):
     else:
         tasks = Task.query.filter_by(project_id=project_id, assigned_to_id=current_user.id).all()
     
-    assignees = User.query.filter_by(is_internal=True).order_by(User.first_name).all()
+    assignees = User.query.filter_by(is_internal=True, is_active=True).order_by(User.first_name).all()
     metrics = calculate_project_metrics(project_id)
     
     # Agrupar tareas por estado
@@ -646,6 +756,93 @@ def project_kanban(project_id):
                           metrics=metrics, users=assignees, now=datetime.now())
 
 
+@main_bp.route('/project/<int:project_id>/gantt')
+@login_required
+def project_gantt(project_id):
+    """Vista Gantt del proyecto con timeline de tareas."""
+    project = Project.query.get_or_404(project_id)
+    from ..auth.decorators import _get_user_from_session
+    user = _get_user_from_session()
+    user_role = user.role.name if (user and user.role) else None
+
+    # Usuario sin rol: no puede ver nada
+    if not user_role:
+        flash('No tienes un rol asignado. Contacta al administrador para obtener acceso.', 'warning')
+        return redirect(url_for('main.projects'))
+
+    # Control de acceso según rol
+    if user_role in ['PMP', 'Admin']:
+        pass
+    elif user_role == 'Participante':
+        has_tasks = Task.query.filter_by(project_id=project_id, assigned_to_id=current_user.id).first()
+        is_member = current_user in project.members
+        if not has_tasks and not is_member:
+            flash('No tienes permiso para ver este proyecto.', 'danger')
+            return redirect(url_for('main.projects'))
+    elif user_role == 'Cliente' or not current_user.is_internal:
+        if current_user not in project.clients:
+            flash('No tienes permiso para ver este proyecto.', 'danger')
+            return redirect(url_for('main.projects'))
+    else:
+        flash('No tienes permiso para ver este proyecto.', 'danger')
+        return redirect(url_for('main.projects'))
+
+    # Filtrar tareas según rol
+    if user_role in ['PMP', 'Admin']:
+        tasks = Task.query.filter_by(project_id=project_id).order_by(Task.position, Task.id).all()
+    elif user_role == 'Participante':
+        tasks = Task.query.filter_by(project_id=project_id, assigned_to_id=current_user.id).order_by(Task.position, Task.id).all()
+    elif user_role == 'Cliente' or not current_user.is_internal:
+        from sqlalchemy import or_
+        tasks = Task.query.filter(
+            Task.project_id == project_id,
+            or_(Task.is_internal_only == False, Task.is_internal_only == None)
+        ).order_by(Task.position, Task.id).all()
+    else:
+        tasks = Task.query.filter_by(project_id=project_id, assigned_to_id=current_user.id).order_by(Task.position, Task.id).all()
+    
+    assignees = User.query.filter_by(is_internal=True, is_active=True).order_by(User.first_name).all()
+    metrics = calculate_project_metrics(project_id)
+    
+    # Preparar datos para el Gantt
+    gantt_tasks = []
+    for task in tasks:
+        # Necesitamos start_date y due_date para mostrar en el Gantt
+        start = task.start_date
+        end = task.due_date
+        
+        # Si no hay fechas, usar valores por defecto
+        if not start and not end:
+            continue  # Omitir tareas sin fechas en el Gantt
+        
+        if not start:
+            start = end
+        if not end:
+            # Estimar duración basada en horas estimadas o usar 1 día por defecto
+            from datetime import timedelta
+            days = int(task.estimated_hours / 8) if task.estimated_hours else 1
+            end = start + timedelta(days=max(1, days))
+        
+        # Construir lista de dependencias (predecessors)
+        dependencies = ','.join([str(p.id) for p in task.predecessors]) if task.predecessors else ''
+        
+        gantt_tasks.append({
+            'id': str(task.id),
+            'name': task.title,
+            'start': start.strftime('%Y-%m-%d') if hasattr(start, 'strftime') else str(start)[:10],
+            'end': end.strftime('%Y-%m-%d') if hasattr(end, 'strftime') else str(end)[:10],
+            'progress': 100 if task.status == 'COMPLETED' else (50 if task.status in ['IN_PROGRESS', 'IN_REVIEW'] else 0),
+            'dependencies': dependencies,
+            'status': task.status,
+            'priority': task.priority,
+            'assignee': task.assigned_to.first_name if task.assigned_to else None,
+            'parent_id': task.parent_task_id
+        })
+    
+    return render_template('gantt.html', project=project, tasks=tasks, gantt_tasks=gantt_tasks,
+                          metrics=metrics, users=assignees, now=datetime.now())
+
+
 # Crear tarea desde modal en project_detail
 @main_bp.route('/task', methods=['POST'])
 @login_required
@@ -653,8 +850,8 @@ def create_task():
     project_id = request.form.get('project_id')
     project = Project.query.get_or_404(project_id)
 
-    # Solo usuarios internos pueden crear tareas
-    if not current_user.is_internal:
+    # Only internal users with appropriate roles can create tasks
+    if (not current_user.is_internal) or (current_user.role and current_user.role.name == 'Participante'):
         flash('No tienes permiso para crear tareas en este proyecto.', 'danger')
         return redirect(url_for('main.project_detail', project_id=project_id))
 
@@ -682,6 +879,10 @@ def create_task():
         if assigned_client_id and assigned_client_id.strip():
             task.assigned_client_id = int(assigned_client_id)
 
+        start_date_str = request.form.get('start_date')
+        if start_date_str:
+            task.start_date = datetime.fromisoformat(start_date_str)
+
         due_date_str = request.form.get('due_date')
         if due_date_str:
             task.due_date = datetime.fromisoformat(due_date_str)
@@ -690,13 +891,38 @@ def create_task():
         if estimated_hours and estimated_hours.strip():
             task.estimated_hours = float(estimated_hours)
 
-        # Assign to a user if provided
-        assigned_to_id = request.form.get('assigned_to_id')
-        if assigned_to_id and assigned_to_id.strip():
-            task.assigned_to_id = int(assigned_to_id)
+        # Assign to a user(s) if provided (multi-select)
+        assignee_ids = [int(x) for x in request.form.getlist('assignees') if x and x.strip()]
+        if assignee_ids:
+            users = User.query.filter(User.id.in_(assignee_ids)).all()
+            task.assignees = users
+            # Keep compatibility with single assigned_to_id: use first selected if any
+            task.assigned_to_id = users[0].id if users else None
+        else:
+            # Handle single assignee from assigned_to_id field (for backwards compatibility)
+            assigned_to_id = request.form.get('assigned_to_id')
+            if assigned_to_id and assigned_to_id.strip():
+                task.assigned_to_id = int(assigned_to_id)
+
+        # Parent task (hierarchy)
+        parent_task_id = request.form.get('parent_task_id')
+        if parent_task_id and parent_task_id.strip():
+            parent_id = int(parent_task_id)
+            parent_task = Task.query.get(parent_id)
+            if not parent_task or parent_task.project_id != project.id:
+                flash('Tarea padre inválida.', 'danger')
+                return redirect(url_for('main.project_detail', project_id=project_id))
+            task.parent_task_id = parent_id
+
+        # Internal only flag - only visible for PMP/Admin
+        task.is_internal_only = request.form.get('is_internal_only') == 'on'
 
         db.session.add(task)
         db.session.flush()  # Get task ID
+
+        # Assign position at the end of the list
+        max_position = db.session.query(db.func.max(Task.position)).filter(Task.project_id == project.id).scalar()
+        task.position = (max_position + 1) if max_position is not None else 0
 
         # Handle predecessors at creation time (if provided)
         predecessor_ids = [int(x) for x in request.form.getlist('predecessor_ids') if x and x.strip()]
@@ -704,7 +930,15 @@ def create_task():
             task.validate_predecessor_ids(predecessor_ids)
             preds = Task.query.filter(Task.id.in_(predecessor_ids)).all()
             task.predecessors = preds
-        
+
+        # If assignees were provided via form, notify them (and persist)
+        assignee_ids = [int(x) for x in request.form.getlist('assignees') if x and x.strip()]
+        if assignee_ids:
+            users = User.query.filter(User.id.in_(assignee_ids)).all()
+            task.assignees = users
+            # Keep compat with single assigned_to_id
+            task.assigned_to_id = users[0].id if users else None
+
         # Registrar auditoría de creación
         audit = AuditLog(
             entity_type='Task',
@@ -748,13 +982,51 @@ def create_task():
         else:
             flash(f"Tarea '{task.title}' creada.", 'success')
 
-        # Notificar al usuario asignado (si es diferente al creador)
-        if task.assigned_to_id and task.assigned_to_id != current_user.id:
+        send_email_setting = SystemSettings.get('notify_task_assigned', 'true')
+        send_email = send_email_setting == 'true' or send_email_setting == True
+        email_sent = False
+
+        # If we created with multiple assignees via form, notify each (including self-assignment)
+        if assignee_ids:
+            project_obj = Project.query.get(task.project_id) if task.project_id else None
+            for uid in set(assignee_ids):
+                try:
+                    NotificationService.notify(
+                        user_id=uid,
+                        title='Nueva tarea asignada',
+                        message=f"Se te ha asignado la tarea '{task.title}'{(' en el proyecto '+project_obj.name) if project_obj else ''}",
+                        notification_type=NotificationService.TASK_ASSIGNED,
+                        related_entity_type='task',
+                        related_entity_id=task.id,
+                        send_email=send_email,
+                        email_context={'task': task, 'project': project_obj, 'assigned_by': current_user}
+                    )
+                    email_sent = True
+                except Exception:
+                    current_app.logger.exception('Failed to notify new assignee %s for task %s', uid, task.id)
+        else:
+            # Backwards compatibility: notify single assigned_to_id if provided
+            if task.assigned_to_id:
+                NotificationService.notify_task_assigned(
+                    task=task,
+                    assigned_by_user=current_user,
+                    send_email=send_email,
+                    notify_client=False
+                )
+                email_sent = True
+
+        # Notificar al cliente asignado (si existe y es diferente al creador)
+        if task.assigned_client_id and task.assigned_client_id != current_user.id:
             NotificationService.notify_task_assigned(
                 task=task,
                 assigned_by_user=current_user,
-                send_email=True
+                send_email=send_email,
+                notify_client=True
             )
+            email_sent = True
+
+        if email_sent and send_email:
+            flash('Se ha enviado una notificación por correo al usuario asignado.', 'info')
 
     except Exception as e:
         db.session.rollback()
@@ -763,11 +1035,10 @@ def create_task():
     return redirect(url_for('main.project_detail', project_id=project.id))
 
 
-# --- Admin: User and Role Management (PMP only) ---
+# --- Admin: User and Role Management (PMP or Admin) ---
 
 def _ensure_pmp():
-    # DEBUG: print current_user details (temporary)
-    # Use session-stored user id to guarantee we check the current session state
+    """Ensure user has PMP or Admin role for management features"""
     from flask import session
     uid = session.get('_user_id') or current_user.get_id()
     if not uid:
@@ -778,7 +1049,7 @@ def _ensure_pmp():
     if not user.role_id:
         abort(403)
     role = Role.query.get(user.role_id)
-    if not role or role.name != 'PMP':
+    if not role or role.name not in ('PMP', 'Admin'):
         abort(403)
     return True
 
@@ -1322,11 +1593,22 @@ def admin_notifications():
         return redirect(url_for('main.index'))
     
     if request.method == 'POST':
+        # Validate base_url first (if provided)
+        base_url = (request.form.get('base_url') or '').strip()
+        if base_url and not base_url.lower().startswith(('http://', 'https://')):
+            flash('La Base URL debe comenzar con http:// o https://', 'danger')
+            return redirect(url_for('main.admin_notifications'))
+
         try:
             SystemSettings.set('email_provider', request.form.get('email_provider', 'stub'), 'notifications', 'Proveedor de email', user_id=current_user.id)
             SystemSettings.set('sendgrid_api_key', request.form.get('sendgrid_api_key', ''), 'notifications', 'API Key de SendGrid', user_id=current_user.id)
             SystemSettings.set('email_from', request.form.get('email_from', ''), 'notifications', 'Email remitente', user_id=current_user.id)
             SystemSettings.set('email_from_name', request.form.get('email_from_name', 'BridgeWork'), 'notifications', 'Nombre remitente', user_id=current_user.id)
+            # Normalize and save base_url (remove trailing slash)
+            if base_url:
+                base_url = base_url.rstrip('/')
+            SystemSettings.set('base_url', base_url, 'notifications', 'Base URL para enlaces en emails', user_id=current_user.id)
+
             SystemSettings.set('notify_task_assigned', request.form.get('notify_task_assigned', 'true'), 'notifications', 'Notificar asignación', 'boolean', user_id=current_user.id)
             SystemSettings.set('notify_task_completed', request.form.get('notify_task_completed', 'true'), 'notifications', 'Notificar completado', 'boolean', user_id=current_user.id)
             SystemSettings.set('notify_task_approved', request.form.get('notify_task_approved', 'true'), 'notifications', 'Notificar aprobación', 'boolean', user_id=current_user.id)
@@ -1435,6 +1717,11 @@ def create_project():
     if not name:
         flash('El nombre del proyecto es un campo obligatorio.', 'danger')
         return redirect(url_for('main.projects'))
+
+    # Only internal users with appropriate roles can create projects
+    if not current_user.is_internal or (current_user.role and current_user.role.name in ['Participante', 'Cliente']):
+        flash('No tienes permiso para crear proyectos.', 'danger')
+        return redirect(url_for('main.projects'))
     
     try:
         new_project = Project(
@@ -1444,7 +1731,7 @@ def create_project():
             status='ACTIVE',
             project_type=project_type,
             manager_id=current_user.id if current_user.is_internal else None,
-            start_date=datetime.strptime(start_date_str, '%Y-%m-%d').date() if start_date_str else datetime.now(timezone.utc).date(),
+            start_date=datetime.strptime(start_date_str, '%Y-%m-%d').date() if start_date_str else datetime.now().date(),
             end_date=datetime.strptime(end_date_str, '%Y-%m-%d').date() if end_date_str else None
         )
         db.session.add(new_project)
@@ -1483,7 +1770,9 @@ def tasks():
     - Cliente: solo tareas de sus proyectos que son visibles externamente
     - Sin Rol: no puede ver nada
     """
-    user_role = current_user.role.name if current_user.role else None
+    from ..auth.decorators import _get_user_from_session
+    user = _get_user_from_session()
+    user_role = user.role.name if (user and user.role) else None
     
     # Usuario sin rol: mostrar mensaje y lista vacía
     if not user_role:
@@ -1501,23 +1790,21 @@ def tasks():
         # PMP/Admin ve todas las tareas
         pass
     elif user_role == 'Participante':
-        # Participante solo ve sus tareas asignadas
-        query = query.filter(Task.assigned_to_id == current_user.id)
-    elif user_role == 'Cliente' or not current_user.is_internal:
-        # Cliente: mostrar SOLO las tareas de sus proyectos que sean visibles externamente o estén asignadas al cliente
-        client_project_ids = db.session.query(Project.id).filter(
-            Project.clients.contains(current_user)
-        ).subquery()
+        # Participante: solo ver tareas donde está asignado (incluye multi-asignados)
         query = query.filter(
-            Task.project_id.in_(client_project_ids)
-        ).filter(
-            (Task.is_external_visible == True) | (Task.assigned_client_id == current_user.id)
+            (Task.assigned_to_id == current_user.id) | (Task.assignees.any(User.id == current_user.id))
         )
+    elif user_role == 'Cliente' or not current_user.is_internal:
+        # Cliente: solo ver tareas que estén asignadas al cliente explícitamente
+        query = query.filter(Task.assigned_client_id == current_user.id)
     else:
         # Cualquier otro rol: no ve nada
         query = query.filter(Task.id == -1)  # Query que no devuelve nada
     
     if status_filter:
+        # Normalize legacy filter 'DONE' to canonical 'COMPLETED'
+        if status_filter == 'DONE':
+            status_filter = 'COMPLETED'
         query = query.filter(Task.status == status_filter)
     
     if priority_filter:
@@ -1542,9 +1829,16 @@ def tasks():
 @login_required
 def time_entries():
     # Filters and pagination
-    user_role = current_user.role.name if current_user.role else None
+    from ..auth.decorators import _get_user_from_session
+    user = _get_user_from_session()
+    user_role = user.role.name if (user and user.role) else None
     page = int(request.args.get('page', 1))
     per_page = 25
+
+    # Usuario sin rol: mostrar mensaje y lista vacía
+    if not user_role:
+        flash('No tienes un rol asignado. Contacta al administrador para obtener acceso.', 'warning')
+        return render_template('time_entries.html', time_entries=[], total_hours_week=0, page=1, total_pages=0, users=[], total_count=0, page_urls=[], prev_url=None, next_url=None, no_role=True)
 
     # Parse filters
     start_date_s = request.args.get('start_date')
@@ -1589,8 +1883,27 @@ def time_entries():
     # Total hours visible in this filtered view
     total_hours_week = query.with_entities(func.sum(TimeEntry.hours)).filter(TimeEntry.date >= (datetime.now().date() - timedelta(days=7))).scalar() or 0
 
-    # If PMP/Admin, expose list of users for filter
-    users = User.query.order_by(User.first_name).all() if user_role in ['PMP', 'Admin'] else []
+    # If PMP/Admin, expose list of users for filter (only users that have time entries within the date filters)
+    users = []
+    if user_role in ['PMP', 'Admin']:
+        user_ids_q = db.session.query(TimeEntry.user_id.distinct())
+        if start_date_s:
+            try:
+                s_date = datetime.strptime(start_date_s, '%Y-%m-%d').date()
+                user_ids_q = user_ids_q.filter(TimeEntry.date >= s_date)
+            except Exception:
+                pass
+        if end_date_s:
+            try:
+                e_date = datetime.strptime(end_date_s, '%Y-%m-%d').date()
+                user_ids_q = user_ids_q.filter(TimeEntry.date <= e_date)
+            except Exception:
+                pass
+        user_ids = [r[0] for r in user_ids_q.all()]
+        if user_ids:
+            users = User.query.filter(User.id.in_(user_ids)).order_by(User.first_name).all()
+        else:
+            users = []
 
     # Build pagination urls (preserve filters)
     params = request.args.to_dict()
@@ -1611,7 +1924,7 @@ def team():
     if not _ensure_pmp():
         return redirect(url_for('main.index'))
     # Obtener usuarios internos
-    internal_users = User.query.filter_by(is_internal=True).all()
+    internal_users = User.query.filter_by(is_internal=True, is_active=True).all()
     
     # Estadísticas de tareas por estado para cada usuario interno
     for u in internal_users:
@@ -1626,7 +1939,7 @@ def team():
         # Horas este mes
         u.hours_this_month = db.session.query(func.sum(TimeEntry.hours)).join(Task).filter(
             TimeEntry.user_id == u.id,
-            TimeEntry.date >= (datetime.utcnow().date().replace(day=1))
+            TimeEntry.date >= (datetime.now().date().replace(day=1))
         ).scalar() or 0
     
     return render_template('team.html', internal_users=internal_users)
@@ -1664,6 +1977,145 @@ def clients():
     return render_template('clients.html', clients=clients)
 
 
+@main_bp.route('/clients/create', methods=['POST'])
+@login_required
+def create_client():
+    """Create a new client user"""
+    if not _ensure_pmp():
+        return redirect(url_for('main.clients'))
+    
+    from werkzeug.security import generate_password_hash
+    
+    email = request.form.get('email', '').strip()
+    password = request.form.get('password', '')
+    first_name = request.form.get('first_name', '').strip()
+    last_name = request.form.get('last_name', '').strip()
+    company = request.form.get('company', '').strip()
+    phone = request.form.get('phone', '').strip()
+    
+    # Validation
+    if not email:
+        flash('El email es requerido.', 'danger')
+        return redirect(url_for('main.clients'))
+    
+    if User.query.filter_by(email=email).first():
+        flash('Ya existe un usuario con ese email.', 'danger')
+        return redirect(url_for('main.clients'))
+    
+    if not password or len(password) < 6:
+        flash('La contraseña debe tener al menos 6 caracteres.', 'danger')
+        return redirect(url_for('main.clients'))
+    
+    # Get or create client role
+    client_role = Role.query.filter_by(name='Cliente').first()
+    if not client_role:
+        # Create the role if it doesn't exist
+        client_role = Role(name='Cliente')
+        db.session.add(client_role)
+        db.session.flush()
+    
+    client = User(
+        email=email,
+        first_name=first_name or None,
+        last_name=last_name or None,
+        company=company or None,
+        phone=phone or None,
+        is_internal=False,
+        is_active=True,
+        role_id=client_role.id
+    )
+    client.set_password(password)
+    
+    db.session.add(client)
+    db.session.commit()
+    
+    flash(f'Cliente {email} creado exitosamente.', 'success')
+    return redirect(url_for('main.clients'))
+
+
+@main_bp.route('/clients/update', methods=['POST'])
+@login_required
+def update_client():
+    """Update an existing client user"""
+    if not _ensure_pmp():
+        return redirect(url_for('main.clients'))
+    
+    from werkzeug.security import generate_password_hash
+    
+    client_id = request.form.get('client_id')
+    client = User.query.get_or_404(client_id)
+    
+    # Only allow editing non-internal users (clients)
+    if client.is_internal:
+        flash('No puedes editar usuarios internos desde esta página.', 'danger')
+        return redirect(url_for('main.clients'))
+    
+    # Azure users can only have company/phone updated
+    is_azure = bool(client.azure_oid)
+    
+    if is_azure:
+        # Only update additional info for Azure users
+        client.company = request.form.get('company', '').strip() or None
+        client.phone = request.form.get('phone', '').strip() or None
+    else:
+        # Local users - all fields can be updated
+        email = request.form.get('email', '').strip()
+        if email and email != client.email:
+            if User.query.filter_by(email=email).first():
+                flash('Ya existe un usuario con ese email.', 'danger')
+                return redirect(url_for('main.clients'))
+            client.email = email
+        
+        client.first_name = request.form.get('first_name', '').strip() or None
+        client.last_name = request.form.get('last_name', '').strip() or None
+        client.company = request.form.get('company', '').strip() or None
+        client.phone = request.form.get('phone', '').strip() or None
+        
+        # Update password only if provided
+        password = request.form.get('password', '')
+        if password:
+            if len(password) < 6:
+                flash('La contraseña debe tener al menos 6 caracteres.', 'danger')
+                return redirect(url_for('main.clients'))
+            client.set_password(password)
+    
+    db.session.commit()
+    flash(f'Cliente {client.email} actualizado.', 'success')
+    return redirect(url_for('main.clients'))
+
+
+@main_bp.route('/clients/delete', methods=['POST'])
+@login_required
+def delete_client():
+    """Delete a client user (only if they have no projects)"""
+    if not _ensure_pmp():
+        return redirect(url_for('main.clients'))
+    
+    client_id = request.form.get('client_id')
+    client = User.query.get_or_404(client_id)
+    
+    # Only allow deleting non-internal users (clients)
+    if client.is_internal:
+        flash('No puedes eliminar usuarios internos desde esta página.', 'danger')
+        return redirect(url_for('main.clients'))
+    
+    # Check if client has associated projects
+    has_projects = db.session.query(project_clients).filter(
+        project_clients.c.user_id == client.id
+    ).first()
+    
+    if has_projects:
+        flash('No se puede eliminar el cliente porque tiene proyectos asociados.', 'danger')
+        return redirect(url_for('main.clients'))
+    
+    email = client.email
+    db.session.delete(client)
+    db.session.commit()
+    
+    flash(f'Cliente {email} eliminado.', 'success')
+    return redirect(url_for('main.clients'))
+
+
 @main_bp.route('/teams')
 @login_required
 def teams_alias():
@@ -1697,14 +2149,167 @@ def reports():
     budget_usage_percent = (total_hours_spent / total_budget * 100) if total_budget > 0 else 0
     
     # Hours by user (last 30 days)
-    thirty_days_ago = datetime.utcnow().date() - timedelta(days=30)
+    thirty_days_ago = datetime.now().date() - timedelta(days=30)
     user_hours = db.session.query(
         User.email,
         func.sum(TimeEntry.hours).label('total_hours')
     ).join(TimeEntry).filter(
         TimeEntry.date >= thirty_days_ago
     ).group_by(User.id, User.email).all()
-    
+
+    # Projects list for selector
+    projects = Project.query.order_by(Project.name).all()
+
+    # Optional: build project-specific summary rows if a project is selected
+    project = None
+    task_rows = None
+    project_id = request.args.get('project_id')
+    if project_id:
+        project = Project.query.get(project_id)
+        if not project:
+            abort(404)
+
+        # Paginated task query for project summary (10 items per page)
+        tasks_query = Task.query.filter_by(project_id=project.id).order_by(Task.id)
+        project_total_tasks = tasks_query.count()
+
+        # Pagination params
+        try:
+            page = max(1, int(request.args.get('page', 1)))
+        except Exception:
+            page = 1
+        per_page = 10
+
+        # Load tasks: all if exporting, otherwise page slice
+        if request.args.get('export') == 'xlsx':
+            tasks = tasks_query.all()
+        else:
+            tasks = tasks_query.limit(per_page).offset((page - 1) * per_page).all()
+
+        task_rows = []
+        today = datetime.now().date()
+        for t in tasks:
+            assignees = [u.name for u in t.assignee_list]
+            # Use first_name when available, otherwise fall back to name or email
+            client_name = ''
+            if t.assigned_client:
+                client_name = t.assigned_client.first_name or getattr(t.assigned_client, 'name', None) or t.assigned_client.email
+            hours_logged = db.session.query(func.coalesce(func.sum(TimeEntry.hours), 0)).filter(TimeEntry.task_id == t.id).scalar() or 0
+
+            # Calculate days overdue (Option 1): for non-completed tasks only
+            if t.due_date:
+                due_val = t.due_date.date() if hasattr(t.due_date, 'date') else t.due_date
+                if t.status == 'COMPLETED':
+                    days_overdue = 0
+                else:
+                    days_overdue = max(0, (today - due_val).days)
+            else:
+                days_overdue = 0
+
+            task_rows.append({
+                'id': t.id,
+                'title': t.title,
+                'status': t.status,
+                'priority': t.priority,
+                'assignees': assignees,
+                'client': client_name,
+                'start_date': t.start_date.date() if t.start_date else None,
+                'due_date': t.due_date.date() if t.due_date else None,
+                'estimated_hours': t.estimated_hours,
+                'hours_logged': float(hours_logged),
+                'days_overdue': int(days_overdue)
+            })
+
+        # Compute pagination metadata for template (only when not exporting)
+        pagination = None
+        if request.args.get('export') != 'xlsx':
+            total_pages = (project_total_tasks + per_page - 1) // per_page if project_total_tasks else 1
+            pagination = {'page': page, 'per_page': per_page, 'total': project_total_tasks, 'pages': total_pages}
+
+        # Override KPI cards with project-scoped metrics when a project is selected
+        try:
+            project_completed_tasks = sum(1 for t in tasks_query if (t.status or '').upper() == 'COMPLETED')
+            project_total_budget = project.budget_hours or 0
+            project_total_hours_spent = db.session.query(func.coalesce(func.sum(TimeEntry.hours), 0)).join(Task).filter(Task.project_id == project.id).scalar() or 0
+
+            # % usage
+            project_budget_usage = (float(project_total_hours_spent) / float(project_total_budget) * 100) if project_total_budget and float(project_total_budget) > 0 else 0
+
+            # Hours by user limited to this project
+            project_user_hours = db.session.query(
+                User.email,
+                func.sum(TimeEntry.hours).label('total_hours')
+            ).join(TimeEntry).join(Task).filter(
+                Task.project_id == project.id,
+                TimeEntry.date >= thirty_days_ago
+            ).group_by(User.id, User.email).all()
+
+            # Override variables used in template
+            total_projects = 1
+            total_tasks = project_total_tasks
+            completed_tasks = project_completed_tasks
+            total_budget = project_total_budget
+            total_hours_spent = project_total_hours_spent
+            budget_usage_percent = project_budget_usage
+            user_hours = project_user_hours
+        except Exception:
+            # If anything goes wrong, fall back to global values already computed
+            pass
+
+        if request.args.get('export') == 'xlsx':
+            try:
+                import openpyxl
+                from openpyxl.utils import get_column_letter
+            except Exception:
+                abort(500, 'openpyxl not installed')
+
+            wb = openpyxl.Workbook()
+            ws = wb.active
+            ws.title = f"Project-{project.id}-Summary"
+
+            headers = ['Task ID', 'Title', 'Status', 'Priority', 'Assignees', 'Assigned Client', 'Start Date', 'Due Date', 'Atraso (días)', 'Estimated Hours', 'Hours Logged']
+            ws.append(headers)
+            for row in task_rows:
+                ws.append([
+                    row['id'],
+                    row['title'],
+                    row['status'],
+                    row['priority'],
+                    ', '.join(row['assignees']) if row['assignees'] else '',
+                    (row['client'] + ' (Cliente Externo)') if row.get('client') else '',
+                    row['start_date'].isoformat() if row['start_date'] else '',
+                    row['due_date'].isoformat() if row['due_date'] else '',
+                    int(row.get('days_overdue', 0)),
+                    float(row['estimated_hours']) if row['estimated_hours'] is not None else '',
+                    row['hours_logged']
+                ])
+
+            # Auto width
+            for i, column_cells in enumerate(ws.columns, 1):
+                length = max(len(str(cell.value or '')) for cell in column_cells)
+                ws.column_dimensions[get_column_letter(i)].width = min(max(length + 2, 10), 50)
+
+            bio = BytesIO()
+            wb.save(bio)
+            bio.seek(0)
+            filename = f"project_{project.id}_summary.xlsx"
+            return send_file(bio, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', as_attachment=True, download_name=filename)
+
+        # Otherwise render the report section with task_rows
+        return render_template('reports.html',
+            total_projects=total_projects,
+            total_tasks=total_tasks,
+            completed_tasks=completed_tasks,
+            total_budget=total_budget,
+            total_hours_spent=total_hours_spent,
+            budget_usage_percent=budget_usage_percent,
+            user_hours=user_hours,
+            projects=projects,
+            selected_project=project,
+            task_rows=task_rows,
+            pagination=pagination
+        )
+
     return render_template('reports.html',
         total_projects=total_projects,
         total_tasks=total_tasks,
@@ -1712,7 +2317,8 @@ def reports():
         total_budget=total_budget,
         total_hours_spent=total_hours_spent,
         budget_usage_percent=budget_usage_percent,
-        user_hours=user_hours
+        user_hours=user_hours,
+        projects=projects
     )
 
 
@@ -1726,6 +2332,15 @@ def create_time_entry():
             task_id = request.form.get('task_id')
             task = Task.query.get_or_404(task_id)
             
+            # Validar que no hay predecesoras incompletas
+            incomplete_preds = task.incomplete_predecessors()
+            if incomplete_preds:
+                pred_names = ', '.join([p.title for p in incomplete_preds[:3]])
+                if len(incomplete_preds) > 3:
+                    pred_names += f' y {len(incomplete_preds) - 3} más'
+                flash(f'No se puede registrar tiempo en esta tarea. Primero deben completarse las tareas predecesoras: {pred_names}', 'warning')
+                return redirect(url_for('main.create_time_entry', task_id=task_id))
+            
             date_str = request.form.get('date')
             hours = float(request.form.get('hours'))
             description = request.form.get('description')
@@ -1734,7 +2349,7 @@ def create_time_entry():
             time_entry = TimeEntry(
                 task_id=task_id,
                 user_id=current_user.id,
-                date=datetime.fromisoformat(date_str).date() if date_str else datetime.utcnow().date(),
+                date=datetime.fromisoformat(date_str).date() if date_str else datetime.now().date(),
                 hours=hours,
                 description=description,
                 is_billable=is_billable
@@ -1760,11 +2375,43 @@ def create_time_entry():
             flash(f'Error: {str(e)}', 'danger')
     
     # Show tasks based on role: PMP/Admin sees all, others see only their assigned tasks
-    user_role = current_user.role.name if current_user.role else None
+    from ..auth.decorators import _get_user_from_session
+    user = _get_user_from_session()
+    user_role = user.role.name if (user and user.role) else None
+    # Respect role: PMP/Admin see all tasks, others should see tasks they are assigned to (either legacy assigned_to or in assignees many-to-many)
     if user_role in ['PMP', 'Admin']:
         tasks = Task.query.order_by(Task.title).all()
     else:
-        tasks = Task.query.filter_by(assigned_to_id=current_user.id).order_by(Task.title).all()
+        from ..models import User
+        tasks = Task.query.filter(
+            (Task.assigned_to_id == user.id) | (Task.assignees.any(User.id == user.id))
+        ).order_by(Task.title).all()
+
+    # Marcar tareas bloqueadas por predecesoras
+    for t in tasks:
+        t.has_incomplete_predecessors = len(t.incomplete_predecessors()) > 0
+
+    # Preserve selected task id if link passed it (e.g., from task detail) so the select pre-selects it
+    selected_task_id = request.args.get('task_id', type=int)
+
+    # If a selected_task_id was provided but not in the tasks list (could happen), try to include it
+    if selected_task_id and not any(t.id == selected_task_id for t in tasks):
+        try:
+            sel_t = Task.query.get(int(selected_task_id))
+            # only add if the current user should be able to log time for it (PMP/Admin or assigned)
+            can_attach = False
+            if user_role in ['PMP', 'Admin']:
+                can_attach = True
+            else:
+                if sel_t and (sel_t.assigned_to_id == user.id or (getattr(sel_t, 'assignees', None) and any(u.id == user.id for u in sel_t.assignees))):
+                    can_attach = True
+            if can_attach and sel_t:
+                sel_t.has_incomplete_predecessors = len(sel_t.incomplete_predecessors()) > 0
+                tasks = tasks + [sel_t]
+        except Exception:
+            pass
+
+    return render_template('time_entry_edit.html', entry=None, tasks=tasks, selected_task_id=selected_task_id, now=datetime.now())
 
     selected_task_id = request.args.get('task_id', type=int)
     return render_template('time_entry_edit.html', tasks=tasks, now=datetime.now(), selected_task_id=selected_task_id)
@@ -1775,10 +2422,12 @@ def create_time_entry():
 def edit_time_entry(entry_id):
     entry = TimeEntry.query.get_or_404(entry_id)
     
-    # Solo el propietario o PMP puede editar (PMP puede marcar facturado)
+    # Solo el propietario, PMP o Admin puede editar (PMP/Admin pueden marcar facturado)
     is_owner = entry.user_id == current_user.id
-    role_name = current_user.role.name if current_user.role else None
-    if not (is_owner or role_name == 'PMP'):
+    from ..auth.decorators import _get_user_from_session
+    user = _get_user_from_session()
+    role_name = user.role.name if (user and user.role) else None
+    if not (is_owner or role_name in ('PMP', 'Admin')):
         flash('No tienes permiso para editar este registro.', 'danger')
         return redirect(url_for('main.time_entries'))
     
@@ -1786,13 +2435,13 @@ def edit_time_entry(entry_id):
         try:
             old_values = {'date': str(entry.date), 'hours': float(entry.hours), 'is_billable': entry.is_billable}
             
-            # Only owners can modify date/hours/description
-            if is_owner:
+            # Owners, PMP or Admin can modify date/hours/description
+            if is_owner or role_name in ('PMP', 'Admin'):
                 entry.date = datetime.fromisoformat(request.form.get('date')).date()
                 entry.hours = float(request.form.get('hours'))
                 entry.description = request.form.get('description')
-            # Only PMP users can change the 'is_billable' flag
-            if role_name == 'PMP':
+            # PMP and Admin users can change the 'is_billable' flag
+            if role_name in ('PMP', 'Admin'):
                 entry.is_billable = request.form.get('is_billable') == 'on'
             else:
                 # preserve existing value (ignore any tampering in form)
@@ -1855,35 +2504,35 @@ def delete_time_entry(entry_id):
 # ========== TASK ROUTES (ENHANCED) ==========
 
 @main_bp.route('/task/<int:task_id>/status', methods=['POST'])
-@login_required
+@internal_required
 def update_task_status(task_id):
+    from flask import session
     task = Task.query.get_or_404(task_id)
     project = task.project
-    
-    if not current_user.is_internal or (project.manager_id and project.manager_id != current_user.id):
+
+    # Load fresh user from session
+    from ..models import User
+    uid = session.get('_user_id')
+    user = User.query.get(int(uid)) if uid else None
+
+    if not user or (project.manager_id and project.manager_id != user.id):
         return jsonify({'error': 'Permission denied'}), 403
     
     try:
         new_status = request.form.get('status')
-        # If trying to mark as completed, ensure predecessors are completed
-        if new_status in ('DONE', 'COMPLETED'):
-            incomplete = [p for p in task.predecessors if p.status not in ('DONE', 'COMPLETED')]
-            if incomplete:
+        
+        # Validate if task can advance to new status
+        if new_status:
+            can_advance, error_msg, blockers = task.can_advance_status(new_status)
+            if not can_advance:
                 return jsonify({
-                    'error': 'No se puede completar la tarea mientras existan predecesoras incompletas',
-                    'incomplete_predecessors': [{'id': p.id, 'title': p.title} for p in incomplete]
-                }), 400
-            # Also prevent completing if any descendant (successor chain) is incomplete
-            incomplete_desc = [d for d in task.descendants() if d.status not in ('DONE', 'COMPLETED')]
-            if incomplete_desc:
-                return jsonify({
-                    'error': 'No se puede completar la tarea mientras existan subtareas (succesoras) incompletas',
-                    'incomplete_descendants': [{'id': d.id, 'title': d.title} for d in incomplete_desc]
+                    'error': error_msg,
+                    **(blockers or {})
                 }), 400
 
-        task.status = new_status
+        task.set_status(new_status)
         db.session.commit()
-        return redirect(url_for('main.project_detail', project_id=project.id))
+        return redirect(url_for('main.task_detail', task_id=task.id))
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': str(e)}), 400
@@ -1894,7 +2543,9 @@ def update_task_status(task_id):
 def task_detail(task_id):
     task = Task.query.get_or_404(task_id)
     project = task.project
-    user_role = current_user.role.name if current_user.role else None
+    from ..auth.decorators import _get_user_from_session
+    user = _get_user_from_session()
+    user_role = user.role.name if (user and user.role) else None
     
     # Control de acceso
     can_view = False
@@ -1904,8 +2555,8 @@ def task_detail(task_id):
         can_view = True
         can_edit = True
     elif user_role == 'Participante':
-        # Participante puede ver/editar si es su tarea asignada
-        if task.assigned_to_id == current_user.id:
+        # Participante puede ver/editar si es su tarea asignada (incluye multi-asignados)
+        if task.assigned_to_id == current_user.id or (getattr(task, 'assignees', None) and any(u.id == current_user.id for u in task.assignees)):
             can_view = True
             can_edit = True
     elif user_role == 'Cliente' or not current_user.is_internal:
@@ -1932,7 +2583,9 @@ def move_task(task_id):
     project = task.project
 
     # Only internal users can move tasks between statuses
-    if not current_user.is_internal:
+    from ..auth.decorators import _get_user_from_session
+    user = _get_user_from_session()
+    if not user or not user.is_internal:
         return jsonify({'error': 'No tienes permiso para mover tareas.'}), 403
 
     data = request.get_json() or request.form
@@ -1943,43 +2596,38 @@ def move_task(task_id):
     if not new_status or new_status not in VALID_STATUSES:
         return jsonify({'error': 'Estado inválido.'}), 400
 
-    # Validate completion conditions
-    if new_status in ('DONE', 'COMPLETED'):
-        incomplete_preds = [p for p in task.predecessors if p.status not in ('DONE', 'COMPLETED')]
-        if incomplete_preds:
-            return jsonify({
-                'error': 'Cannot complete task while predecessors are incomplete',
-                'incomplete_predecessors': [{'id': p.id, 'title': p.title} for p in incomplete_preds]
-            }), 400
-        incomplete_desc = [d for d in task.descendants() if d.status not in ('DONE', 'COMPLETED')]
-        if incomplete_desc:
-            return jsonify({
-                'error': 'Cannot complete task while descendants are incomplete',
-                'incomplete_descendants': [{'id': d.id, 'title': d.title} for d in incomplete_desc]
-            }), 400
+    # Validate if task can advance to new status (blocked by predecessors or children)
+    can_advance, error_msg, blockers = task.can_advance_status(new_status)
+    if not can_advance:
+        return jsonify({
+            'error': error_msg,
+            **(blockers or {})
+        }), 400
 
     try:
-        task.status = new_status
+        # Normalize and set status
+        task.set_status(new_status)
+        normalized_new = task.status
         
-        # Registrar auditoría de cambio de estado
+        # Registrar auditoría de cambio de estado (use session-bound user)
         audit = AuditLog(
             entity_type='Task',
             entity_id=task.id,
             action='UPDATE',
-            user_id=current_user.id,
-            changes={'status': {'old': old_status, 'new': new_status}}
+            user_id=user.id,
+            changes={'status': {'old': old_status, 'new': normalized_new}}
         )
         db.session.add(audit)
         
         # Si la tarea se completa, notificar a los clientes
-        if new_status == 'COMPLETED' and old_status != 'COMPLETED':
-            notify_clients_task_completed(task, completed_by_user=current_user)
+        if normalized_new == 'COMPLETED' and old_status != 'COMPLETED':
+            notify_clients_task_completed(task, completed_by_user=user)
         # Notificar cambio de estado al asignado (solo in-app, sin email)
-        elif old_status != new_status and task.assigned_to_id:
+        elif old_status != normalized_new and task.assigned_to_id:
             NotificationService.notify_task_status_changed(
                 task=task,
                 old_status=old_status,
-                changed_by_user=current_user,
+                changed_by_user=user,
                 send_email=False
             )
         
@@ -2034,81 +2682,152 @@ def edit_task(task_id):
     can_edit = current_user.is_internal or project.client_id == current_user.id
     if not can_edit:
         flash('No tienes permiso para editar esta tarea.', 'danger')
-        return redirect(url_for('main.project_detail', project_id=project.id))
+        return redirect(url_for('main.task_detail', task_id=task.id))
 
     if request.method == 'POST':
         try:
             # Guardar valores anteriores para detectar cambios y auditoría
             old_assigned_to_id = task.assigned_to_id
+            old_assigned_client_id = task.assigned_client_id
+            old_parent_id = task.parent_task_id
+            old_assignees = set([u.id for u in task.assignees]) if getattr(task, 'assignees', None) else set()
             old_values = {
                 'title': task.title,
                 'status': task.status,
                 'priority': task.priority,
                 'assigned_to_id': task.assigned_to_id,
-                'is_external_visible': task.is_external_visible,
-                'predecessor_ids': sorted([p.id for p in task.predecessors])
+                'is_internal_only': task.is_internal_only,
+                'predecessor_ids': sorted([p.id for p in task.predecessors]),
+                'parent_task_id': task.parent_task_id
             }
-            
+
+            # Role checks: only PMP/Admin can modify most fields. Participants and Clients may only change status and upload files.
+            is_pmp_admin = (current_user.is_authenticated and current_user.is_internal and current_user.role and current_user.role.name in ('PMP','Admin'))
+            is_participant = (current_user.is_authenticated and current_user.is_internal and current_user.role and current_user.role.name == 'Participante')
+            is_client = (not current_user.is_internal) and (project.client_id == current_user.id)
+            is_limited_editor = is_participant or is_client
+
+            if is_limited_editor:
+                # Only allow status in form. If any other form fields are present, reject and redirect.
+                allowed = {'status'}
+                extra = set([k for k in request.form.keys() if k not in allowed and not k.startswith('_')])
+                if extra:
+                    flash('No tienes permiso para modificar campos además de estado y archivos.', 'danger')
+                    return redirect(url_for('main.edit_task', task_id=task.id))
+
+            # Process fields (PMP/Admin or allowed status for limited editors)
             task.title = request.form.get('title') or task.title
             task.description = request.form.get('description')
-            # Validate status change before assignment
-            new_status_from_form = request.form.get('status') or task.status
-            if new_status_from_form in ('DONE', 'COMPLETED'):
-                incomplete_preds = [p for p in task.predecessors if p.status not in ('DONE', 'COMPLETED')]
-                if incomplete_preds:
-                    raise ValueError('No se puede completar la tarea mientras existan predecesoras incompletas')
-                incomplete_desc = [d for d in task.descendants() if d.status not in ('DONE', 'COMPLETED')]
-                if incomplete_desc:
-                    raise ValueError('No se puede completar la tarea mientras existan subtareas incompletas')
-            task.status = new_status_from_form
-            task.priority = request.form.get('priority') or task.priority
-            task.is_external_visible = request.form.get('is_external_visible') == 'on'
 
+            # Handle predecessors (many-to-many) EARLY: only if provided in form, validate and assign BEFORE status validation
+            if 'predecessor_ids' in request.form:
+                predecessor_ids = [int(x) for x in request.form.getlist('predecessor_ids') if x and x.strip()]
+                try:
+                    # validate before assignment
+                    task.validate_predecessor_ids(predecessor_ids)
+                    if predecessor_ids:
+                        preds = Task.query.filter(Task.id.in_(predecessor_ids)).all()
+                    else:
+                        preds = []
+                    task.predecessors = preds
+                except ValueError as ve:
+                    raise ve
+
+            status_from_form = request.form.get('status')
+            if status_from_form and status_from_form != task.status:
+                can_advance, error_msg, blockers = task.can_advance_status(status_from_form)
+                if not can_advance:
+                    raise ValueError(error_msg)
+                task.set_status(status_from_form)
+            # If no status provided, keep existing task.status unchanged
+
+            task.priority = request.form.get('priority') or task.priority
+            # Only update is_internal_only if provided in form (checkboxes absent when not submitted)
+            if 'is_internal_only' in request.form:
+                task.is_internal_only = request.form.get('is_internal_only') == 'on'
+            start_date_str = request.form.get('start_date')
             due_date_str = request.form.get('due_date')
+
+            # Only PMP/Admin may modify dates
+            if (start_date_str or due_date_str) and not is_pmp_admin:
+                flash('No tienes permiso para modificar fechas de la tarea.', 'danger')
+                return redirect(url_for('main.edit_task', task_id=task.id))
+
+            if start_date_str:
+                task.start_date = datetime.fromisoformat(start_date_str)
+            else:
+                task.start_date = None
+
             if due_date_str:
                 task.due_date = datetime.fromisoformat(due_date_str)
             else:
                 task.due_date = None
 
-            estimated_hours = request.form.get('estimated_hours')
-            if estimated_hours and estimated_hours.strip():
-                task.estimated_hours = float(estimated_hours)
-            else:
-                task.estimated_hours = None
-
-            # Update assignee
-            assigned_to_id = request.form.get('assigned_to_id')
-            new_assigned_to_id = int(assigned_to_id) if assigned_to_id and assigned_to_id.strip() else None
-            task.assigned_to_id = new_assigned_to_id
-
-            # Update assigned client (separate field)
-            assigned_client_id = request.form.get('assigned_client_id')
-            new_assigned_client_id = int(assigned_client_id) if assigned_client_id and assigned_client_id.strip() else None
-            task.assigned_client_id = new_assigned_client_id
-
-            # Handle predecessors (many-to-many)
-            predecessor_ids = [int(x) for x in request.form.getlist('predecessor_ids') if x and x.strip()]
-            try:
-                # validate before assignment
-                task.validate_predecessor_ids(predecessor_ids)
-                if predecessor_ids:
-                    preds = Task.query.filter(Task.id.in_(predecessor_ids)).all()
+            # Update parent task (validate no cycles)
+            # Update parent task only if provided in form
+            if 'parent_task_id' in request.form:
+                parent_task_id = request.form.get('parent_task_id')
+                if parent_task_id and parent_task_id.strip():
+                    new_parent_id = int(parent_task_id)
+                    if new_parent_id == task.id:
+                        raise ValueError('La tarea no puede ser su propia tarea padre')
+                    parent_task = Task.query.get(new_parent_id)
+                    if not parent_task or parent_task.project_id != project.id:
+                        raise ValueError('Tarea padre inválida')
+                    # Ensure not assigning a descendant as parent (would create cycle)
+                    descendant_ids = [d.id for d in task.descendants()]
+                    if new_parent_id in descendant_ids:
+                        raise ValueError('No se puede asignar una subtarea como tarea padre')
+                    task.parent_task_id = new_parent_id
                 else:
-                    preds = []
-                task.predecessors = preds
-            except ValueError as ve:
-                raise ve
+                    task.parent_task_id = None
+
+            # Update estimated_hours only if provided in form
+            if 'estimated_hours' in request.form:
+                estimated_hours = request.form.get('estimated_hours')
+                if estimated_hours and estimated_hours.strip():
+                    task.estimated_hours = float(estimated_hours)
+                else:
+                    task.estimated_hours = None
+
+            # Update assignees (multi-select). Keep assigned_to_id for compatibility (first selected)
+            current_app.logger.debug('edit_task: raw assignees payload = %s', request.form.getlist('assignees'))
+            if 'assignees' in request.form:
+                assignee_ids = [int(x) for x in request.form.getlist('assignees') if x and x.strip()]
+                # Use ORM relationship management only (avoid direct SQL deletes that confuse the ORM unit-of-work)
+                if assignee_ids:
+                    users = User.query.filter(User.id.in_(assignee_ids)).all()
+                    task.assignees = users
+                    task.assigned_to_id = users[0].id if users else None
+                else:
+                    # Explicitly clearing assignees requested
+                    task.assignees = []
+                    task.assigned_to_id = None
+
+            # Update assigned client (separate field) only if present in form
+            assigned_client_provided = False
+            new_assigned_client_id = None
+            if 'assigned_client_id' in request.form:
+                assigned_client_provided = True
+                assigned_client_id = request.form.get('assigned_client_id')
+                new_assigned_client_id = int(assigned_client_id) if assigned_client_id and assigned_client_id.strip() else None
+                task.assigned_client_id = new_assigned_client_id
+            # Predecessor handling moved earlier to occur BEFORE status validation to ensure
+            # that status changes take the new predecessors into account. See above.
 
             # Handle file attachments
             files = request.files.getlist('attachments')
+            invalid_files = []
             for file in files:
-                if file and file.filename and allowed_file(file.filename):
+                if file and file.filename:
+                    if not allowed_file(file.filename):
+                        invalid_files.append(file.filename)
+                        continue
                     filename = secure_filename(file.filename)
-                    stored_filename = get_unique_filename(task.id, filename)
+                    # get_unique_filename returns (stored_filename, task_folder)
+                    stored_filename, task_folder = get_unique_filename(task.id, filename)
                     
-                    task_folder = os.path.join(current_app.config['UPLOAD_FOLDER'], f'task_{task.id}')
-                    os.makedirs(task_folder, exist_ok=True)
-                    
+                    # task_folder is already created inside get_unique_filename
                     file_path = os.path.join(task_folder, stored_filename)
                     file.save(file_path)
                     
@@ -2122,14 +2841,18 @@ def edit_task(task_id):
                     )
                     db.session.add(attachment)
 
+            if invalid_files:
+                flash('Algunos archivos no fueron subidos porque su extensión no está permitida: ' + ', '.join(invalid_files), 'warning')
+
             # Registrar auditoría de cambios en tarea
             new_values = {
                 'title': task.title,
                 'status': task.status,
                 'priority': task.priority,
                 'assigned_to_id': task.assigned_to_id,
-                'is_external_visible': task.is_external_visible,
-                'predecessor_ids': sorted([p.id for p in task.predecessors])
+                'is_internal_only': task.is_internal_only,
+                'predecessor_ids': sorted([p.id for p in task.predecessors]),
+                'parent_task_id': task.parent_task_id
             }
             changes = {k: {'old': old_values[k], 'new': new_values[k]} for k in old_values if old_values[k] != new_values[k]}
             
@@ -2145,25 +2868,65 @@ def edit_task(task_id):
 
             db.session.commit()
             
-            # Notificar si se asignó a un nuevo usuario
-            if new_assigned_to_id and new_assigned_to_id != old_assigned_to_id and new_assigned_to_id != current_user.id:
-                NotificationService.notify_task_assigned(
-                    task=task,
-                    assigned_by_user=current_user,
-                    send_email=True
-                )
-            
+            send_email_setting = SystemSettings.get('notify_task_assigned', 'true')
+            send_email = send_email_setting == 'true' or send_email_setting == True
+            email_sent = False
+
+            # Notify newly added assignees (for multi-assign) - including self-assignment
+            new_assignees = set([u.id for u in task.assignees]) if getattr(task, 'assignees', None) else set()
+            added = new_assignees - old_assignees
+            if added:
+                project_obj = Project.query.get(task.project_id) if task.project_id else None
+                for uid in added:
+                    try:
+                        NotificationService.notify(
+                            user_id=uid,
+                            title='Nueva tarea asignada',
+                            message=f"Se te ha asignado la tarea '{task.title}'{(' en el proyecto '+project_obj.name) if project_obj else ''}",
+                            notification_type=NotificationService.TASK_ASSIGNED,
+                            related_entity_type='task',
+                            related_entity_id=task.id,
+                            send_email=send_email,
+                            email_context={'task': task, 'project': project_obj, 'assigned_by': current_user}
+                        )
+                        email_sent = True
+                    except Exception:
+                        current_app.logger.exception('Failed to notify new assignee %s for task %s', uid, task.id)
+
+            # Notificar si se asignó a un nuevo cliente (solo si fue provisto en el formulario)
+            if assigned_client_provided and new_assigned_client_id is not None and new_assigned_client_id != old_assigned_client_id and new_assigned_client_id != current_user.id:
+                try:
+                    NotificationService.notify_task_assigned(
+                        task=task,
+                        assigned_by_user=current_user,
+                        send_email=send_email,
+                        notify_client=True
+                    )
+                    email_sent = True
+                except Exception:
+                    current_app.logger.exception('Failed to notify assigned client %s for task %s', new_assigned_client_id, task.id)
+
+            if email_sent and send_email:
+                flash('Se ha enviado una notificación por correo al usuario asignado.', 'info')            
             flash('Tarea actualizada.', 'success')
-            return redirect(url_for('main.project_detail', project_id=project.id))
+            return redirect(url_for('main.task_detail', task_id=task.id))
         except Exception as e:
             db.session.rollback()
+            current_app.logger.exception('Error updating task %s: %s', task.id if task else None, e)
             flash(f'Error al actualizar: {str(e)}', 'danger')
 
     # Provide user list for assignment
-    users = User.query.filter_by(is_internal=True).order_by(User.first_name).all()
+    users = User.query.filter_by(is_internal=True, is_active=True).order_by(User.first_name).all()
     # Candidate predecessors: tasks within the same project (exclude self)
     candidate_predecessors = Task.query.filter(Task.project_id == project.id, Task.id != task.id).order_by(Task.title).all()
-    return render_template('task_edit.html', task=task, project=project, users=users, candidate_predecessors=candidate_predecessors)
+
+    # Role flags for template: limit edit capabilities for Participants and Clients
+    is_pmp_admin = (current_user.is_authenticated and current_user.is_internal and current_user.role and current_user.role.name in ('PMP','Admin'))
+    is_participant = (current_user.is_authenticated and current_user.is_internal and current_user.role and current_user.role.name == 'Participante')
+    is_client = (not current_user.is_internal) and (project.client_id == current_user.id)
+    is_limited_editor = is_participant or is_client
+
+    return render_template('task_edit.html', task=task, project=project, users=users, candidate_predecessors=candidate_predecessors, is_pmp_admin=is_pmp_admin, is_limited_editor=is_limited_editor, allowed_extensions=list(current_app.config.get('ALLOWED_EXTENSIONS', [])))
 
 
 @main_bp.route('/task/<int:task_id>/client_accept', methods=['POST'])
@@ -2179,13 +2942,17 @@ def client_accept_task(task_id):
         flash('No tienes permiso para realizar esta acción.', 'danger')
         return redirect(url_for('main.task_detail', task_id=task.id))
 
+    # Additionally, client can only accept tasks that are explicitly assigned to them
+    if task.assigned_client_id != current_user.id:
+        flash('No tienes permiso para realizar esta acción.', 'danger')
+        return redirect(url_for('main.task_detail', task_id=task.id))
+
     # Prevent completing if predecessors or descendants incomplete
-    incomplete_preds = [p for p in task.predecessors if p.status not in ('DONE', 'COMPLETED')]
-    if incomplete_preds:
+    blockers = task.get_completion_blockers()
+    if blockers['incomplete_predecessors']:
         flash('No se puede completar la tarea mientras existan predecesoras incompletas', 'danger')
         return redirect(url_for('main.task_detail', task_id=task.id))
-    incomplete_desc = [d for d in task.descendants() if d.status not in ('DONE', 'COMPLETED')]
-    if incomplete_desc:
+    if blockers['incomplete_children']:
         flash('No se puede completar la tarea mientras existan subtareas incompletas', 'danger')
         return redirect(url_for('main.task_detail', task_id=task.id))
 
@@ -2297,8 +3064,8 @@ def profile():
     
     # Obtener estadísticas del usuario
     stats = {
-        'tasks_assigned': Task.query.filter_by(assigned_to_id=current_user.id).count(),
-        'tasks_completed': Task.query.filter_by(assigned_to_id=current_user.id, status='DONE').count(),
+        'tasks_assigned': Task.query.filter((Task.assigned_to_id == current_user.id) | (Task.assignees.any(User.id == current_user.id))).count(),
+        'tasks_completed': Task.query.filter_by(assigned_to_id=current_user.id, status='COMPLETED').count(),
         'projects_managed': Project.query.filter_by(manager_id=current_user.id).count() if current_user.is_internal else 0,
         'total_hours': db.session.query(func.sum(TimeEntry.hours)).filter_by(user_id=current_user.id).scalar() or 0
     }
@@ -2370,8 +3137,9 @@ def upload_attachment(task_id):
     task = Task.query.get_or_404(task_id)
     project = task.project
     
-    # Check permissions - internal users or project client
-    can_upload = current_user.is_internal or project.client_id == current_user.id
+    # Check permissions - internal users or a client associated with the project
+    # Note: projects can have multiple clients via project.clients association
+    can_upload = current_user.is_internal or (current_user in project.clients)
     if not can_upload:
         flash('No tienes permiso para subir archivos a esta tarea.', 'danger')
         return redirect(url_for('main.task_detail', task_id=task_id))
@@ -2381,12 +3149,16 @@ def upload_attachment(task_id):
         return redirect(url_for('main.task_detail', task_id=task_id))
     
     file = request.files['file']
+    current_app.logger.info(f"upload_attachment called by user={getattr(current_user, 'id', None)}, filename={file.filename}")
     
     if file.filename == '':
+        print("DEBUG: No filename provided")
         flash('No se seleccionó ningún archivo.', 'warning')
         return redirect(url_for('main.task_detail', task_id=task_id))
     
     if not allowed_file(file.filename):
+        allowed = current_app.config.get('ALLOWED_EXTENSIONS', None)
+        print(f"DEBUG: File not allowed: {file.filename}; ALLOWED_EXTENSIONS={allowed} (type={type(allowed)})")
         flash('Tipo de archivo no permitido.', 'danger')
         return redirect(url_for('main.task_detail', task_id=task_id))
     
@@ -2396,7 +3168,9 @@ def upload_attachment(task_id):
         filepath = os.path.join(task_folder, stored_filename)
         
         # Save the file
+        current_app.logger.info(f"Saving attachment to {filepath}")
         file.save(filepath)
+        current_app.logger.info(f"Saved attachment to {filepath}")
         
         # Get file info
         file_size = os.path.getsize(filepath)
@@ -2413,10 +3187,12 @@ def upload_attachment(task_id):
         )
         db.session.add(attachment)
         db.session.commit()
+        current_app.logger.debug(f"Attachment DB id after commit: {attachment.id}")
         
         flash(f'Archivo "{file.filename}" subido correctamente.', 'success')
     except Exception as e:
         db.session.rollback()
+        current_app.logger.exception(f"Error uploading attachment for task {task_id}: {e}")
         flash(f'Error al subir el archivo: {str(e)}', 'danger')
     
     return redirect(url_for('main.task_detail', task_id=task_id))
@@ -2521,6 +3297,14 @@ def mark_all_notifications_read():
 def global_search():
     """Búsqueda global de proyectos, tareas y usuarios"""
     try:
+        # Determine role and allow search for:
+        # - internal users with role (PMP/Admin/Participante)
+        # - clients (external users) but they will be limited to their projects/tasks
+        user_role = current_user.role.name if (current_user and getattr(current_user, 'role', None)) else None
+        if current_user.is_internal and not user_role:
+            # Internal user without a role is not allowed to search
+            return jsonify({'error': 'No tienes permisos para realizar búsquedas. Contacta al administrador.'}), 403
+
         query = request.args.get('q', '').strip()
         
         if not query or len(query) < 2:
@@ -2536,11 +3320,24 @@ def global_search():
         search_term = f"%{query}%"
         
         # Buscar proyectos
-        if current_user.is_internal:
+        if current_user.is_internal and user_role in ['PMP', 'Admin']:
+            # PMP/Admin ven todos los proyectos
             projects = Project.query.filter(
                 db.or_(
                     Project.name.ilike(search_term),
                     Project.description.ilike(search_term)
+                )
+            ).limit(5).all()
+        elif current_user.is_internal and user_role == 'Participante':
+            # Participante solo ve proyectos donde es miembro o tiene tareas asignadas
+            projects = Project.query.filter(
+                db.or_(
+                    Project.name.ilike(search_term),
+                    Project.description.ilike(search_term)
+                ),
+                db.or_(
+                    Project.members.any(User.id == current_user.id),
+                    Project.tasks.any(Task.assignee_id == current_user.id)
                 )
             ).limit(5).all()
         else:
@@ -2563,11 +3360,24 @@ def global_search():
             })
         
         # Buscar tareas
-        if current_user.is_internal:
+        if current_user.is_internal and user_role in ['PMP', 'Admin']:
+            # PMP/Admin ven todas las tareas
             tasks = Task.query.filter(
                 db.or_(
                     Task.title.ilike(search_term),
                     Task.description.ilike(search_term)
+                )
+            ).limit(8).all()
+        elif current_user.is_internal and user_role == 'Participante':
+            # Participante solo ve tareas que tiene asignadas o donde es miembro del proyecto
+            tasks = Task.query.join(Project).filter(
+                db.or_(
+                    Task.title.ilike(search_term),
+                    Task.description.ilike(search_term)
+                ),
+                db.or_(
+                    Task.assignee_id == current_user.id,
+                    Project.members.any(User.id == current_user.id)
                 )
             ).limit(8).all()
         else:
@@ -2591,8 +3401,8 @@ def global_search():
                 'url': url_for('main.task_detail', task_id=t.id)
             })
         
-        # Buscar usuarios (solo para internos)
-        if current_user.is_internal:
+        # Buscar usuarios (solo para PMP/Admin)
+        if current_user.is_internal and user_role in ['PMP', 'Admin']:
             users = User.query.filter(
                 db.or_(
                     User.email.ilike(search_term),
@@ -2614,8 +3424,6 @@ def global_search():
     except Exception as e:
         current_app.logger.exception(f"Search error: {e}")
         return jsonify({'error': str(e), 'projects': [], 'tasks': [], 'users': [], 'query': ''}), 500
-    
-    return jsonify(results)
 
 
 @main_bp.route('/notifications/recent')
@@ -2681,7 +3489,7 @@ def approve_task(task_id):
     try:
         task.approval_status = 'APPROVED'
         task.approved_by_id = current_user.id
-        task.approved_at = datetime.utcnow()
+        task.approved_at = datetime.now()
         task.approval_notes = notes
         
         # Auditoría de aprobación
@@ -2707,7 +3515,7 @@ def approve_task(task_id):
         NotificationService.notify_task_approved(
             task=task,
             approved_by_user=current_user,
-            send_email=True
+            send_email=SystemSettings.get('notify_task_approved', True)
         )
         
         flash(f'Tarea "{task.title}" aprobada correctamente.', 'success')
@@ -2739,7 +3547,7 @@ def reject_task(task_id):
     try:
         task.approval_status = 'REJECTED'
         task.approved_by_id = current_user.id
-        task.approved_at = datetime.utcnow()
+        task.approved_at = datetime.now()
         task.approval_notes = notes
         
         # Volver a IN_REVIEW para que el equipo revise
@@ -2769,7 +3577,7 @@ def reject_task(task_id):
             task=task,
             rejected_by_user=current_user,
             rejection_reason=notes,
-            send_email=True
+            send_email=SystemSettings.get('notify_task_rejected', True)
         )
         
         flash(f'Tarea "{task.title}" rechazada. El equipo será notificado.', 'info')
@@ -2778,3 +3586,436 @@ def reject_task(task_id):
         flash(f'Error al rechazar: {str(e)}', 'danger')
     
     return redirect(url_for('main.pending_approvals'))
+
+
+# ========== AUDIT LOG ROUTES ==========
+
+def pmp_or_admin_required(f):
+    """Decorator to require PMP or Admin role"""
+    from functools import wraps
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not current_user.is_authenticated:
+            return redirect(url_for('auth.login'))
+        if not current_user.role or current_user.role.name not in ['PMP', 'Admin']:
+            flash('Solo usuarios PMP o Admin pueden acceder a esta sección.', 'danger')
+            return redirect(url_for('main.index'))
+        return f(*args, **kwargs)
+    return decorated
+
+
+@main_bp.route('/audit')
+@login_required
+@pmp_or_admin_required
+def audit_log():
+    """Vista del registro de auditoría - Solo PMP y Admin"""
+    # Limpiar registros antiguos (más de 6 meses)
+    cleanup_old_audit_logs()
+    
+    # Filtros
+    entity_type = request.args.get('entity_type', '')
+    action = request.args.get('action', '')
+    user_id = request.args.get('user_id', type=int)
+    date_from = request.args.get('date_from', '')
+    date_to = request.args.get('date_to', '')
+    page = request.args.get('page', 1, type=int)
+    per_page = 15
+    
+    # Construir query
+    query = AuditLog.query
+    
+    if entity_type:
+        query = query.filter(AuditLog.entity_type == entity_type)
+    if action:
+        query = query.filter(AuditLog.action == action)
+    if user_id:
+        query = query.filter(AuditLog.user_id == user_id)
+    if date_from:
+        try:
+            date_from_dt = datetime.strptime(date_from, '%Y-%m-%d')
+            query = query.filter(AuditLog.created_at >= date_from_dt)
+        except ValueError:
+            pass
+    if date_to:
+        try:
+            date_to_dt = datetime.strptime(date_to, '%Y-%m-%d') + timedelta(days=1)
+            query = query.filter(AuditLog.created_at < date_to_dt)
+        except ValueError:
+            pass
+    
+    # Ordenar y paginar
+    query = query.order_by(AuditLog.created_at.desc())
+    total = query.count()
+    logs = query.offset((page - 1) * per_page).limit(per_page).all()
+    total_pages = (total + per_page - 1) // per_page
+    
+    # Obtener registro más antiguo
+    oldest = AuditLog.query.order_by(AuditLog.created_at.asc()).first()
+    oldest_record = oldest.created_at if oldest else None
+    
+    # Obtener usuarios para filtro
+    users = User.query.filter(User.is_internal == True).order_by(User.first_name).all()
+    
+    filters = {
+        'entity_type': entity_type,
+        'action': action,
+        'user_id': user_id,
+        'date_from': date_from,
+        'date_to': date_to
+    }
+    
+    return render_template('audit_log.html',
+        logs=logs,
+        page=page,
+        per_page=per_page,
+        total=total,
+        total_pages=total_pages,
+        filters=filters,
+        users=users,
+        oldest_record=oldest_record
+    )
+
+
+def cleanup_old_audit_logs():
+    """Elimina registros de auditoría con más de 6 meses de antigüedad"""
+    try:
+        cutoff_date = datetime.now() - timedelta(days=180)  # 6 meses
+        deleted_count = AuditLog.query.filter(AuditLog.created_at < cutoff_date).delete()
+        if deleted_count > 0:
+            db.session.commit()
+            current_app.logger.info(f'Limpieza de auditoría: {deleted_count} registros eliminados')
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f'Error limpiando auditoría: {e}')
+
+
+# ========== ADMIN SETTINGS ROUTES ==========
+
+def admin_required(f):
+    """Decorator to require Admin role only for settings"""
+    from functools import wraps
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not current_user.is_authenticated:
+            return redirect(url_for('auth.login'))
+        if not current_user.role or current_user.role.name != 'Admin':
+            flash('Solo los administradores pueden acceder a esta sección.', 'danger')
+            return redirect(url_for('main.dashboard'))
+        return f(*args, **kwargs)
+    return decorated
+
+
+@main_bp.route('/admin/settings', methods=['GET'])
+@login_required
+@admin_required
+def admin_settings_page():
+    """Admin settings page"""
+    from app.models import SystemSettings, Role
+    
+    # Get all users
+    users = User.query.order_by(User.created_at.desc()).all()
+    
+    # Get all roles
+    roles = Role.query.all()
+    
+    # Get all settings as dict (raw DB values)
+    all_settings = SystemSettings.query.all()
+    settings = {s.key: s.value for s in all_settings}
+    
+    # Ensure sensible defaults: notifications ON by default
+    defaults = {
+        'notify_task_assigned': 'true',
+        'notify_task_completed': 'true',
+        'notify_task_approved': 'true',
+        'notify_task_rejected': 'true',
+        'notify_task_comment': 'true',
+        'notify_due_date_reminder': 'true',
+        'show_notification_center': 'true'
+    }
+    for k, v in defaults.items():
+        settings.setdefault(k, v)
+
+    # Normalize boolean-like options so templates can rely on Python booleans
+    notify_keys = [
+        'notify_task_assigned', 'notify_task_completed', 'notify_task_approved',
+        'notify_task_rejected', 'notify_task_comment', 'notify_due_date_reminder',
+        'show_notification_center', 'enable_push_notifications'
+    ]
+    for k in notify_keys:
+        raw = settings.get(k, defaults.get(k, 'true'))
+        if isinstance(raw, str):
+            settings[k] = raw.lower() not in ('false', '0', 'no')
+        else:
+            settings[k] = bool(raw)
+    
+    # Get system stats
+    stats = {
+        'total_users': User.query.count(),
+        'total_projects': Project.query.count(),
+        'total_tasks': Task.query.count(),
+        'active_users': User.query.filter_by(is_active=True).count()
+    }
+    
+    return render_template('admin_settings.html', 
+                         users=users, 
+                         roles=roles,
+                         settings=settings,
+                         stats=stats)
+
+
+@main_bp.route('/admin/settings', methods=['POST'])
+@login_required
+@admin_required
+def admin_settings():
+    """Handle admin settings form submission"""
+    from app.models import SystemSettings
+    
+    section = request.form.get('section', 'general')
+    
+    # Get all form fields (except section and csrf)
+    fields_to_save = {k: v for k, v in request.form.items() 
+                     if k not in ('section', 'csrf_token')}
+    
+    # Handle checkboxes (they only submit when checked)
+    checkbox_fields = [
+        'smtp_use_tls', 'allow_projects_without_manager', 'require_task_estimation',
+        'block_parent_until_children_complete', 'notify_task_assigned', 'notify_task_completed',
+        'notify_task_approved', 'notify_task_rejected', 'notify_task_comment', 
+        'notify_due_date_reminder', 'show_notification_center',
+        'enable_push_notifications', 'enable_azure_auth', 'enable_local_auth',
+        'allow_public_registration', 'password_require_complexity'
+    ]
+    
+    for cb in checkbox_fields:
+        if cb not in fields_to_save:
+            fields_to_save[cb] = 'false'
+        else:
+            fields_to_save[cb] = 'true'
+    
+    # Handle password field - don't update if empty
+    if 'smtp_password' in fields_to_save and not fields_to_save['smtp_password']:
+        del fields_to_save['smtp_password']
+    
+    # Save each setting; for checkbox fields, save as boolean value_type
+    for key, value in fields_to_save.items():
+        if value is not None and value != '':
+            value_type = 'boolean' if key in checkbox_fields else 'string'
+            SystemSettings.set(
+                key=key,
+                value=str(value),
+                category=section,
+                description=None,
+                value_type=value_type,
+                user_id=current_user.id
+            )
+    
+    db.session.commit()
+    flash('Configuración guardada correctamente.', 'success')
+    return redirect(url_for('main.admin_settings_page') + f'#{section}')
+
+
+@main_bp.route('/admin/settings/user/create', methods=['POST'])
+@login_required
+@admin_required
+def admin_settings_create_user():
+    """Create a new user from settings page"""
+    from werkzeug.security import generate_password_hash
+    from app.models import Role
+    
+    email = request.form.get('email')
+    password = request.form.get('password')
+    first_name = request.form.get('first_name')
+    last_name = request.form.get('last_name')
+    role_id = request.form.get('role_id')
+    is_internal = request.form.get('is_internal') == '1'
+    
+    # Check if email already exists
+    if User.query.filter_by(email=email).first():
+        flash('Ya existe un usuario con ese email.', 'danger')
+        return redirect(url_for('main.admin_settings_page') + '#users')
+    
+    # Create user
+    user = User(
+        email=email,
+        password_hash=generate_password_hash(password),
+        first_name=first_name,
+        last_name=last_name,
+        role_id=int(role_id) if role_id else None,
+        is_internal=is_internal,
+        is_active=True
+    )
+    db.session.add(user)
+    db.session.commit()
+    
+    flash(f'Usuario {email} creado correctamente.', 'success')
+    return redirect(url_for('main.admin_settings_page') + '#users')
+
+
+@main_bp.route('/admin/settings/user/update', methods=['POST'])
+@login_required
+@admin_required  
+def admin_settings_update_user():
+    """Update an existing user from settings page"""
+    from werkzeug.security import generate_password_hash
+    
+    user_id = request.form.get('user_id')
+    user = User.query.get_or_404(user_id)
+    
+    # Azure Entra ID users can only have their role updated
+    is_azure_user = bool(user.azure_oid)
+    
+    if is_azure_user:
+        # Only allow role update for Azure users
+        user.role_id = int(request.form.get('role_id')) if request.form.get('role_id') else user.role_id
+    else:
+        # Local users - all fields can be updated
+        user.email = request.form.get('email', user.email)
+        user.first_name = request.form.get('first_name', user.first_name)
+        user.last_name = request.form.get('last_name', user.last_name)
+        user.role_id = int(request.form.get('role_id')) if request.form.get('role_id') else user.role_id
+        user.is_internal = request.form.get('is_internal') == '1'
+        
+        # Update password only if provided
+        password = request.form.get('password')
+        if password:
+            user.password_hash = generate_password_hash(password)
+    
+    db.session.commit()
+    flash(f'Usuario {user.email} actualizado.', 'success')
+    return redirect(url_for('main.admin_settings_page') + '#users')
+
+
+@main_bp.route('/api/users/<int:user_id>/toggle-status', methods=['POST'])
+@login_required
+@admin_required
+def toggle_user_status(user_id):
+    """Toggle user active status"""
+    user = User.query.get_or_404(user_id)
+    
+    if user.id == current_user.id:
+        return jsonify({'success': False, 'error': 'No puedes desactivar tu propia cuenta'}), 400
+    
+    user.is_active = not user.is_active
+    db.session.commit()
+    
+    return jsonify({'success': True, 'is_active': user.is_active})
+
+
+@main_bp.route('/admin/test-email', methods=['POST'])
+@login_required
+@admin_required
+def admin_test_email():
+    """Test SMTP email configuration"""
+    from app.models import SystemSettings
+    import smtplib
+    from email.mime.text import MIMEText
+
+    try:
+        # Get email settings
+        host = SystemSettings.get('smtp_host', '')
+        port = int(SystemSettings.get('smtp_port', '587'))
+        username = SystemSettings.get('smtp_username', '')
+        password = SystemSettings.get('smtp_password', '')
+        use_tls = SystemSettings.get('smtp_use_tls', 'true') == 'true'
+        from_email = SystemSettings.get('email_from', username)
+        from_name = SystemSettings.get('email_from_name', 'BridgeWork')
+
+        if not host or not username:
+            return jsonify({'success': False, 'error': 'Configura el servidor SMTP primero'}), 400
+
+        # Create test message
+        msg = MIMEText(f'Este es un correo de prueba desde {from_name}.\n\nSi recibes este mensaje, la configuración SMTP es correcta.')
+        msg['Subject'] = f'[{from_name}] Prueba de conexión SMTP'
+        msg['From'] = f'{from_name} <{from_email}>'
+        msg['To'] = current_user.email
+
+        # Connect and send
+        if use_tls and port == 587:
+            server = smtplib.SMTP(host, port)
+            server.starttls()
+        elif port == 465:
+            server = smtplib.SMTP_SSL(host, port)
+        else:
+            server = smtplib.SMTP(host, port)
+
+        if username and password:
+            server.login(username, password)
+
+        server.sendmail(from_email, [current_user.email], msg.as_string())
+        server.quit()
+
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@main_bp.route('/admin/run-due-reminders', methods=['POST'])
+@login_required
+@admin_required
+def admin_run_due_reminders():
+    """Trigger generation of due date reminders manually (admin-only)."""
+    from app.tasks.alerts import generate_alerts
+
+    try:
+        res = generate_alerts()
+        created = res.get('created', [])
+        groups = res.get('groups', {})
+        # Ensure keys are JSON-serializable (strings)
+        simple_groups = {str(k): len(v) for k, v in groups.items()}
+        return jsonify({'success': True, 'created': len(created), 'groups': simple_groups})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@main_bp.route('/admin/enable-all-notifications', methods=['POST'])
+@login_required
+@admin_required
+def admin_enable_all_notifications():
+    """Enable all email notification toggles (admin-only convenience endpoint)."""
+    from app.models import SystemSettings, AuditLog
+
+    keys = [
+        'notify_task_assigned', 'notify_task_completed', 'notify_task_approved',
+        'notify_task_rejected', 'notify_task_comment', 'notify_due_date_reminder',
+        'show_notification_center', 'enable_push_notifications'
+    ]
+    try:
+        for k in keys:
+            SystemSettings.set(k, 'true', category='notifications', value_type='boolean', user_id=current_user.id)
+        # Audit log
+        audit = AuditLog(
+            entity_type='SystemSettings',
+            entity_id=0,
+            action='UPDATE',
+            user_id=current_user.id,
+            changes={'enabled_all_notifications': True}
+        )
+        db.session.add(audit)
+        db.session.commit()
+        return jsonify({'success': True, 'enabled': keys})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@main_bp.route('/admin/send-test-notification', methods=['POST'])
+@login_required
+@admin_required
+def admin_send_test_notification():
+    """Create a test notification for the current admin user and attempt send (admin-only)."""
+    from app.services.notifications import NotificationService
+
+    try:
+        # Create an in-app notification
+        note = NotificationService.create(
+            user_id=current_user.id,
+            title='Prueba de Notificación',
+            message='Este es un mensaje de prueba generado desde la configuración de administrador',
+            notification_type=NotificationService.GENERAL
+        )
+        # Attempt to send email for this notification
+        sent = NotificationService.send_email(user_id=current_user.id, subject=note.title, notification_type=note.notification_type, context={'message': note.message, 'title': note.title})
+        return jsonify({'success': True, 'notification_id': note.id, 'email_sent': bool(sent)})
+    except Exception as e:
+        current_app.logger.exception('Error sending test notification: %s', e)
+        return jsonify({'success': False, 'error': str(e)}), 500

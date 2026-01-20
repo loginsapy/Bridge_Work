@@ -30,7 +30,7 @@
       <p class="mb-0 opacity-75">{{ _('summary') }}</p>
     </div>
     <div class="d-none d-md-flex align-items-center gap-3">
-      <span class="opacity-75"><i class="fa-regular fa-calendar me-2"></i>{{ now.strftime('%A, %d %b %Y') if now else '' }}</span>
+      <span class="opacity-75"><i class="fa-regular fa-calendar me-2"></i>{{ now|fecha_es('completo') if now else '' }}</span>
     </div>
   </div>
 </div>
@@ -144,15 +144,14 @@
                       <div class="d-flex align-items-center justify-content-between">
                         <div class="d-flex align-items-center gap-2">
                           {% if project.clients %}
-                            <div class="monday-avatar sm {{ config.monday_class }}">
-                              {{ (project.clients[0].first_name or project.clients[0].email)[0]|upper }}
-                            </div>
-                            <small class="text-muted">{{ project.clients[0].first_name or project.clients[0].email.split('@')[0] }}</small>
+                            {% set pc = project.clients[0] %}
+                            <div class="client-icon" title="{{ (pc.first_name or pc.email) }} (Cliente Externo)" aria-label="{{ (pc.first_name or pc.email) }} (Cliente Externo)"><i class="fa-solid fa-building"></i></div>
+                            <small class="text-muted">{{ pc.first_name or pc.email.split('@')[0] }}</small>
                           {% endif %}
                         </div>
                         {% if project.end_date %}
                           <small class="text-muted">
-                            <i class="fa-regular fa-calendar me-1"></i>{{ project.end_date.strftime('%d %b') }}
+                            <i class="fa-regular fa-calendar me-1"></i>{{ project.end_date|fecha_es }}
                           </small>
                         {% endif %}
                       </div>
@@ -235,7 +234,11 @@
                     </td>
                     <td class="text-secondary">
                       {% if project.clients %}
-                        {% for client in project.clients %}{{ client.first_name or client.email.split('@')[0] }}{% if not loop.last %}, {% endif %}{% endfor %}
+                        {% for client in project.clients[:3] %}
+                          {% set cname = client.first_name or client.email.split('@')[0] %}
+                          <span class="me-2"><span class="client-icon" title="{{ cname }} (Cliente Externo)" aria-label="{{ cname }} (Cliente Externo)"><i class="fa-solid fa-building"></i></span> {{ cname }}</span>
+                        {% endfor %}
+                        {% if project.clients|length > 3 %}<small class="text-muted">+{{ project.clients|length - 3 }}</small>{% endif %}
                       {% else %}
                         N/A
                       {% endif %}
@@ -249,7 +252,7 @@
                       </div>
                     </td>
                     <td><span class="badge badge-primary">{{ project.status|title }}</span></td>
-                    <td><small class="text-secondary">{{ project.end_date.strftime('%d %b %Y') if project.end_date else 'N/A' }}</small></td>
+                    <td><small class="text-secondary">{{ project.end_date|fecha_es('corto_año') if project.end_date else 'N/A' }}</small></td>
                   </tr>
                 {% endfor %}
               {% else %}
@@ -286,7 +289,7 @@
                   {{ activity.assigned_to.first_name or _('someone') }} {{ _('completed_task') }} "{{ activity.title }}"
                 </p>
                 {% if activity.due_date %}
-                  <small class="text-secondary"><i class="fa-solid fa-clock me-1"></i> {{ activity.due_date.strftime('%d %b %Y') }}</small>
+                  <small class="text-secondary"><i class="fa-solid fa-clock me-1"></i> {{ activity.due_date|fecha_es('corto_año') }}</small>
                 {% endif %}
               </div>
             </div>

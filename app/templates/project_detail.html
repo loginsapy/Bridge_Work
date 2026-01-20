@@ -18,7 +18,7 @@
     {% if current_user.role and current_user.role.name in ['PMP', 'Admin'] %}
       <a href="{{ url_for('main.edit_project', project_id=project.id) }}" class="btn btn-outline-secondary me-2 text-dark"><i class="fa-solid fa-pen me-2"></i>Editar</a>
     {% endif %}
-    {% if current_user.is_internal %}
+    {% if current_user.is_internal and not (current_user.role and current_user.role.name == 'Participante') %}
       <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createTaskModal"><i class="fa-solid fa-plus me-2"></i>Nueva Tarea</button>
     {% endif %}
   </div>
@@ -99,7 +99,9 @@
         <tr>
           <th class="ps-4">Tarea</th>
           <th>Asignado</th>
+          <th>Cliente</th>
           <th>Estado</th>
+          <th>Info</th>
           <th>Vencimiento</th>
           <th class="text-end pe-4">Acciones</th>
         </tr>
@@ -108,25 +110,105 @@
         {% if tasks %}
           {% set status_colors = {'BACKLOG': 'secondary', 'IN_PROGRESS': 'primary', 'IN_REVIEW': 'info', 'COMPLETED': 'success', 'CANCELLED': 'danger'} %}
           {% for task in tasks %}
-          <tr>
+          <tr {% if task.is_blocked() %}class="table-warning"{% endif %}>
             <td class="ps-4">
-              <div class="fw-semibold">{{ task.title }}</div>
-              <small class="text-muted">#{{ task.id }}</small>
+              <div class="d-flex align-items-center">
+                {% if task.parent_task_id %}
+                  <span class="text-muted me-2" style="font-size: 0.8rem;">↳</span>
+                {% endif %}
+                <div>
+                  <div class="fw-semibold">
+                    <span class="badge bg-light text-dark border me-2" style="font-size: 0.7rem; font-family: monospace;">{{ task.wbs_number|default('—') }}</span>
+                    {{ task.title }}
+                  </div>
+                  <small class="text-muted">#{{ task.id }}</small>
+                  {% if task.children|length > 0 %}
+                    <span class="badge bg-light text-dark border ms-1" title="Subtareas">
+                      <i class="fa-solid fa-sitemap"></i> {{ task.children|length }}
+                    </span>
+                  {% endif %}
+                  {% if task.predecessors|length > 0 %}
+                    {% set first_pred = task.predecessors[0] %}
+                    <a href="{{ url_for('main.task_detail', task_id=first_pred.id) }}" class="badge bg-info text-white ms-1" style="text-decoration:none;" onclick="event.stopPropagation();" title="Predecesoras: {% for p in task.predecessors %}{{ p.wbs_number|default('#'+p.id|string) }} {{ p.title }}{% if not loop.last %}, {% endif %}{% endfor %}">
+                      <i class="fa-solid fa-link"></i> {{ task.predecessors|length }}
+                    </a>
+                  {% endif %}
+                </div>
+              </div>
             </td>
             <td>
-              {% if task.assigned_to %}
-                <div class="d-flex align-items-center">
-                  <div class="rounded-circle bg-light text-primary d-flex align-items-center justify-content-center me-2" style="width: 24px; height: 24px; font-size: 10px;">
-                    {{ task.assigned_to.first_name[0] if task.assigned_to.first_name else 'U' }}
+              <div class="d-flex flex-column">
+                {% if task.assignees and task.assignees|length > 0 %}
+                  <div class="d-flex align-items-center">
+                    {% for a in task.assignees[:2] %}
+                      <div class="rounded-circle bg-light text-primary d-flex align-items-center justify-content-center me-2" style="width: 24px; height: 24px; font-size: 10px;">{{ (a.first_name or a.email)[0]|upper }}</div>
+                    {% endfor %}
+                    <small>{{ task.assignees[0].first_name or task.assignees[0].email }}</small>
+                    {% if task.assignees|length > 1 %}<small class="text-muted ms-2">(+{{ task.assignees|length - 1 }} más)</small>{% endif %}
                   </div>
-                  <small>{{ task.assigned_to.first_name }}</small>
+                {% elif task.assigned_to %}
+                  <div class="d-flex align-items-center">
+                    <div class="rounded-circle bg-light text-primary d-flex align-items-center justify-content-center me-2" style="width: 24px; height: 24px; font-size: 10px;">
+                      {{ task.assigned_to.first_name[0] if task.assigned_to.first_name else 'U' }}
+                    </div>
+                    <small>{{ task.assigned_to.first_name }}</small>
+                  </div>
+                {% endif %}
+
+                {% if task.assigned_client %}
+                {% set client_name = (task.assigned_client.first_name or task.assigned_client.email) %}
+                  <div class="d-flex align-items-center mt-1">
+                    <div class="client-icon" title="{{ client_name }} (Cliente Externo)" aria-label="{{ client_name }} (Cliente Externo)"><i class="fa-solid fa-building"></i></div>
+                  </div>
+                {% endif %}
+
+                {% if not (task.assignees and task.assignees|length > 0) and not task.assigned_client and not task.assigned_to %}
+                  <span class="text-muted small">Sin asignar</span>
+                {% endif %}
+              </div>
+            </td>
+
+            <td>
+              {% if task.assigned_client %}
+                {% set client_name = (task.assigned_client.first_name or task.assigned_client.email) %}
+                <div class="d-flex align-items-center">
+                  <div class="client-icon me-2" title="{{ client_name }} (Cliente Externo)" aria-label="{{ client_name }} (Cliente Externo)"><i class="fa-solid fa-building"></i></div>
+                  <small class="text-muted">{{ client_name }}</small>
                 </div>
               {% else %}
-                <span class="text-muted small">Sin asignar</span>
+                <span class="text-muted">—</span>
               {% endif %}
             </td>
             <td><span class="badge bg-{{ status_colors.get(task.status, 'secondary') }}">{{ task.status.replace('_', ' ')|title }}</span></td>
-            <td><small class="text-muted">{{ task.due_date.strftime('%d %b %Y') if task.due_date else '-' }}</small></td>
+            <td>
+              {% set incomplete_preds = task.incomplete_predecessors() %}
+              {% set incomplete_children = task.all_incomplete_children() %}
+              
+              {% if incomplete_preds %}
+                {% set first_incomplete = incomplete_preds[0] %}
+                <a href="{{ url_for('main.task_detail', task_id=first_incomplete.id) }}" class="badge bg-warning text-dark" style="text-decoration:none;" onclick="event.stopPropagation();" title="Predecesoras incompletas: {{ incomplete_preds|map(attribute='title')|join(', ') }}">
+                  <i class="fa-solid fa-lock"></i> {{ incomplete_preds|length }} pred.
+                </a>
+              {% endif %}
+              
+              {% if incomplete_children %}
+                <span class="badge bg-info text-white" title="Subtareas incompletas: {{ incomplete_children|map(attribute='title')|join(', ') }}">
+                  <i class="fa-solid fa-code-branch"></i> {{ incomplete_children|length }} sub.
+                </span>
+              {% endif %}
+              
+              {% if task.predecessors|length > 0 and not incomplete_preds %}
+                {% set first_pred_done = task.predecessors[0] %}
+                <a href="{{ url_for('main.task_detail', task_id=first_pred_done.id) }}" class="badge bg-success" style="text-decoration:none;" onclick="event.stopPropagation();" title="Predecesoras completadas">
+                  <i class="fa-solid fa-check"></i> {{ task.predecessors|length }} dep.
+                </a>
+              {% endif %}
+              
+              {% if not incomplete_preds and not incomplete_children and task.predecessors|length == 0 and task.children|length == 0 %}
+                <span class="text-muted small">—</span>
+              {% endif %}
+            </td>
+            <td><small class="text-muted">{{ task.due_date|fecha_es('corto_año') if task.due_date else '-' }}</small></td>
             <td class="text-end pe-4">
               {% if current_user.is_internal %}
                 <a href="{{ url_for('main.edit_task', task_id=task.id) }}" class="btn btn-sm btn-outline-secondary" title="Editar"><i class="fa-solid fa-pen"></i></a>
@@ -136,7 +218,7 @@
           {% endfor %}
         {% else %}
           <tr>
-            <td colspan="5" class="text-center py-5 text-muted">Este proyecto no tiene tareas aún.</td>
+            <td colspan="7" class="text-center py-5 text-muted">Este proyecto no tiene tareas aún.</td>
           </tr>
         {% endif %}
       </tbody>
@@ -165,7 +247,11 @@
               </div>
               <div class="text-end">
                 {% if task.assigned_to %}
-                  <small class="text-muted">{{ task.assigned_to.first_name or task.assigned_to.email }}</small>
+                  <small class="text-muted d-block">{{ task.assigned_to.first_name or task.assigned_to.email }}</small>
+                {% endif %}
+                {% if task.assigned_client %}
+                  {% set client_name = (task.assigned_client.first_name or task.assigned_client.email) %}
+                  <small class="text-muted d-block"><span class="client-icon me-1" title="{{ client_name }} (Cliente Externo)" aria-label="{{ client_name }} (Cliente Externo)"><i class="fa-solid fa-building"></i></span> {{ client_name }}</small>
                 {% endif %}
               </div>
             </div>
@@ -179,7 +265,7 @@
 </div>
 
 <!-- Modal Nueva Tarea -->
-{% if current_user.is_internal %}
+{% if current_user.is_internal and not (current_user.role and current_user.role.name == 'Participante') %}
 <div class="modal fade" id="createTaskModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog">
     <div class="modal-content">
@@ -203,14 +289,23 @@
           
           <div class="row">
             <div class="col-md-6 mb-3">
-              <label class="form-label">Asignar a</label>
-              <select class="form-select" name="assigned_to_id">
+              <label class="form-label">Asignar a (Cliente)</label>
+              <select class="form-select" name="assigned_client_id">
                 <option value="">-- Sin asignar --</option>
+                {% for c in project.clients %}
+                  <option value="{{ c.id }}">{{ c.first_name or c.email }} {{ c.last_name or '' }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-md-12 mb-3">
+              <label class="form-label">Asignados (Internos) — Múltiples</label>
+              <select class="form-select" name="assignees" multiple size="4">
                 {% for u in assignees %}
                   <option value="{{ u.id }}">{{ u.first_name or u.email }}</option>
                 {% endfor %}
               </select>
-            </div>
+              <div class="form-text">Mantén Ctrl/Cmd para seleccionar múltiples usuarios</div>
+            </div> 
             <div class="col-md-6 mb-3">
               <label class="form-label">Prioridad</label>
               <select class="form-select" name="priority">
@@ -222,7 +317,11 @@
             </div>
             <div class="col-md-6 mb-3">
               <label class="form-label">Vencimiento</label>
+              {% if current_user.is_authenticated and current_user.is_internal and current_user.role and current_user.role.name in ('PMP','Admin') %}
               <input type="datetime-local" class="form-control" name="due_date">
+              {% else %}
+              <input type="datetime-local" class="form-control" name="due_date" disabled title="Solo PMP/Admin puede editar fechas">
+              {% endif %}
             </div>
           </div>
           
@@ -230,10 +329,43 @@
             <label class="form-label">Horas Estimadas</label>
             <input type="number" class="form-control" name="estimated_hours" step="0.5" placeholder="Ej. 8">
           </div>
+
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Tarea Padre</label>
+              <select class="form-select" name="parent_task_id">
+                <option value="">-- Sin tarea padre --</option>
+                {% for t in candidate_predecessors %}
+                  <option value="{{ t.id }}">{{ t.title }} (#{{ t.id }})</option>
+                {% endfor %}
+              </select>
+              <small class="text-muted">Crear como subtarea de otra tarea (jerarquía).</small>
+            </div>
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Predecesoras</label>
+              <select class="form-select" name="predecessor_ids" multiple size="4">
+                {% for t in candidate_predecessors %}
+                  <option value="{{ t.id }}">{{ t.title }} (#{{ t.id }})</option>
+                {% endfor %}
+              </select>
+              <small class="text-muted">Tareas que deben completarse antes (dependencias).</small>
+            </div>
+          </div>
+
+          <div class="mb-3 form-check">
+            <input type="checkbox" class="form-check-input" name="is_internal_only" id="is_internal_only">
+            <label class="form-check-label" for="is_internal_only">
+              <i class="fa-solid fa-lock me-1"></i>Solo Interno
+            </label>
+            <small class="d-block text-muted mt-1">Si está marcada, esta tarea solo será visible para usuarios PMP y Admin. Los clientes no podrán verla.</small>
+          </div>
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-          <button type="submit" class="btn btn-primary">Crear Tarea</button>
+          <button type="submit" class="btn btn-primary" id="btnCreateTask">
+            <span class="spinner-border spinner-border-sm d-none me-1" role="status" aria-hidden="true" id="createTaskSpinner"></span>
+            <span id="createTaskText">Crear Tarea</span>
+          </button>
         </div>
       </form>
     </div>
@@ -268,6 +400,16 @@ function kanbanDrop(evt, status){
     else r.json().then(j=>alert(j.error || 'Error'))
   })
 }
+
+// Show loading state when creating task
+document.querySelector('#createTaskModal form')?.addEventListener('submit', function(e) {
+  const btn = document.getElementById('btnCreateTask');
+  const spinner = document.getElementById('createTaskSpinner');
+  const text = document.getElementById('createTaskText');
+  btn.disabled = true;
+  spinner.classList.remove('d-none');
+  text.textContent = 'Creando y notificando...';
+});
 </script>
 {% endblock %}
 {% endblock %}

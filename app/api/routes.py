@@ -1,7 +1,7 @@
 from flask import jsonify, request, abort
 from . import api_bp
 from .. import db
-from ..models import Project, Task, TimeEntry
+from ..models import Project, Task, TimeEntry, User
 from sqlalchemy.exc import SQLAlchemyError
 from datetime import date, datetime
 from marshmallow import ValidationError
@@ -34,9 +34,12 @@ def task_to_dict(t: Task):
         "title": t.title,
         "description": t.description,
         "assigned_to_id": t.assigned_to_id,
+        "assignees": [u.id for u in (t.assignees or [])],
+        "assignees_info": [{"id": u.id, "name": (u.first_name or u.email.split('@')[0])} for u in (t.assignees or [])],
         "assigned_client_id": t.assigned_client_id,
         "status": t.status,
         "priority": t.priority,
+        "start_date": t.start_date.isoformat() if t.start_date else None,
         "due_date": t.due_date.isoformat() if t.due_date else None,
         "is_external_visible": t.is_external_visible,
         "estimated_hours": float(t.estimated_hours) if t.estimated_hours is not None else None,
@@ -107,6 +110,11 @@ def get_project(project_id):
 @api_bp.route("/projects", methods=["POST"])
 @internal_required
 def create_project():
+    from flask_login import current_user
+    # Prevent participants from creating projects via API
+    if current_user.role and current_user.role.name == 'Participante':
+        return jsonify({"error": "No tienes permiso para crear proyectos."}), 403
+
     data = request.get_json() or {}
     schema = ProjectSchema()
     try:
@@ -187,8 +195,17 @@ def list_tasks():
             q = q.filter(Task.assigned_to_id == aid)
         except ValueError:
             return jsonify({"error": "invalid assigned_to_id"}), 400
+    if 'assignee_id' in request.args:
+        try:
+            aid = int(request.args['assignee_id'])
+            q = q.filter((Task.assigned_to_id == aid) | (Task.assignees.any(User.id == aid)))
+        except ValueError:
+            return jsonify({"error": "invalid assignee_id"}), 400
     if 'status' in request.args:
-        q = q.filter(Task.status == request.args['status'])
+        status = request.args['status']
+        if status == 'DONE':
+            status = 'COMPLETED'
+        q = q.filter(Task.status == status)
 
     # Visibility filter: unless user is internal, return only externally visible tasks
     from flask import session as _session
@@ -251,12 +268,24 @@ def get_task(task_id):
 @api_bp.route("/tasks", methods=["POST"])
 @internal_required
 def create_task():
+    from flask_login import current_user
+    # Prevent participants from creating tasks via API
+    if current_user.role and current_user.role.name == 'Participante':
+        return jsonify({"error": "No tienes permiso para crear tareas."}), 403
+
     data = request.get_json() or {}
     schema = TaskSchema()
     try:
         validated = schema.load(data)
     except ValidationError as e:
         return jsonify({"errors": e.messages}), 400
+
+    from flask_login import current_user
+
+    # Prevent non-PMP/Admin users from setting dates
+    if (validated.get('start_date') or validated.get('due_date')):
+        if not (getattr(current_user, 'is_authenticated', False) and current_user.is_internal and getattr(current_user, 'role', None) and current_user.role.name in ('PMP', 'Admin')):
+            return jsonify({'error': 'No tienes permiso para establecer fechas'}), 403
 
     t = Task(
         project_id=validated.get("project_id"),
@@ -266,13 +295,25 @@ def create_task():
         assigned_to_id=validated.get("assigned_to_id"),
         status=validated.get("status", "BACKLOG"),
         priority=validated.get("priority", "MEDIUM"),
+        start_date=validated.get("start_date"),
         due_date=validated.get("due_date"),
         is_external_visible=validated.get("is_external_visible", False),
         estimated_hours=validated.get("estimated_hours"),
     )
     try:
         db.session.add(t)
+        db.session.flush()  # Get task ID
+        
+        # Assign position at the end of the list
+        max_position = db.session.query(db.func.max(Task.position)).filter(Task.project_id == t.project_id).scalar()
+        t.position = (max_position + 1) if max_position is not None else 0
+        
         db.session.commit()
+        # If API provided multiple assignees, assign them after creation
+        if validated.get('assignees'):
+            users = User.query.filter(User.id.in_(validated.get('assignees'))).all()
+            t.assignees = users
+            db.session.commit()
     except SQLAlchemyError as e:
         db.session.rollback()
         abort(500, description=str(e))
@@ -283,33 +324,109 @@ def create_task():
 def update_task(task_id):
     t = Task.query.get_or_404(task_id)
     data = request.get_json() or {}
-    # Validate status transition wrt predecessors
-    if 'status' in data and data['status'] in ('DONE', 'COMPLETED'):
-        incomplete = [p for p in t.predecessors if p.status not in ('DONE', 'COMPLETED')]
-        if incomplete:
+    
+    # Role-based restrictions: participants and clients may only change 'status' via API
+    from flask_login import current_user
+    is_pmp_admin = (getattr(current_user, 'is_authenticated', False) and getattr(current_user, 'is_internal', False) and getattr(current_user, 'role', None) and current_user.role.name in ('PMP','Admin'))
+    is_participant = (getattr(current_user, 'is_authenticated', False) and getattr(current_user, 'is_internal', False) and getattr(current_user, 'role', None) and current_user.role.name == 'Participante')
+    is_client = (not getattr(current_user, 'is_internal', True)) and (t.project and t.project.client_id == getattr(current_user, 'id', None))
+
+    if is_participant or is_client:
+        allowed_keys = {'status'}
+        extra = set([k for k in data.keys() if k not in allowed_keys])
+        if extra:
+            return jsonify({'error': 'No tienes permiso para modificar campos además de status'}), 403
+
+    # Validate status transition using can_advance_status (normalize legacy values)
+    if 'status' in data:
+        from app.models import Task as TaskModel
+        status_val = TaskModel.normalize_status(data['status'])
+        can_advance, error_msg, blockers = t.can_advance_status(status_val)
+        if not can_advance:
             return jsonify({
-                'error': 'Cannot complete task while predecessors are incomplete',
-                'incomplete_predecessors': [{'id': p.id, 'title': p.title} for p in incomplete]
-            }), 400
-        # Also prevent completing if any descendant (successor chain) is incomplete
-        incomplete_desc = [d for d in t.descendants() if d.status not in ('DONE', 'COMPLETED')]
-        if incomplete_desc:
-            return jsonify({
-                'error': 'Cannot complete task while descendants are incomplete',
-                'incomplete_descendants': [{'id': d.id, 'title': d.title} for d in incomplete_desc]
+                'error': error_msg,
+                **(blockers or {})
             }), 400
 
-    for field in ["project_id", "parent_task_id", "title", "description", "assigned_to_id", "assigned_client_id", "status", "priority", "due_date", "is_external_visible", "estimated_hours"]:
+    # Capture old assignment values to detect changes
+    old_assigned_to = t.assigned_to_id
+    old_assigned_client = t.assigned_client_id
+    old_assignees = set([u.id for u in t.assignees]) if getattr(t, 'assignees', None) else set()
+
+    for field in ["project_id", "parent_task_id", "title", "description", "assigned_to_id", "assigned_client_id", "status", "priority", "start_date", "due_date", "is_external_visible", "estimated_hours"]:
         if field in data:
-            if field == "due_date":
+            if field in ["start_date", "due_date"]:
+                # Only PMP/Admin users may modify date fields
+                from flask_login import current_user
+                if not (getattr(current_user, 'is_authenticated', False) and current_user.is_internal and getattr(current_user, 'role', None) and current_user.role.name in ('PMP', 'Admin')):
+                    return jsonify({'error': 'No tienes permiso para modificar fechas'}), 403
                 setattr(t, field, parse_datetime(data[field]))
             else:
-                setattr(t, field, data[field])
+                if field == 'status':
+                    # Normalize and set canonical status
+                    t.set_status(data[field])
+                else:
+                    setattr(t, field, data[field])
+
+    # Handle 'assignees' (list of user ids) explicitly
+    if 'assignees' in data:
+        try:
+            new_ids = set([int(x) for x in (data.get('assignees') or [])])
+        except Exception:
+            return jsonify({'error': 'assignees must be a list of user ids'}), 400
+        users = User.query.filter(User.id.in_(list(new_ids))).all()
+        t.assignees = users
+
     try:
         db.session.commit()
     except SQLAlchemyError as e:
         db.session.rollback()
         abort(500, description=str(e))
+
+    # After commit: notify on assignment changes (for API updates)
+    try:
+        from flask_login import current_user
+        from app.services.notifications import NotificationService
+        from app.models import SystemSettings
+
+        send_email_setting = SystemSettings.get('notify_task_assigned', 'true')
+        send_email = send_email_setting == 'true' or send_email_setting == True
+
+        # assigned_to change
+        new_assigned_to = t.assigned_to_id
+        if 'assigned_to_id' in data and new_assigned_to and new_assigned_to != old_assigned_to:
+            NotificationService.notify_task_assigned(task=t, assigned_by_user=current_user if getattr(current_user, 'is_authenticated', False) else None, send_email=send_email, notify_client=False)
+
+        # assigned_client change
+        new_assigned_client = t.assigned_client_id
+        if 'assigned_client_id' in data and new_assigned_client and new_assigned_client != old_assigned_client:
+            NotificationService.notify_task_assigned(task=t, assigned_by_user=current_user if getattr(current_user, 'is_authenticated', False) else None, send_email=send_email, notify_client=True)
+
+        # assignees change: notify newly added assigned users
+        new_assignees = set([u.id for u in t.assignees]) if getattr(t, 'assignees', None) else set()
+        added = new_assignees - old_assignees
+        if added:
+            # Build email_context
+            project = Project.query.get(t.project_id) if t.project_id else None
+            for uid in added:
+                try:
+                    NotificationService.notify(
+                        user_id=uid,
+                        title='Nueva tarea asignada',
+                        message=f"Se te ha asignado la tarea '{t.title}'{(' en el proyecto '+project.name) if project else ''}",
+                        notification_type=NotificationService.TASK_ASSIGNED,
+                        related_entity_type='task',
+                        related_entity_id=t.id,
+                        send_email=send_email,
+                        email_context={'task': t, 'project': project, 'assigned_by': current_user}
+                    )
+                except Exception:
+                    current_app.logger.exception('Failed to notify new assignee %s for task %s', uid, t.id)
+
+    except Exception as e:
+        # Log and ignore notification errors to keep API update successful
+        current_app.logger.exception('Error while sending assignment notifications: %s', e)
+
     return jsonify(task_to_dict(t))
 
 
@@ -367,6 +484,19 @@ def create_time_entry():
     except ValidationError as e:
         return jsonify({"errors": e.messages}), 400
 
+    # Validar que la tarea no tiene predecesoras incompletas
+    task_id = validated.get("task_id")
+    if task_id:
+        task = Task.query.get(task_id)
+        if task:
+            incomplete_preds = task.incomplete_predecessors()
+            if incomplete_preds:
+                pred_names = ', '.join([p.title for p in incomplete_preds[:3]])
+                return jsonify({
+                    "error": f"No se puede registrar tiempo. La tarea tiene predecesoras incompletas: {pred_names}",
+                    "blocked_by": [{"id": p.id, "title": p.title} for p in incomplete_preds]
+                }), 400
+
     te = TimeEntry(
         task_id=validated.get("task_id"),
         user_id=validated.get("user_id"),
@@ -414,3 +544,36 @@ def delete_time_entry(entry_id):
         db.session.rollback()
         abort(500, description=str(e))
     return jsonify({"deleted": entry_id}), 200
+
+
+# User endpoints (for admin)
+from ..models import User
+
+def user_to_dict(u: User):
+    return {
+        "id": u.id,
+        "email": u.email,
+        "first_name": u.first_name,
+        "last_name": u.last_name,
+        "name": u.name,
+        "role_id": u.role_id,
+        "is_internal": u.is_internal,
+        "is_active": u.is_active,
+        "is_azure": bool(u.azure_oid),
+        "azure_oid": u.azure_oid,
+        "company": u.company,
+        "phone": u.phone,
+        "created_at": u.created_at.isoformat() if u.created_at else None,
+    }
+
+
+@api_bp.route("/users/<int:user_id>", methods=["GET"])
+def get_user(user_id):
+    """Get user details for admin editing"""
+    if not current_user.is_authenticated:
+        abort(401)
+    if not current_user.role or current_user.role.name not in ('Admin', 'PMP'):
+        abort(403)
+    
+    user = User.query.get_or_404(user_id)
+    return jsonify(user_to_dict(user))

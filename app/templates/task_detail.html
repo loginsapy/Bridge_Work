@@ -44,7 +44,7 @@
 .status-BACKLOG { background: #c4c4c4; }
 .status-IN_PROGRESS { background: var(--monday-blue); }
 .status-IN_REVIEW { background: var(--monday-purple); }
-.status-COMPLETED { background: var(--monday-green); }
+.status-COMPLETED, .status-DONE { background: var(--monday-green); }
 
 .priority-pill {
   display: inline-block;
@@ -299,13 +299,42 @@
 {% endblock %}
 
 {% block content %}
+<!-- Blocking Alert -->
+{% set is_blocked = task.is_blocked() %}
+{% set incomplete_preds = task.incomplete_predecessors() if is_blocked else [] %}
+{% if is_blocked %}
+<div class="alert alert-warning d-flex align-items-start mb-4" role="alert">
+  <i class="fa-solid fa-lock fa-lg me-3 mt-1"></i>
+  <div>
+    <h5 class="alert-heading mb-2"><strong>Tarea Bloqueada</strong></h5>
+    <p class="mb-2">Esta tarea no puede avanzar de estado hasta que se completen las siguientes tareas predecesoras:</p>
+    <ul class="mb-0">
+      {% for pred in incomplete_preds %}
+      <li>
+        <a href="{{ url_for('main.task_detail', task_id=pred.id) }}" class="alert-link">{{ pred.title }}</a>
+        <span class="badge bg-secondary ms-1">{{ {'BACKLOG':'Backlog','IN_PROGRESS':'En Progreso','IN_REVIEW':'En Revisión'}.get(pred.status, pred.status) }}</span>
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+</div>
+{% endif %}
+
 <div class="task-header">
   <a href="{{ url_for('main.project_detail', project_id=task.project_id) }}" class="back-link">
     <i class="fa-solid fa-arrow-left"></i>{{ task.project.name }}
   </a>
   <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
     <div>
-      <h1 class="task-title">{{ task.title }}</h1>
+      <h1 class="task-title">
+        {{ task.title }}
+        {% if is_blocked %}
+        <span class="badge bg-warning text-dark ms-2" style="font-size: 0.5em; vertical-align: middle;" title="Bloqueada">
+          <i class="fa-solid fa-lock" aria-hidden="true"></i>
+          <span class="visually-hidden">Bloqueada</span>
+        </span>
+        {% endif %}
+      </h1>
       <div class="mt-3 d-flex gap-2 flex-wrap">
         <span class="status-pill status-{{ task.status }}">
           {{ {'BACKLOG':'Backlog','IN_PROGRESS':'En Progreso','IN_REVIEW':'En Revisión','COMPLETED':'Completado'}.get(task.status, task.status) }}
@@ -336,7 +365,7 @@
         {% if task.status != 'COMPLETED' %}
         <form method="POST" action="{{ url_for('main.client_accept_task', task_id=task.id) }}" style="display:inline;">
           <button type="submit" class="action-btn btn-accept">
-            <i class="fa-solid fa-check me-2"></i>Aceptar y Marcar como Completado
+            <i class="fa-solid fa-check me-2"></i>Marcar como Completado
           </button>
         </form>
         {% endif %}
@@ -400,9 +429,16 @@
       <div class="detail-card-header">
         <span><i class="fa-solid fa-clock me-2"></i>Registros de Tiempo</span>
         {% if can_edit %}
-        <a href="{{ url_for('main.create_time_entry') }}?task_id={{ task.id }}" class="btn btn-sm btn-primary">
-          <i class="fa-solid fa-plus me-1"></i>Registrar
-        </a>
+          {% set incomplete_preds = task.incomplete_predecessors() %}
+          {% if incomplete_preds %}
+          <span class="btn btn-sm btn-secondary disabled" title="No se puede registrar tiempo - hay predecesoras incompletas: {% for p in incomplete_preds[:3] %}{{ p.title }}{% if not loop.last %}, {% endif %}{% endfor %}">
+            <i class="fa-solid fa-lock me-1"></i>Bloqueado
+          </span>
+          {% else %}
+          <a href="{{ url_for('main.create_time_entry') }}?task_id={{ task.id }}" class="btn btn-sm btn-primary">
+            <i class="fa-solid fa-plus me-1"></i>Registrar
+          </a>
+          {% endif %}
         {% endif %}
       </div>
       <table class="time-table">
@@ -429,9 +465,11 @@
               <td class="fw-bold">{{ entry.hours }}h</td>
               <td><small class="text-muted">{{ entry.description or '—' }}</small></td>
               <td class="text-end">
+                {% if (entry.user_id == current_user.id) or (current_user.role and current_user.role.name in ['PMP','Admin']) %}
                 <a href="{{ url_for('main.edit_time_entry', entry_id=entry.id) }}" class="btn btn-sm btn-outline-primary">
                   <i class="fa-solid fa-pen"></i>
                 </a>
+                {% endif %}
               </td>
             </tr>
             {% endfor %}
@@ -513,6 +551,7 @@
       {% endif %}
 
       <!-- Upload Form -->
+      {% if current_user.is_internal or (task.project.client_id and task.project.client_id == current_user.id) or (task.assigned_client_id and task.assigned_client_id == current_user.id) %}
       <form action="{{ url_for('main.upload_attachment', task_id=task.id) }}" method="POST" enctype="multipart/form-data" id="uploadForm">
         <div class="upload-zone" id="uploadZone" onclick="document.getElementById('fileInput').click();">
           <i class="fa-solid fa-cloud-upload-alt d-block"></i>
@@ -520,7 +559,13 @@
           <small class="text-muted mt-2 d-block">Máx 16MB • PDF, imágenes, documentos, hojas de cálculo</small>
           <input type="file" name="file" id="fileInput" style="display:none;" onchange="handleFileSelect(this)">
         </div>
+        <div class="d-flex justify-content-end mt-2">
+          <button type="submit" id="uploadBtn" class="action-btn btn-edit" disabled>Guardar</button>
+        </div>
       </form>
+      {% else %}
+      <div class="text-muted small mt-2">No puedes adjuntar archivos a esta tarea.</div>
+      {% endif %}
     </div>
   </div>
 
@@ -531,12 +576,33 @@
       </div>
       <div class="detail-card-body">
         <div class="detail-item">
-          <div class="detail-label">Asignado a</div>
+          <div class="detail-label">Asignados (Internos)</div>
           <div class="detail-value">
-            {% if task.assigned_to %}
+            {% if task.assignees and task.assignees|length > 0 %}
             <div class="assignee-display">
-              <div class="assignee-avatar">{{ (task.assigned_to.first_name or task.assigned_to.email)[0]|upper }}</div>
-              {{ task.assigned_to.first_name or task.assigned_to.email }}
+              {% for a in task.assignees[:2] %}
+              <div class="d-flex align-items-center me-3">
+                <div class="assignee-avatar">{{ (a.first_name or a.email)[0]|upper }}</div>
+                <div class="ms-2">{{ a.first_name or a.email }}</div>
+              </div>
+              {% endfor %}
+              {% if task.assignees|length > 2 %}
+                <small class="text-muted">+{{ task.assignees|length - 2 }} más</small>
+              {% endif %}
+            </div>
+            {% else %}
+              <span class="text-muted">Sin asignar</span>
+            {% endif %}
+          </div>
+        </div>
+
+        <div class="detail-item">
+          <div class="detail-label">Asignado (Cliente)</div>
+          <div class="detail-value">
+            {% if task.assigned_client %}
+            <div class="assignee-display">
+              <div class="assignee-avatar" style="background:#e6f9ec;color:#138a3a;">{{ (task.assigned_client.first_name or task.assigned_client.email)[0]|upper }}</div>
+              {{ task.assigned_client.first_name or task.assigned_client.email }}
             </div>
             {% else %}
             <span class="text-muted">Sin asignar</span>
@@ -545,9 +611,16 @@
         </div>
 
         <div class="detail-item">
+          <div class="detail-label">Fecha de Inicio</div>
+          <div class="detail-value">
+            {% if task.start_date %}{{ task.start_date|fecha_es('corto_año') }}{% else %}<span class="text-muted">—</span>{% endif %}
+          </div>
+        </div>
+
+        <div class="detail-item">
           <div class="detail-label">Fecha de Vencimiento</div>
           <div class="detail-value">
-            {% if task.due_date %}{{ task.due_date.strftime('%d %b %Y') }}{% else %}<span class="text-muted">—</span>{% endif %}
+            {% if task.due_date %}{{ task.due_date|fecha_es('corto_año') }}{% else %}<span class="text-muted">—</span>{% endif %}
           </div>
         </div>
 
@@ -595,19 +668,30 @@ document.addEventListener('DOMContentLoaded', function(){
 });
 
 // File upload handling
+const allowAutoSubmit = {{ 'true' if current_user.is_internal else 'false' }};
 function handleFileSelect(input) {
   if (input.files && input.files[0]) {
     const file = input.files[0];
     const maxSize = 16 * 1024 * 1024; // 16MB
     
+    const uploadBtn = document.getElementById('uploadBtn');
     if (file.size > maxSize) {
       alert('El archivo es demasiado grande. Máximo 16MB.');
       input.value = '';
+      if (uploadBtn) { uploadBtn.disabled = true; }
       return;
     }
     
-    // Auto submit the form
-    document.getElementById('uploadForm').submit();
+    // Enable the visible save/upload button for clients
+    if (uploadBtn) {
+      uploadBtn.disabled = false;
+      uploadBtn.style.display = 'inline-flex';
+    }
+    
+    // Auto submit only for internal users
+    if (allowAutoSubmit) {
+      document.getElementById('uploadForm').submit();
+    }
   }
 }
 

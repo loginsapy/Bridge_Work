@@ -43,6 +43,11 @@ class DevConfig(Config):
             'schedule': 600.0,  # seconds (10 minutes)
             'args': (),
         },
+        'weekly-cleanup-audit-logs': {
+            'task': 'alerts.cleanup_audit_logs',
+            'schedule': 604800.0,  # seconds (weekly - 7 days)
+            'args': (),
+        },
     }
 
     # Notification provider config (optional)

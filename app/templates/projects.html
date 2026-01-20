@@ -426,7 +426,7 @@ tr:hover .actions-cell {
         <i class="fa-solid fa-grid-2 me-1"></i> {{ _('cards') if sys_language == 'en' else 'Tarjetas' }}
       </button>
     </div>
-    {% if current_user.is_internal %}
+    {% if current_user_role_name in ['PMP', 'Admin'] %}
     <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createProjectModal">
       <i class="fa-solid fa-plus me-1"></i>{{ _('new_project') }}
     </button>
@@ -444,6 +444,7 @@ tr:hover .actions-cell {
           <th style="min-width: 250px;">{{ _('project') }}</th>
           <th style="min-width: 120px;">{{ _('status') }}</th>
           <th style="min-width: 150px;">{{ _('progress') }}</th>
+          <th style="min-width: 120px;">Responsable</th>
           <th style="min-width: 100px;">{{ _('client') }}</th>
           <th style="min-width: 120px;">{{ _('hours') }}</th>
           <th style="min-width: 140px;">{{ _('due_date') }}</th>
@@ -481,15 +482,26 @@ tr:hover .actions-cell {
             </div>
           </td>
           <td>
+            {% if project.manager %}
+            <div class="d-flex align-items-center gap-2">
+              <div class="client-avatar" style="background: var(--brand-primary); color: white;" title="{{ project.manager.first_name or project.manager.email }}">
+                {{ (project.manager.first_name or project.manager.email)[0]|upper }}
+              </div>
+              <span class="small">{{ project.manager.first_name or project.manager.email.split('@')[0] }}</span>
+            </div>
+            {% else %}
+            <span class="text-muted">—</span>
+            {% endif %}
+          </td>
+          <td>
             {% if project.clients %}
             <div class="client-avatars">
               {% for client in project.clients[:3] %}
-              <div class="client-avatar" title="{{ client.first_name or client.email }}">
-                {{ (client.first_name or client.email)[0]|upper }}
-              </div>
+                {% set cname = (client.first_name or client.email.split('@')[0]) %}
+                <div class="client-icon" title="{{ cname }} (Cliente Externo)" aria-label="{{ cname }} (Cliente Externo)"><i class="fa-solid fa-building"></i></div>
               {% endfor %}
               {% if project.clients|length > 3 %}
-              <div class="client-avatar" style="background: var(--monday-grey);">+{{ project.clients|length - 3 }}</div>
+                <div class="client-icon" style="background: var(--monday-grey); color:#374151;">+{{ project.clients|length - 3 }}</div>
               {% endif %}
             </div>
             {% else %}
@@ -505,7 +517,7 @@ tr:hover .actions-cell {
           <td>
             <div class="date-cell {% if project.end_date and project.end_date < now.date() %}overdue{% endif %}">
               {% if project.end_date %}
-              <i class="fa-regular fa-calendar me-1"></i>{{ project.end_date.strftime('%d %b %Y') }}
+              <i class="fa-regular fa-calendar me-1"></i>{{ project.end_date|fecha_es('corto_año') }}
               {% else %}
               —
               {% endif %}
@@ -513,13 +525,17 @@ tr:hover .actions-cell {
           </td>
           <td>
             <div class="actions-cell">
-              <a href="{{ url_for('main.project_detail', project_id=project.id) }}" class="action-btn" title="View">
+              <a href="{{ url_for('main.project_detail', project_id=project.id) }}" class="action-btn" title="Ver">
                 <i class="fa-solid fa-eye"></i>
               </a>
-              {% if (current_user_role_name|default('')|lower in ['pmp','admin']) or (current_user.role and (current_user.role.name|lower in ['pmp','admin'])) %}
-              <a href="{{ url_for('main.edit_project', project_id=project.id) }}" class="action-btn" title="Edit">
+              {% if current_user_role_name in ['PMP','Admin'] %}
+              <a href="{{ url_for('main.edit_project', project_id=project.id) }}" class="action-btn" title="Editar">
                 <i class="fa-solid fa-pen"></i>
               </a>
+              <button type="button" class="action-btn text-danger" title="Eliminar" 
+                      onclick="confirmDeleteProject({{ project.id }}, '{{ project.name|e }}')">
+                <i class="fa-solid fa-trash"></i>
+              </button>
               {% endif %}
             </div>
           </td>
@@ -533,7 +549,7 @@ tr:hover .actions-cell {
     <i class="fa-regular fa-folder-open"></i>
     <h4>{{ _('no_projects') }}</h4>
     <p>{{ _('create_first_project') }}</p>
-    {% if (current_user_role_name|default('')|lower in ['pmp','admin']) or (current_user.role and (current_user.role.name|lower in ['pmp','admin'])) %}
+    {% if current_user_role_name in ['PMP','Admin'] %}
     <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createProjectModal">
       <i class="fa-solid fa-plus me-2"></i>{{ _('create_project') }}
     </button>
@@ -568,17 +584,25 @@ tr:hover .actions-cell {
         </div>
         <div class="project-stat">
           <i class="fa-regular fa-calendar"></i>
-          {{ project.end_date.strftime('%d %b') if project.end_date else _('no_end_date') }}
+          {{ project.end_date|fecha_es if project.end_date else _('no_end_date') }}
         </div>
       </div>
     </div>
     <div class="project-card-footer">
+      {% if project.manager %}
+      <div class="d-flex align-items-center gap-1 me-auto" title="Responsable: {{ project.manager.first_name or project.manager.email }}">
+        <div class="client-avatar" style="background: var(--brand-primary); color: white; width: 24px; height: 24px; font-size: 11px;">
+          {{ (project.manager.first_name or project.manager.email)[0]|upper }}
+        </div>
+        <small class="text-muted">{{ project.manager.first_name or project.manager.email.split('@')[0] }}</small>
+      </div>
+      {% endif %}
+      
       {% if project.clients %}
       <div class="client-avatars">
         {% for client in project.clients[:2] %}
-        <div class="client-avatar" title="{{ client.first_name or client.email }}">
-          {{ (client.first_name or client.email)[0]|upper }}
-        </div>
+          {% set cname = client.first_name or client.email.split('@')[0] %}
+          <div class="client-icon" title="{{ cname }} (Cliente Externo)" aria-label="{{ cname }} (Cliente Externo)"><i class="fa-solid fa-building"></i></div>
         {% endfor %}
       </div>
       {% endif %}
@@ -592,14 +616,124 @@ tr:hover .actions-cell {
         {% endfor %}
       </div>
       {% endif %}
-      {% if (current_user_role_name|default('')|lower in ['pmp','admin']) or (current_user.role and (current_user.role.name|lower in ['pmp','admin'])) %}
-      <a href="{{ url_for('main.edit_project', project_id=project.id) }}" class="action-btn">
-        <i class="fa-solid fa-pen"></i>
-      </a>
+      {% if current_user_role_name in ['PMP','Admin'] %}
+      <div class="d-flex gap-1">
+        <a href="{{ url_for('main.edit_project', project_id=project.id) }}" class="action-btn" title="Editar">
+          <i class="fa-solid fa-pen"></i>
+        </a>
+        <button type="button" class="action-btn text-danger" title="Eliminar"
+                onclick="confirmDeleteProject({{ project.id }}, '{{ project.name|e }}')">
+          <i class="fa-solid fa-trash"></i>
+        </button>
+      </div>
       {% endif %}
     </div>
   </div>
   {% endfor %}
+</div>
+{% endif %}
+
+<!-- Create Project Modal -->
+{% if current_user_role_name in ['PMP','Admin'] %}
+<div class="modal fade" id="createProjectModal" tabindex="-1" aria-labelledby="createProjectModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <form method="POST" action="{{ url_for('main.create_project') }}">
+        <div class="modal-header">
+          <h5 class="modal-title" id="createProjectModalLabel">
+            <i class="fa-solid fa-folder-plus me-2 text-primary"></i>{{ _('new_project') if sys_language == 'en' else 'Nuevo Proyecto' }}
+          </h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <div class="row g-3">
+            <div class="col-12">
+              <label class="form-label fw-semibold">{{ _('name') if sys_language == 'en' else 'Nombre' }} <span class="text-danger">*</span></label>
+              <input type="text" name="name" class="form-control" required placeholder="Nombre del proyecto">
+            </div>
+            <div class="col-12">
+              <label class="form-label fw-semibold">{{ _('description') if sys_language == 'en' else 'Descripción' }}</label>
+              <textarea name="description" class="form-control" rows="3" placeholder="Descripción del proyecto"></textarea>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-semibold">{{ _('project_type') if sys_language == 'en' else 'Tipo de Proyecto' }}</label>
+              <select name="project_type" class="form-select">
+                <option value="APP_DEVELOPMENT">Desarrollo de Aplicación</option>
+                <option value="WEB_DEVELOPMENT">Desarrollo Web</option>
+                <option value="MOBILE_APP">Aplicación Móvil</option>
+                <option value="CONSULTING">Consultoría</option>
+                <option value="SUPPORT">Soporte</option>
+                <option value="INFRASTRUCTURE">Infraestructura</option>
+                <option value="DATA_ANALYTICS">Analítica de Datos</option>
+                <option value="OTHER">Otro</option>
+              </select>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-semibold">{{ _('budget_hours') if sys_language == 'en' else 'Horas Presupuestadas' }}</label>
+              <input type="number" name="budget_hours" class="form-control" min="0" step="0.5" placeholder="Ej: 100">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-semibold">{{ _('start_date') if sys_language == 'en' else 'Fecha Inicio' }}</label>
+              <input type="date" name="start_date" class="form-control">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-semibold">{{ _('end_date') if sys_language == 'en' else 'Fecha Fin' }}</label>
+              <input type="date" name="end_date" class="form-control">
+            </div>
+            <div class="col-12">
+              <label class="form-label fw-semibold">
+                <i class="fa-solid fa-user-tie me-1"></i>{{ _('clients') if sys_language == 'en' else 'Clientes Asignados' }}
+              </label>
+              <select name="client_ids" class="form-select" multiple size="4">
+                {% for client in available_clients %}
+                <option value="{{ client.id }}">
+                  {{ client.first_name or client.email }} {{ client.last_name or '' }}
+                  {% if client.company %} ({{ client.company }}){% endif %}
+                </option>
+                {% endfor %}
+              </select>
+              <small class="text-muted">Mantén presionado Ctrl/Cmd para seleccionar múltiples clientes</small>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn btn-primary">
+            <i class="fa-solid fa-save me-1"></i>{{ _('create') if sys_language == 'en' else 'Crear Proyecto' }}
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Delete Confirmation Modal -->
+<div class="modal fade" id="deleteProjectModal" tabindex="-1" aria-labelledby="deleteProjectModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header bg-danger text-white">
+        <h5 class="modal-title" id="deleteProjectModalLabel">
+          <i class="fa-solid fa-triangle-exclamation me-2"></i>Confirmar Eliminación
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <p>¿Estás seguro que deseas eliminar el proyecto <strong id="deleteProjectName"></strong>?</p>
+        <div class="alert alert-warning">
+          <i class="fa-solid fa-exclamation-circle me-2"></i>
+          <strong>Advertencia:</strong> Esta acción eliminará también todas las tareas y registros de tiempo asociados al proyecto. Esta acción no se puede deshacer.
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancelar</button>
+        <form id="deleteProjectForm" method="POST" style="display: inline;">
+          <button type="submit" class="btn btn-danger">
+            <i class="fa-solid fa-trash me-1"></i>Eliminar Proyecto
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
 </div>
 {% endif %}
 {% endblock %}
@@ -614,6 +748,13 @@ function switchView(view) {
   
   document.getElementById('tableView').classList.toggle('active', view === 'table');
   document.getElementById('gridView').classList.toggle('active', view === 'grid');
+}
+
+function confirmDeleteProject(projectId, projectName) {
+  document.getElementById('deleteProjectName').textContent = projectName;
+  document.getElementById('deleteProjectForm').action = '/project/' + projectId + '/delete';
+  var modal = new bootstrap.Modal(document.getElementById('deleteProjectModal'));
+  modal.show();
 }
 </script>
 {% endblock %}

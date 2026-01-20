@@ -1,0 +1,90 @@
+/* Shared Board Styles - extracted from board.html for reuse in tasks view */
+:root {
+  --board-bg: white;
+  --board-border: #e6e8eb;
+  --board-hover: rgba(0,115,234,0.04);
+}
+
+.monday-board {
+  background: var(--board-bg);
+  border-radius: 8px;
+  border: 1px solid var(--board-border);
+  overflow: hidden;
+}
+
+.monday-board-header {
+  display: grid;
+  grid-template-columns: 40px 60px 2fr 1fr 120px 120px 100px 100px 80px;
+  padding: 0 16px;
+  background: #f5f6f8;
+  border-bottom: 1px solid var(--board-border);
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: #6b7280;
+}
+
+.monday-board-row {
+  display: grid;
+  grid-template-columns: 40px 60px 2fr 1fr 120px 120px 100px 100px 80px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--board-border);
+  align-items: center;
+  transition: background 0.15s;
+  cursor: pointer;
+  grid-auto-rows: minmax(48px, auto); /* prevent excessive single-line height */
+}
+
+.monday-board-row > div { display: flex; align-items: center; gap: 8px; padding: 12px 8px; }
+.monday-board-row .task-title-cell { flex-direction: column; align-items: flex-start; gap: 4px; }
+.monday-board-row .task-title { font-weight: 600; }
+.monday-board-row .task-description { max-width: 480px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.wbs-cell { text-align: center; }
+
+/* Make filter buttons look like board chips */
+.filter-buttons { display:flex; gap:8px; align-items:center; }
+.filter-button { display:inline-flex; align-items:center; gap:6px; padding:8px 10px; border-radius: 16px; border:1px solid var(--board-border); background:white; cursor:pointer; }
+.filter-button.active { background:#0d6efd; color:white; border-color:#0d6efd; }
+
+/* Reduce vertical padding to make rows compact like board */
+.monday-board-row > div { padding-top:10px; padding-bottom:10px; }
+
+/* Ensure WBS badge is left aligned and compact */
+.wbs-badge { display:inline-block; padding:4px 6px; font-size:12px; }
+
+.monday-board-row:hover { background: var(--board-hover); }
+
+.task-checkbox { width:18px; height:18px; border:2px solid var(--board-border); border-radius:4px; }
+.task-checkbox.checked { background:#00c875; border-color:#00c875; }
+
+.wbs-badge { font-family: monospace; font-size:12px; padding:4px 8px; border-radius:6px; background:white; border:1px solid var(--board-border); }
+
+.task-title { font-weight:600; color:#111827; font-size:14px; }
+.task-description { color:#6b7280; max-width:380px; text-overflow:ellipsis; overflow:hidden; white-space:nowrap; }
+
+.project-badge { display:inline-flex; align-items:center; gap:8px; padding:4px 10px; background:#f5f6f8; border-radius:6px; }
+
+.status-pill { display:inline-block; padding:6px 12px; border-radius:20px; font-weight:600; color:white; }
+.status-pill.BACKLOG { background:#6b7280; }
+.status-pill.TODO { background:#6b7280; }
+.status-pill.IN_PROGRESS { background:#0d6efd; }
+.status-pill.IN_REVIEW { background:#a25ddc; }
+.status-pill.COMPLETED, .status-pill.DONE { background:#00c875; }
+
+.monday-priority { padding:6px 12px; border-radius:6px; font-weight:600; }
+.monday-priority.low { color:#579bfc; background:rgba(87,155,252,0.1); }
+.monday-priority.medium { color:#fdab3d; background:rgba(253,171,61,0.1); }
+.monday-priority.high { color:#e2445c; background:rgba(226,68,92,0.08); }
+.monday-priority.critical { color:white; background:#e2445c; }
+
+.person-avatars { display:inline-flex; gap:6px; align-items:center; }
+.monday-avatar-sm { width:28px; height:28px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; color:white; font-weight:700; }
+
+.filter-button { padding:6px 10px; border-radius:6px; border:1px solid var(--board-border); background:white; cursor:pointer; }
+.filter-button.active { background:#0d6efd; color:white; border-color:#0d6efd; }
+
+@media (max-width: 768px) {
+  .monday-board-header, .monday-board-row { grid-template-columns: 40px 1fr 100px 80px; }
+  .task-description { display:none; }
+}

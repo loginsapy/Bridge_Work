@@ -3,6 +3,7 @@
 {% block title %}{{ _('tasks') }} — {{ sys_app_name }}{% endblock %}
 
 {% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/board-shared.css') }}">
 <style>
 /* Monday.com Tasks Page Styles */
 .tasks-page-header {
@@ -88,7 +89,19 @@
 
 .filter-chip:hover {
   border-color: var(--monday-blue);
-  color: var(--monday-blue);
+}
+
+/* ensure selects inherit the chip styling and remain readable */
+.filter-chip select {
+  color: inherit;
+  background: transparent;
+  border: none;
+}
+.filter-chip select:focus {
+  outline: none;
+}
+.filter-chip select option {
+  color: var(--monday-dark);
 }
 
 .filter-chip.active {
@@ -110,52 +123,19 @@
   outline: none;
 }
 
-/* Monday Table Styles */
-.monday-board {
-  background: white;
-  border-radius: 8px;
-  border: 1px solid var(--monday-border);
-  overflow: hidden;
-}
+/* Table styles are provided by `board-shared.css` to ensure consistency between Board and Tasks.
+   The old inline definitions were removed so the shared stylesheet is authoritative. */
 
-.monday-board-header {
-  display: grid;
-  grid-template-columns: 40px 2fr 1fr 120px 120px 100px 100px 80px;
-  padding: 0 16px;
-  background: var(--monday-light-grey);
-  border-bottom: 1px solid var(--monday-border);
-  font-size: 12px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  color: var(--monday-text-secondary);
+/* Ensure the header action button is styled correctly */
+.tasks-page-header .monday-btn-primary {
+  background: var(--monday-blue) !important;
+  color: white !important;
+  border: none !important;
+  padding: 8px 14px !important;
+  box-shadow: 0 6px 20px rgba(13,110,253,0.08);
 }
-
-.monday-board-header > div {
-  padding: 12px 8px;
-}
-
-.monday-board-row {
-  display: grid;
-  grid-template-columns: 40px 2fr 1fr 120px 120px 100px 100px 80px;
-  padding: 0 16px;
-  border-bottom: 1px solid var(--monday-border);
-  align-items: center;
-  transition: background 0.15s;
-  cursor: pointer;
-}
-
-.monday-board-row:hover {
-  background: rgba(0, 115, 234, 0.04);
-}
-
-.monday-board-row:last-child {
-  border-bottom: none;
-}
-
-.monday-board-row > div {
-  padding: 12px 8px;
-}
+.tasks-page-header .monday-btn-primary:hover { background: var(--monday-blue-hover) !important; transform: translateY(-1px); }
+.tasks-page-header .monday-btn-primary:active { transform: translateY(0); }
 
 .task-checkbox {
   width: 18px;
@@ -213,63 +193,22 @@
   border-radius: 50%;
 }
 
-/* Monday Status Cell - Full width colored */
-.status-cell {
-  display: flex;
-  justify-content: center;
-}
+/* Status pills are standardized in `board-shared.css` for consistent Board/Tasks appearance */
+.status-cell { display:flex; justify-content:center; }
+/* Leave detailed color and sizing to shared stylesheet (board-shared.css) */
+.status-pill { min-width: 90px; }
 
-.monday-status {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 6px 12px;
-  border-radius: 4px;
-  font-size: 12px;
-  font-weight: 500;
-  color: white;
-  min-width: 90px;
-  text-align: center;
+/* Filter chips styled like Board */
+.filter-buttons { display:flex; gap:8px; }
+.filter-button {
+  padding: 6px 10px; border-radius: 6px; border:1px solid var(--monday-border); background:white; cursor:pointer; font-size:13px;
 }
+.filter-button.active { background:var(--monday-blue); color:white; border-color:var(--monday-blue); }
+.filter-button i { margin-right:6px; }
 
-.monday-status.backlog { background: #c4c4c4; }
-.monday-status.in-progress { background: var(--monday-blue); }
-.monday-status.in-review { background: var(--monday-purple); }
-.monday-status.completed { background: var(--monday-green); }
-
-/* Monday Priority Cell */
-.priority-cell {
-  display: flex;
-  justify-content: center;
-}
-
-.monday-priority {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 6px 12px;
-  border-radius: 4px;
-  font-size: 12px;
-  font-weight: 500;
-  min-width: 80px;
-}
-
-.monday-priority.low { 
-  background: rgba(87, 155, 252, 0.2); 
-  color: #579bfc;
-}
-.monday-priority.medium { 
-  background: rgba(253, 171, 61, 0.2); 
-  color: #fdab3d;
-}
-.monday-priority.high { 
-  background: rgba(226, 68, 92, 0.2); 
-  color: #e2445c;
-}
-.monday-priority.critical { 
-  background: #e2445c; 
-  color: white;
-}
+/* Priority pill styles are centralized in `board-shared.css` to match Board look */
+.priority-cell { display: flex; justify-content: center; }
+/* Use shared `.monday-priority` rules from board-shared.css for consistent sizing and colors */
 
 /* Date Cell */
 .date-cell {
@@ -424,10 +363,12 @@
     <i class="fa-solid fa-circle-check"></i>
     {{ _('tasks_header') }}
   </h1>
-  <a href="{{ url_for('main.projects') }}" class="monday-btn monday-btn-primary">
+  {% if current_user.is_authenticated and current_user.is_internal and not (current_user.role and current_user.role.name in ['Participante','Cliente']) %}
+  <button type="button" onclick="window.location='{{ url_for('main.projects') }}'" class="monday-btn monday-btn-primary">
     <i class="fa-solid fa-plus"></i>
     {{ _('new_from_project') }}
-  </a>
+  </button>
+  {% endif %}
 </div>
 
 <!-- Stats Bar -->
@@ -461,18 +402,16 @@
     <input type="text" placeholder="{{ _('search') }}..." id="taskSearch">
   </div>
   
-  <form method="GET" class="filter-chips" id="filterForm">
-    <div class="filter-chip {% if status_filter %}active{% endif %}">
-      <i class="fa-solid fa-circle-dot"></i>
-      <select name="status" onchange="this.form.submit()">
-        <option value="">{{ _('all_statuses') }}</option>
-        <option value="BACKLOG" {% if status_filter == 'BACKLOG' %}selected{% endif %}>{{ _('backlog') }}</option>
-        <option value="IN_PROGRESS" {% if status_filter == 'IN_PROGRESS' %}selected{% endif %}>{{ _('in_progress') }}</option>
-        <option value="IN_REVIEW" {% if status_filter == 'IN_REVIEW' %}selected{% endif %}>{{ _('in_review') }}</option>
-        <option value="COMPLETED" {% if status_filter == 'COMPLETED' %}selected{% endif %}>{{ _('completed') }}</option>
-      </select>
+  <form method="GET" id="filterForm">
+    <div class="filter-buttons" role="tablist" aria-label="Filtro por estado">
+      {% set states = ['TODO','BACKLOG','IN_PROGRESS','IN_REVIEW','COMPLETED'] %}
+      <button type="button" class="filter-button {% if not status_filter %}active{% endif %}" data-status="">Todas</button>
+      {% for s in states %}
+      <button type="button" class="filter-button {% if status_filter == s %}active{% endif %}" data-status="{{ s }}">{{ s if s == 'TODO' else _(s.lower()) }}</button>
+      {% endfor %}
     </div>
-    
+    <input type="hidden" name="status" id="statusInput" value="{{ status_filter }}">
+
     <div class="filter-chip {% if priority_filter %}active{% endif %}">
       <i class="fa-solid fa-flag"></i>
       <select name="priority" onchange="this.form.submit()">
@@ -483,7 +422,7 @@
         <option value="LOW" {% if priority_filter == 'LOW' %}selected{% endif %}>{{ _('low') }}</option>
       </select>
     </div>
-    
+
     {% if status_filter or priority_filter %}
     <a href="{{ url_for('main.tasks') }}" class="filter-chip">
       <i class="fa-solid fa-xmark"></i>
@@ -494,16 +433,33 @@
 </div>
 
 <!-- Monday-style Board -->
+{% set total_tasks = tasks|length %}
+{% set completed_tasks = (tasks|selectattr('status','equalto','COMPLETED')|list|length) %}
+{% set percent_complete = (completed_tasks / total_tasks * 100)|round(0) if total_tasks > 0 else 0 %}
+
+<div class="project-board-header">
+  <div class="project-left">
+    <h3 class="project-title">{{ _('tasks') }} <span class="project-badge">{{ total_tasks }} {{ _('tasks_short') if translations.get('tasks_short') else 'tareas' }}</span></h3>
+  </div>
+  <div class="project-right">
+    <div class="project-progress" aria-hidden="false">
+      <div class="progress-bar" role="progressbar" aria-valuenow="{{ percent_complete }}" aria-valuemin="0" aria-valuemax="100" style="width: {{ percent_complete }}%; {% if percent_complete|int > 0 %}min-width:6px;{% endif %}"></div>
+    </div>
+    <div class="project-progress-text">{{ percent_complete }}% completado</div>
+  </div>
+</div>
+
 <div class="monday-board">
   <div class="monday-board-header">
     <div></div>
+    <div style="text-align:center">WBS</div>
     <div>{{ _('task_title') }}</div>
     <div>{{ _('project') }}</div>
     <div style="text-align: center;">{{ _('status') }}</div>
     <div style="text-align: center;">{{ _('priority') }}</div>
     <div>{{ _('expiration') }}</div>
     <div>{{ _('assigned_to') }}</div>
-    <div style="text-align: right;">{{ _('hours') }}</div>
+    <div style="text-align: right; color: var(--monday-text-secondary);">{{ _('hours') }}</div>
   </div>
   
   {% if tasks %}
@@ -511,6 +467,9 @@
     <div class="monday-board-row" onclick="window.location='{{ url_for('main.task_detail', task_id=task.id) }}'">
       <div>
         <div class="task-checkbox {% if task.status == 'COMPLETED' %}checked{% endif %}" onclick="event.stopPropagation(); toggleComplete({{ task.id }}, '{{ task.status }}');"></div>
+      </div>
+      <div class="wbs-cell" style="text-align:center">
+        <span class="wbs-badge">{{ task.wbs_number|default('—') }}</span>
       </div>
       <div class="task-title-cell">
         <span class="task-title">{{ task.title }}</span>
@@ -542,7 +501,16 @@
         {% endif %}
       </div>
       <div class="assignee-cell">
-        {% if task.assigned_to %}
+        {% if task.assignees and task.assignees|length > 0 %}
+          <div class="person-avatars">
+            {% for a in task.assignees[:2] %}
+              <div class="monday-avatar-sm" title="{{ a.first_name or a.email }}" aria-label="{{ a.first_name or a.email }}" style="background: {{ ['#0073ea', '#00c875', '#fdab3d', '#e2445c', '#a25ddc', '#579bfc'][loop.index0 % 6] }};">{{ (a.first_name or a.email)[:2]|upper }}</div>
+            {% endfor %}
+            {% if task.assignees|length > 2 %}
+              <small class="text-muted ms-1">+{{ task.assignees|length - 2 }}</small>
+            {% endif %}
+          </div>
+        {% elif task.assigned_to %}
           {% if current_user.role and current_user.role.name in ['PMP','Admin'] %}
           <a href="{{ url_for('main.user_profile', user_id=task.assigned_to.id) }}" title="{{ task.assigned_to.name }}">
             <div class="monday-avatar-sm" aria-label="{{ task.assigned_to.name }}" style="background: {{ ['#0073ea', '#00c875', '#fdab3d', '#e2445c', '#a25ddc', '#579bfc'][loop.index0 % 6] }};">
@@ -588,7 +556,7 @@
 {{ super() }}
 <script>
 function toggleComplete(taskId, currentStatus) {
-  const newStatus = (currentStatus === 'COMPLETED' || currentStatus === 'DONE') ? 'BACKLOG' : 'COMPLETED';
+  const newStatus = (currentStatus === 'COMPLETED') ? 'BACKLOG' : 'COMPLETED';
   fetch(`/api/tasks/${taskId}`, {
     method: 'PATCH',
     headers: {'Content-Type': 'application/json'},
@@ -601,9 +569,9 @@ function toggleComplete(taskId, currentStatus) {
         showPredecessorModal(taskId, json.incomplete_predecessors);
         return Promise.reject('predecessors_incomplete');
       }
-      if (json && json.incomplete_descendants) {
-        showDescendantModal(taskId, json.incomplete_descendants);
-        return Promise.reject('descendants_incomplete');
+      if (json && json.incomplete_children) {
+        showDescendantModal(taskId, json.incomplete_children);
+        return Promise.reject('children_incomplete');
       }
       throw new Error('Update failed');
     }
@@ -663,15 +631,20 @@ function showDescendantModal(taskId, preds) {
 <script>
 // Search functionality
 document.getElementById('taskSearch').addEventListener('input', function(e) {
-  const searchTerm = e.target.value.toLowerCase();
+  const searchTerm = e.target.value.toLowerCase().trim();
   const rows = document.querySelectorAll('.monday-board-row');
-  
+
   rows.forEach(row => {
     const title = row.querySelector('.task-title')?.textContent.toLowerCase() || '';
     const project = row.querySelector('.project-badge')?.textContent.toLowerCase() || '';
     const desc = row.querySelector('.task-description')?.textContent.toLowerCase() || '';
-    
-    if (title.includes(searchTerm) || project.includes(searchTerm) || desc.includes(searchTerm)) {
+    // include visible text AND title/aria-label attributes for avatars (covers initials + hidden full names)
+    let assignee = row.querySelector('.assignee-cell')?.textContent.toLowerCase() || '';
+    row.querySelectorAll('.assignee-cell [title], .assignee-cell [aria-label]').forEach(el => {
+      assignee += ' ' + ((el.getAttribute('title') || el.getAttribute('aria-label') || '').toLowerCase());
+    });
+
+    if (title.includes(searchTerm) || project.includes(searchTerm) || desc.includes(searchTerm) || assignee.includes(searchTerm)) {
       row.style.display = '';
     } else {
       row.style.display = 'none';
@@ -679,5 +652,21 @@ document.getElementById('taskSearch').addEventListener('input', function(e) {
   });
 });
 </script>
+
+<script>
+// Filter button handlers
+document.querySelectorAll('.filter-button').forEach(btn => {
+  btn.addEventListener('click', function(e) {
+    const s = this.dataset.status || '';
+    document.getElementById('statusInput').value = s;
+    // Update active class
+    document.querySelectorAll('.filter-button').forEach(b => b.classList.remove('active'));
+    this.classList.add('active');
+    // submit form
+    document.getElementById('filterForm').submit();
+  });
+});
+</script>
+
 {% endif %}
 {% endblock %}

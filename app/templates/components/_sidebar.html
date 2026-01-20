@@ -1,98 +1,70 @@
 <div id="sidebar-wrapper">
-  <!-- Logo Section -->
-  <div class="sidebar-brand p-3 border-bottom border-white border-opacity-10">
-    <div class="d-flex align-items-center gap-2">
-      {% if sys_logo_path %}
-        <img src="{{ sys_logo_path }}" alt="{{ sys_app_name }}" style="max-height: 32px;">
-      {% else %}
-        <div class="monday-avatar monday-avatar-blue">
-          <i class="fa-solid fa-bridge"></i>
-        </div>
-      {% endif %}
-      <div class="flex-grow-1 overflow-hidden">
-        <h5 class="text-white mb-0 fw-semibold text-truncate" style="font-size: 15px;">{{ sys_app_name }}</h5>
-        {% if sys_app_subtitle %}
-        <small class="text-white-50 d-block text-truncate" style="font-size: 11px;">{{ sys_app_subtitle }}</small>
-        {% endif %}
-      </div>
-    </div>
-  </div>
 
   <!-- Main Navigation -->
-  <div class="list-group list-group-flush py-2">
-    <a href="/" class="list-group-item list-group-item-action {{ 'active' if request.path == '/' }}">
+  <div class="sidebar-nav">
+    <a href="/" class="sidebar-link {{ 'active' if request.path == '/' }}">
       <i class="fa-solid fa-house"></i>
       <span>{{ _('dashboard') }}</span>
     </a>
-    <a href="/projects" class="list-group-item list-group-item-action {{ 'active' if request.path.startswith('/project') }}">
+    <a href="/projects" class="sidebar-link {{ 'active' if request.path.startswith('/project') }}">
       <i class="fa-solid fa-table-cells-large"></i>
       <span>{{ _('projects') }}</span>
     </a>
-    <a href="/tasks" class="list-group-item list-group-item-action {{ 'active' if request.path.startswith('/task') }}">
+    <a href="/tasks" class="sidebar-link {{ 'active' if request.path.startswith('/task') }}">
       <i class="fa-solid fa-circle-check"></i>
       <span>{{ _('tasks') }}</span>
     </a>
-    <a href="/time" class="list-group-item list-group-item-action {{ 'active' if request.path.startswith('/time') }}">
+    <a href="/time" class="sidebar-link {{ 'active' if request.path.startswith('/time') }}">
       <i class="fa-regular fa-clock"></i>
       <span>{{ _('time_entries') }}</span>
     </a>
     
-    {% if current_user.is_authenticated and current_user.is_internal and current_user.role and current_user.role.name == 'PMP' %}
+    {% if current_user.is_authenticated and current_user.is_internal and current_user.role and current_user.role.name in ('PMP', 'Admin') %}
     <div class="sidebar-divider"></div>
     
-    <a href="/team" class="list-group-item list-group-item-action {{ 'active' if request.path.startswith('/team') }}">
+    <a href="/team" class="sidebar-link {{ 'active' if request.path.startswith('/team') }}">
       <i class="fa-solid fa-user-group"></i>
       <span>{{ _('team') }}</span>
     </a>
-    <a href="/clients" class="list-group-item list-group-item-action {{ 'active' if request.path.startswith('/client') }}">
+    <a href="/clients" class="sidebar-link {{ 'active' if request.path.startswith('/client') }}">
       <i class="fa-solid fa-building"></i>
       <span>{{ _('clients') }}</span>
     </a>
-    <a href="/reports" class="list-group-item list-group-item-action {{ 'active' if request.path.startswith('/report') }}">
+    <a href="/reports" class="sidebar-link {{ 'active' if request.path.startswith('/report') }}">
       <i class="fa-solid fa-chart-simple"></i>
       <span>{{ _('reports') }}</span>
     </a>
+    <a href="/audit" class="sidebar-link {{ 'active' if request.path.startswith('/audit') }}">
+      <i class="fa-solid fa-clipboard-list"></i>
+      <span>Auditoría</span>
+    </a>
     
     <div class="sidebar-divider"></div>
     {% endif %}
     
-    <a href="/notifications" class="list-group-item list-group-item-action {{ 'active' if request.path.startswith('/notification') }}">
+    <a href="/notifications" class="sidebar-link {{ 'active' if request.path.startswith('/notification') }}">
       <i class="fa-regular fa-bell"></i>
       <span>{{ _('notifications') }}</span>
       {% if unread_notifications_count %}
-        <span class="badge bg-danger rounded-pill ms-auto">{{ unread_notifications_count }}</span>
+        <span class="sidebar-badge">{{ unread_notifications_count }}</span>
       {% endif %}
     </a>
     {% if current_user.is_authenticated and not current_user.is_internal %}
-    <a href="/pending-approvals" class="list-group-item list-group-item-action {{ 'active' if request.path.startswith('/pending-approval') }}">
+    <a href="/pending-approvals" class="sidebar-link {{ 'active' if request.path.startswith('/pending-approval') }}">
       <i class="fa-solid fa-clipboard-check"></i>
       <span>{{ _('pending') }}</span>
       {% if pending_approvals_count %}
-        <span class="badge bg-warning text-dark rounded-pill ms-auto">{{ pending_approvals_count }}</span>
+        <span class="sidebar-badge warning">{{ pending_approvals_count }}</span>
       {% endif %}
     </a>
     {% endif %}
     
-    {% if current_user.is_authenticated and current_user.is_internal and current_user.role and current_user.role.name == 'PMP' %}
+    {% if current_user.is_authenticated and current_user.is_internal and current_user.role and current_user.role.name == 'Admin' %}
     <div class="sidebar-divider"></div>
-    <a href="{{ url_for('main.admin_dashboard') }}" class="list-group-item list-group-item-action {{ 'active' if request.path.startswith('/admin') }}">
+    <a href="{{ safe_url_for('main.admin_settings_page') }}" class="sidebar-link {{ 'active' if request.path.startswith('/admin') }}">
       <i class="fa-solid fa-gear"></i>
-      <span>{{ _('admin') }}</span>
-    </a>
-    {% endif %}
-  </div>
-
-  <!-- Bottom Section - User & Settings -->
-  <div class="mt-auto border-top border-white border-opacity-10" style="position: absolute; bottom: 0; width: 100%;">
-    <a href="/profile" class="list-group-item list-group-item-action d-flex align-items-center gap-2 {{ 'active' if request.path.startswith('/profile') }}">
-      <div class="monday-avatar monday-avatar-purple sm">
-        {{ (current_user.first_name or current_user.email)[0]|upper }}
-      </div>
-      <span class="flex-grow-1 text-truncate">{{ current_user.first_name or current_user.email.split('@')[0] }}</span>
-    </a>
-    <a href="/settings" class="list-group-item list-group-item-action {{ 'active' if request.path.startswith('/setting') }}">
-      <i class="fa-solid fa-sliders"></i>
       <span>{{ _('settings') }}</span>
     </a>
+    {% endif %}
   </div>
 </div>

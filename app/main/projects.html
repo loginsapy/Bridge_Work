@@ -5,7 +5,9 @@
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-4">
   <h2 class="fw-bold mb-0 text-primary">Proyectos</h2>
+  {% if current_user.is_authenticated and current_user.is_internal and not (current_user.role and current_user.role.name in ['Participante','Cliente']) %}
   <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createProjectModal"><i class="fa-solid fa-plus me-2"></i>Nuevo Proyecto</button>
+  {% endif %}
 </div>
 
 <div class="row g-4">
@@ -46,7 +48,7 @@
           </div>
         </div>
         <div class="card-footer bg-white border-top-0 py-3">
-          <small class="text-muted"><i class="fa-regular fa-calendar me-1"></i> Inicio: {{ project.start_date.strftime('%d %b %Y') if project.start_date else 'TBD' }}</small>
+          <small class="text-muted"><i class="fa-regular fa-calendar me-1"></i> Inicio: {{ project.start_date|fecha_es('corto_año') if project.start_date else 'TBD' }}</small>
         </div>
       </div>
     </div>

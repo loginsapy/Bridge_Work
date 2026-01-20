@@ -46,6 +46,19 @@
           </div>
 
           <div class="mb-3">
+            <label class="form-label fw-semibold">Responsable del Proyecto</label>
+            <select class="form-select" name="manager_id">
+              <option value="">-- Sin asignar --</option>
+              {% for manager in available_managers %}
+                <option value="{{ manager.id }}" {% if project.manager_id == manager.id %}selected{% endif %}>
+                  {{ manager.first_name }} {{ manager.last_name }} ({{ manager.email }})
+                </option>
+              {% endfor %}
+            </select>
+            <small class="text-muted">Usuario interno responsable de la gestión del proyecto.</small>
+          </div>
+
+          <div class="mb-3">
             <label class="form-label fw-semibold">Clientes Asociados</label>
             {% if available_clients %}
               <div class="border rounded p-3" style="max-height: 200px; overflow-y: auto;">

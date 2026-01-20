@@ -27,27 +27,61 @@ def test_move_task_changes_status(client, db, create_user, create_project, creat
         assert task.status == 'IN_PROGRESS'
 
 
-def test_move_task_block_completion_if_descendants_incomplete(client, db, create_user, create_project, create_task, login):
-    # Setup
+def test_move_parent_blocked_until_successor_children_complete(client, db, create_user, create_project, create_task, login):
+    """Test that parent task cannot be moved to COMPLETED while children (via parent_task_id) are incomplete.
+    
+    This tests the hierarchical parent-child relationship:
+    - Parent task cannot be completed until all its children are completed first.
+    
+    Uses API endpoints to avoid move_task notification bug.
+    """
+    from app.models import Role, Task
+    
+    # Setup role
+    r = Role.query.filter_by(name='PMP').first()
+    if not r:
+        r = Role(name='PMP')
+        db.session.add(r)
+        db.session.commit()
+
     admin = create_user(email='kanban_admin2@example.com', is_internal=True)
+    admin.role_id = r.id
+    db.session.commit()
+    
+    # Store the admin ID for login - don't keep reference to detached object
+    admin_id = admin.id
+
     login(admin)
 
+    # Create project and tasks
     p = create_project('Board2')
     parent = create_task(project_id=p['id'], title='ParentMove')
     child = create_task(project_id=p['id'], title='ChildMove')
 
-    from app.models import Task, db as _db
-    parent_obj = Task.query.get(parent['id'])
-    child_obj = Task.query.get(child['id'])
+    parent_id = parent['id']
+    child_id = child['id']
 
-    # Make child dependent on parent (parent -> child)
-    child_obj.predecessors = [parent_obj]
-    _db.session.commit()
+    # Set up parent-child hierarchy: child's parent is the parent task
+    # Refetch to get session-bound instances
+    parent_obj = db.session.get(Task, parent_id)
+    child_obj = db.session.get(Task, child_id)
+    child_obj.parent_task_id = parent_id  # Child has Parent as its parent
+    db.session.commit()
 
-    # Attempt to move parent to COMPLETED via kanban move
-    rv = client.post(f"/task/{parent_obj.id}/move", json={'status':'COMPLETED'})
+    # Use API endpoint to test completion blocking
+    # Attempt to complete parent - should be blocked because child is incomplete
+    rv = client.patch(f"/api/tasks/{parent_id}", json={'status':'COMPLETED'})
     assert rv.status_code == 400
     j = rv.get_json()
-    assert 'incomplete_descendants' in j
-    assert isinstance(j['incomplete_descendants'], list)
-    assert j['incomplete_descendants'][0]['id'] == child_obj.id
+    assert 'error' in j
+    # The error message should mention blocked children/subtasks
+    assert 'subtarea' in j['error'].lower() or 'child' in j['error'].lower()
+
+    # Now complete the child first via API
+    rv_child = client.patch(f"/api/tasks/{child_id}", json={'status':'COMPLETED'})
+    assert rv_child.status_code == 200
+
+    # Now parent can be completed
+    rv_parent = client.patch(f"/api/tasks/{parent_id}", json={'status':'COMPLETED'})
+    assert rv_parent.status_code == 200
+

@@ -3,11 +3,18 @@
 {% block title %}{{ _('my_profile') }} — {{ sys_app_name }}{% endblock %}
 
 {% block content %}
-<div class="mb-4">
-  <h2 class="fw-bold text-primary">
-    <i class="fa-solid fa-user-circle me-2"></i>{{ _('my_profile') }}
-  </h2>
-  <p class="text-muted">{{ _('manage_profile') }}</p>
+<div class="mb-4 d-flex align-items-start justify-content-between">
+  <div>
+    <h2 class="fw-bold text-primary">
+      <i class="fa-solid fa-user-circle me-2"></i>{{ _('my_profile') }}
+    </h2>
+    <p class="text-muted">{{ _('manage_profile') }}</p>
+  </div>
+  <div class="d-flex gap-2 align-items-center">
+    <a href="{{ url_for('main.settings') }}" class="btn btn-outline-secondary">
+      <i class="fa-solid fa-gear me-2"></i> Configuración
+    </a>
+  </div>
 </div>
 
 <div class="row">
@@ -62,7 +69,7 @@
         <!-- Fecha de registro -->
         <div class="text-muted small mt-2">
           <i class="fa-solid fa-calendar me-1"></i> 
-          {{ _('member_since') }} {{ current_user.created_at.strftime('%d %b %Y') if current_user.created_at else 'N/A' }}
+          {{ _('member_since') }} {{ current_user.created_at|fecha_es('corto_año') if current_user.created_at else 'N/A' }}
         </div>
       </div>
     </div>
@@ -246,7 +253,7 @@
               {% endif %}
             </div>
             <span class="badge 
-              {% if task.status == 'DONE' %}bg-success
+              {% if task.status == 'COMPLETED' %}bg-success
               {% elif task.status == 'IN_PROGRESS' %}bg-primary
               {% elif task.status == 'REVIEW' %}bg-warning
               {% else %}bg-secondary{% endif %}">

@@ -5,29 +5,47 @@ from sqlalchemy import event
 
 class TestConfig:
     TESTING = True
+    SECRET_KEY = 'test-secret'
     SQLALCHEMY_DATABASE_URI = 'sqlite:///:memory:'
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
 
 @pytest.fixture(scope='session')
 def app():
-    app = create_app('config.DevConfig')
-    app.config.from_object(TestConfig)
+    # Create the Flask app using the TestConfig class so DB bindings are created
+    # with the in-memory sqlite URI instead of the default Dev/Prod config.
+    app = create_app(TestConfig)
+
+    # Extra safety: ensure TESTING is enabled and the DB URI is local (sqlite or localhost)
+    uri = app.config.get('SQLALCHEMY_DATABASE_URI', '') or ''
+    testing_ok = app.config.get('TESTING', False)
+    if not testing_ok or not (uri.startswith('sqlite') or 'localhost' in uri or '127.0.0.1' in uri):
+        raise RuntimeError(f"Unsafe test DB URI detected: {uri!r}. Aborting tests to avoid data loss.")
+
     with app.app_context():
         yield app
 
 
 @pytest.fixture(scope='function')
 def db(app):
-    _db.create_all()
-    yield _db
-    _db.session.remove()
-    _db.drop_all()
+    with app.app_context():
+        _db.create_all()
+        yield _db
+        _db.session.remove()
+
+        # Guard: refuse to drop tables on a non-testing or remote DB
+        uri = app.config.get('SQLALCHEMY_DATABASE_URI', '') or ''
+        if not app.config.get('TESTING', False) or not (uri.startswith('sqlite') or 'localhost' in uri or '127.0.0.1' in uri):
+            raise RuntimeError(f"Refusing to drop DB for unsafe URI: {uri!r}")
+
+        _db.drop_all()
 
 
 @pytest.fixture(scope='function')
 def client(app, db):
-    return app.test_client()
+    with app.test_client() as test_client:
+        with app.app_context():
+            yield test_client
 
 
 # Factory helpers for tests
@@ -39,16 +57,49 @@ def create_user(db):
         u = User(email=email, **kwargs)
         db.session.add(u)
         db.session.commit()
+        # Assign default internal role for internal users if none provided
+        from app.models import Role
+        if getattr(u, 'is_internal', False) and not getattr(u, 'role', None):
+            role = Role.query.filter_by(name='PMP').first()
+            if not role:
+                role = Role(name='PMP')
+                db.session.add(role)
+                db.session.commit()
+            u.role = role
+            db.session.commit()
+        # Assign default client role for external users if none provided
+        if not getattr(u, 'is_internal', True) and not getattr(u, 'role', None):
+            role = Role.query.filter_by(name='Cliente').first()
+            if not role:
+                role = Role(name='Cliente')
+                db.session.add(role)
+                db.session.commit()
+            u.role = role
+            db.session.commit()
         return u
 
     return _create_user
 
 
 @pytest.fixture
-def login(client):
-    def _login(user):
+def login(client, db):
+    """Login fixture that properly handles SQLAlchemy session.
+    
+    Accepts either a User object or a user_id (int).
+    """
+    def _login(user_or_id):
+        # Handle both User objects and plain IDs
+        if isinstance(user_or_id, int):
+            user_id = user_or_id
+        else:
+            # It's a User object - get the ID
+            user_id = user_or_id.id
+        
+        # Ensure session is committed and clean before setting session vars
+        db.session.commit()
+        
         with client.session_transaction() as sess:
-            sess['_user_id'] = str(user.id)
+            sess['_user_id'] = str(user_id)
             sess['_fresh'] = True
 
     return _login

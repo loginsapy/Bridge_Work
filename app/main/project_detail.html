@@ -16,7 +16,7 @@
   </div>
   <div>
     <button class="btn btn-outline-secondary me-2"><i class="fa-solid fa-pen me-2"></i>Editar</button>
-    <button class="btn btn-primary"><i class="fa-solid fa-plus me-2"></i>Nueva Tarea</button>
+    <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createTaskModal"><i class="fa-solid fa-plus me-2"></i>Nueva Tarea</button>
   </div>
 </div>
 
@@ -96,7 +96,18 @@
               <small class="text-muted">#{{ task.id }}</small>
             </td>
             <td>
-              {% if task.assigned_to %}
+              {% if task.assignees and task.assignees|length > 0 %}
+                <div class="d-flex align-items-center">
+                  {% for a in task.assignees[:2] %}
+                    <div class="rounded-circle bg-light text-primary d-flex align-items-center justify-content-center me-2" style="width: 24px; height: 24px; font-size: 10px;">
+                      {{ (a.first_name or a.email)[0]|upper }}
+                    </div>
+                  {% endfor %}
+                  {% if task.assignees|length > 2 %}
+                    <small class="text-muted ms-1">+{{ task.assignees|length - 2 }}</small>
+                  {% endif %}
+                </div>
+              {% elif task.assigned_to %}
                 <div class="d-flex align-items-center">
                   <div class="rounded-circle bg-light text-primary d-flex align-items-center justify-content-center me-2" style="width: 24px; height: 24px; font-size: 10px;">
                     {{ task.assigned_to.first_name[0] if task.assigned_to.first_name else 'U' }}
@@ -108,7 +119,7 @@
               {% endif %}
             </td>
             <td><span class="badge bg-{{ status_colors.get(task.status, 'secondary') }}">{{ task.status.replace('_', ' ')|title }}</span></td>
-            <td><small class="text-muted">{{ task.due_date.strftime('%d %b %Y') if task.due_date else '-' }}</small></td>
+            <td><small class="text-muted">{{ task.due_date|fecha_es('corto_año') if task.due_date else '-' }}</small></td>
             <td class="text-end pe-4">
               <button class="btn btn-sm btn-outline-secondary"><i class="fa-solid fa-pen"></i></button>
             </td>
@@ -123,4 +134,129 @@
     </table>
   </div>
 </div>
+
+<!-- Modal Nueva Tarea (copiado para permitir multi-assignees en la vista de proyecto) -->
+{% if current_user.is_internal and not (current_user.role and current_user.role.name == 'Participante') %}
+<div class="modal fade" id="createTaskModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title fw-bold">Nueva Tarea</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <form method="POST" action="{{ url_for('main.create_task') }}">
+        <div class="modal-body">
+          <input type="hidden" name="project_id" value="{{ project.id }}">
+          
+          <div class="mb-3">
+            <label class="form-label">Título</label>
+            <input type="text" class="form-control" name="title" required placeholder="Título de la tarea">
+          </div>
+          
+          <div class="mb-3">
+            <label class="form-label">Descripción</label>
+            <textarea class="form-control" name="description" rows="3" placeholder="Detalles de la tarea..."></textarea>
+          </div>
+          
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Asignar a (Cliente)</label>
+              <select class="form-select" name="assigned_client_id">
+                <option value="">-- Sin asignar --</option>
+                {% for c in project.clients %}
+                  <option value="{{ c.id }}">{{ c.first_name or c.email }} {{ c.last_name or '' }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-md-12 mb-3">
+              <label class="form-label">Asignados (Internos) — Múltiples</label>
+              <select class="form-select" name="assignees" multiple size="4">
+                {% for u in assignees %}
+                  <option value="{{ u.id }}">{{ u.first_name or u.email }}</option>
+                {% endfor %}
+              </select>
+              <div class="form-text">Mantén Ctrl/Cmd para seleccionar múltiples usuarios</div>
+            </div>
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Prioridad</label>
+              <select class="form-select" name="priority">
+                <option value="LOW">Baja</option>
+                <option value="MEDIUM" selected>Media</option>
+                <option value="HIGH">Alta</option>
+                <option value="CRITICAL">Crítica</option>
+              </select>
+            </div>
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Vencimiento</label>
+              {% if current_user.is_authenticated and current_user.is_internal and current_user.role and current_user.role.name in ('PMP','Admin') %}
+              <input type="datetime-local" class="form-control" name="due_date">
+              {% else %}
+              <input type="datetime-local" class="form-control" name="due_date" disabled title="Solo PMP/Admin puede editar fechas">
+              {% endif %}
+            </div>
+          </div>
+          
+          <div class="mb-3">
+            <label class="form-label">Horas Estimadas</label>
+            <input type="number" class="form-control" name="estimated_hours" step="0.5" placeholder="Ej. 8">
+          </div>
+
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Tarea Padre</label>
+              <select class="form-select" name="parent_task_id">
+                <option value="">-- Sin tarea padre --</option>
+                {% for t in candidate_predecessors %}
+                  <option value="{{ t.id }}">{{ t.title }} (#{{ t.id }})</option>
+                {% endfor %}
+              </select>
+              <small class="text-muted">Crear como subtarea de otra tarea (jerarquía).</small>
+            </div>
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Predecesoras</label>
+              <select class="form-select" name="predecessor_ids" multiple size="4">
+                {% for t in candidate_predecessors %}
+                  <option value="{{ t.id }}">{{ t.title }} (#{{ t.id }})</option>
+                {% endfor %}
+              </select>
+              <small class="text-muted">Tareas que deben completarse antes (dependencias).</small>
+            </div>
+          </div>
+
+          <div class="mb-3 form-check">
+            <input type="checkbox" class="form-check-input" name="is_internal_only" id="is_internal_only">
+            <label class="form-check-label" for="is_internal_only">
+              <i class="fa-solid fa-lock me-1"></i>Solo Interno
+            </label>
+            <small class="d-block text-muted mt-1">Si está marcada, esta tarea solo será visible para usuarios PMP y Admin. Los clientes no podrán verla.</small>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn btn-primary" id="btnCreateTask">
+            <span class="spinner-border spinner-border-sm d-none me-1" role="status" aria-hidden="true" id="createTaskSpinner"></span>
+            <span id="createTaskText">Crear Tarea</span>
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+// Show loading state when creating task from project detail modal
+document.querySelector('#createTaskModal form')?.addEventListener('submit', function(e) {
+  const btn = document.getElementById('btnCreateTask');
+  const spinner = document.getElementById('createTaskSpinner');
+  const text = document.getElementById('createTaskText');
+  if(btn && spinner && text){
+    btn.disabled = true;
+    spinner.classList.remove('d-none');
+    text.textContent = 'Creando y notificando...';
+  }
+});
+</script>
 {% endblock %}
