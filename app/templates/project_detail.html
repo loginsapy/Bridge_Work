@@ -156,11 +156,9 @@
                 {% endif %}
 
                 {% if task.assigned_client %}
+                {% set client_name = (task.assigned_client.first_name or task.assigned_client.email) %}
                   <div class="d-flex align-items-center mt-1">
-                    <div class="rounded-circle bg-light text-success d-flex align-items-center justify-content-center me-2" style="width: 24px; height: 24px; font-size: 10px;">
-                      {{ task.assigned_client.first_name[0] if task.assigned_client.first_name else (task.assigned_client.email[0] if task.assigned_client.email else 'C') }}
-                    </div>
-                    <small class="text-muted">Cliente: {{ task.assigned_client.first_name or task.assigned_client.email }}</small>
+                    <div class="client-icon" title="{{ client_name }} (Cliente Externo)" aria-label="{{ client_name }} (Cliente Externo)"><i class="fa-solid fa-building"></i></div>
                   </div>
                 {% endif %}
 
@@ -172,11 +170,10 @@
 
             <td>
               {% if task.assigned_client %}
+                {% set client_name = (task.assigned_client.first_name or task.assigned_client.email) %}
                 <div class="d-flex align-items-center">
-                  <div class="rounded-circle bg-light text-success d-flex align-items-center justify-content-center me-2" style="width: 24px; height: 24px; font-size: 10px;">
-                    {{ task.assigned_client.first_name[0] if task.assigned_client.first_name else (task.assigned_client.email[0] if task.assigned_client.email else 'C') }}
-                  </div>
-                  <small>{{ task.assigned_client.first_name or task.assigned_client.email }}</small>
+                  <div class="client-icon me-2" title="{{ client_name }} (Cliente Externo)" aria-label="{{ client_name }} (Cliente Externo)"><i class="fa-solid fa-building"></i></div>
+                  <small class="text-muted">{{ client_name }}</small>
                 </div>
               {% else %}
                 <span class="text-muted">—</span>
@@ -253,7 +250,8 @@
                   <small class="text-muted d-block">{{ task.assigned_to.first_name or task.assigned_to.email }}</small>
                 {% endif %}
                 {% if task.assigned_client %}
-                  <small class="text-muted d-block">Cliente: {{ task.assigned_client.first_name or task.assigned_client.email }}</small>
+                  {% set client_name = (task.assigned_client.first_name or task.assigned_client.email) %}
+                  <small class="text-muted d-block"><span class="client-icon me-1" title="{{ client_name }} (Cliente Externo)" aria-label="{{ client_name }} (Cliente Externo)"><i class="fa-solid fa-building"></i></span> {{ client_name }}</small>
                 {% endif %}
               </div>
             </div>

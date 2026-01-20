@@ -497,12 +497,11 @@ tr:hover .actions-cell {
             {% if project.clients %}
             <div class="client-avatars">
               {% for client in project.clients[:3] %}
-              <div class="client-avatar" title="{{ client.first_name or client.email }}">
-                {{ (client.first_name or client.email)[0]|upper }}
-              </div>
+                {% set cname = (client.first_name or client.email.split('@')[0]) %}
+                <div class="client-icon" title="{{ cname }} (Cliente Externo)" aria-label="{{ cname }} (Cliente Externo)"><i class="fa-solid fa-building"></i></div>
               {% endfor %}
               {% if project.clients|length > 3 %}
-              <div class="client-avatar" style="background: var(--monday-grey);">+{{ project.clients|length - 3 }}</div>
+                <div class="client-icon" style="background: var(--monday-grey); color:#374151;">+{{ project.clients|length - 3 }}</div>
               {% endif %}
             </div>
             {% else %}
@@ -602,9 +601,8 @@ tr:hover .actions-cell {
       {% if project.clients %}
       <div class="client-avatars">
         {% for client in project.clients[:2] %}
-        <div class="client-avatar" title="{{ client.first_name or client.email }}">
-          {{ (client.first_name or client.email)[0]|upper }}
-        </div>
+          {% set cname = client.first_name or client.email.split('@')[0] %}
+          <div class="client-icon" title="{{ cname }} (Cliente Externo)" aria-label="{{ cname }} (Cliente Externo)"><i class="fa-solid fa-building"></i></div>
         {% endfor %}
       </div>
       {% endif %}

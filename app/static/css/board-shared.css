@@ -185,4 +185,8 @@
   .tasks-toolbar { flex-wrap:wrap; height:auto; padding:10px; }
 }
 
+/* Client building icon (shared) */
+.client-icon { width:20px; height:20px; display:inline-flex; align-items:center; justify-content:center; border-radius:4px; background:#f1f5f9; color:#374151; font-size:10px; }
+.client-icon i { font-size:12px; }
+
 

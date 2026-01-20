@@ -18,5 +18,7 @@ def test_project_detail_shows_client_assignment(client, db, create_project, crea
     data = rv2.get_data(as_text=True)
     # Ensure client's name/email appears in task list
     assert 'ClienteX' in data or 'show_client@example.com' in data
-    # Ensure column 'Asignado' or Kanban view render client assignment
-    assert 'Cliente: ClienteX' in data or 'Cliente: show_client@example.com' in data
+    # Ensure we do not show the literal 'Cliente:' label and we show the client icon with tooltip
+    assert 'Cliente:' not in data
+    assert 'class="client-icon"' in data
+    assert 'ClienteX (Cliente Externo)' in data or 'show_client@example.com (Cliente Externo)' in data

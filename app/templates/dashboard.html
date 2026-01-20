@@ -144,10 +144,9 @@
                       <div class="d-flex align-items-center justify-content-between">
                         <div class="d-flex align-items-center gap-2">
                           {% if project.clients %}
-                            <div class="monday-avatar sm {{ config.monday_class }}">
-                              {{ (project.clients[0].first_name or project.clients[0].email)[0]|upper }}
-                            </div>
-                            <small class="text-muted">{{ project.clients[0].first_name or project.clients[0].email.split('@')[0] }}</small>
+                            {% set pc = project.clients[0] %}
+                            <div class="client-icon" title="{{ (pc.first_name or pc.email) }} (Cliente Externo)" aria-label="{{ (pc.first_name or pc.email) }} (Cliente Externo)"><i class="fa-solid fa-building"></i></div>
+                            <small class="text-muted">{{ pc.first_name or pc.email.split('@')[0] }}</small>
                           {% endif %}
                         </div>
                         {% if project.end_date %}
@@ -235,7 +234,11 @@
                     </td>
                     <td class="text-secondary">
                       {% if project.clients %}
-                        {% for client in project.clients %}{{ client.first_name or client.email.split('@')[0] }}{% if not loop.last %}, {% endif %}{% endfor %}
+                        {% for client in project.clients[:3] %}
+                          {% set cname = client.first_name or client.email.split('@')[0] %}
+                          <span class="me-2"><span class="client-icon" title="{{ cname }} (Cliente Externo)" aria-label="{{ cname }} (Cliente Externo)"><i class="fa-solid fa-building"></i></span> {{ cname }}</span>
+                        {% endfor %}
+                        {% if project.clients|length > 3 %}<small class="text-muted">+{{ project.clients|length - 3 }}</small>{% endif %}
                       {% else %}
                         N/A
                       {% endif %}

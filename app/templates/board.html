@@ -166,6 +166,9 @@
 
 .person-avatar.client-avatar { background:#e6f9ec;color:#138a3a; }
 
+.client-icon { width:20px; height:20px; display:inline-flex; align-items:center; justify-content:center; border-radius:4px; background:#f1f5f9; color:#374151; font-size:10px; }
+.client-icon i { font-size:12px; }
+
 .person-name {
   font-size: 13px;
   color: var(--monday-dark);
@@ -882,7 +885,7 @@ tr.table-warning:hover {
               </div>
             </td>
             <td>
-              <div class="cell person-cell" data-assignee-id="{{ task.assigned_to_id or '' }}" {% if current_user.is_internal %}onclick="showPersonDropdown(event, {{ task.id }})"{% endif %}>
+              <div class="cell person-cell" data-assignee-id="{{ task.assigned_to_id or '' }}" {% if current_user.is_internal and current_user.role and current_user.role.name in ['PMP','Admin'] %}onclick="showPersonDropdown(event, {{ task.id }})"{% endif %}>
                 {% set assignees = task.assignee_list %}
                 {% if assignees and assignees|length > 0 %}
                 <div class="person-avatars">
@@ -895,13 +898,13 @@ tr.table-warning:hover {
                   {% endif %}
                 </div>
                 {% else %}
-                <span class="text-muted">{% if current_user.is_internal %}+ Asignar{% else %}—{% endif %}</span>
+                <span class="text-muted">{% if current_user.is_internal and current_user.role and current_user.role.name in ['PMP','Admin'] %}+ Asignar{% else %}—{% endif %}</span>
                 {% endif %}
 
                 {% if task.assigned_client %}
+                {% set client_name = (task.assigned_client.first_name or task.assigned_client.email) %}
                 <div class="d-flex align-items-center mt-1">
-                  <div class="person-avatar client-avatar" style="background:#e6f9ec;color:#138a3a;" title="{{ task.assigned_client.first_name or task.assigned_client.email }}">{{ (task.assigned_client.first_name or task.assigned_client.email)[0]|upper }}</div>
-                  <span class="person-name text-muted small">Cliente: {{ task.assigned_client.first_name or task.assigned_client.email }}</span>
+                  <div class="client-icon" title="{{ client_name }} (Cliente Externo)" aria-label="{{ client_name }} (Cliente Externo)"><i class="fa-solid fa-building"></i></div>
                 </div>
                 {% endif %}
               </div>
@@ -1049,6 +1052,7 @@ tr.table-warning:hover {
   <div class="status-option" onclick="setPriority('CRITICAL')"><div class="status-dot" style="background:var(--monday-red)"></div>Crítica</div>
 </div>
 
+{% if current_user.is_internal and current_user.role and current_user.role.name in ['PMP','Admin'] %}
 <!-- Person Dropdown -->
 <div class="person-dropdown" id="personDropdown" style="display:none;">
   <div class="person-option" onclick="setAssignee(null)">
@@ -1062,6 +1066,7 @@ tr.table-warning:hover {
   </div>
   {% endfor %}
 </div>
+{% endif %}
 
 <!-- Modal Nueva Tarea - World Class Design -->
 {% if current_user.is_internal and not (current_user.role and current_user.role.name == 'Participante') %}
@@ -1718,13 +1723,32 @@ function setPriority(priority) {
 }
 
 function setAssignee(userId) {
-  // When selecting a person quickly from the dropdown, update the task's assignees list.
-  // This will set the task to have a single assignee (but the assignees list allows multiple users elsewhere).
-  const payload = {
-    assignees: userId ? [userId] : []
-  };
-  updateTaskFields(currentTaskId, payload);
-  document.getElementById('personDropdown').style.display = 'none';
+  // Additive assign: fetch current assignees, add the selected user (if any), and send merged list.
+  const dd = document.getElementById('personDropdown');
+  if (dd) dd.style.display = 'none';
+
+  if (!userId) {
+    // 'Sin asignar' chosen: clear assignees
+    updateTaskFields(currentTaskId, { assignees: [] });
+    return;
+  }
+
+  // Fetch current task to get current assignees, then merge
+  fetch(`/api/tasks/${currentTaskId}`)
+    .then(async r => {
+      if (!r.ok) throw new Error('Failed to fetch task');
+      return r.json();
+    })
+    .then(data => {
+      const current = Array.isArray(data.assignees) ? data.assignees.map(x => parseInt(x)) : [];
+      const uid = parseInt(userId);
+      if (!current.includes(uid)) current.push(uid);
+      updateTaskFields(currentTaskId, { assignees: current });
+    })
+    .catch(err => {
+      console.error('Error fetching task:', err);
+      alert('Error al asignar usuario');
+    });
 }
 
 function updateTaskFields(taskId, payload) {
