@@ -94,10 +94,10 @@
     </div>
   </div>
   <div class="table-responsive">
-    <table class="table table-hover align-middle mb-0">
+    <table class="table table-hover align-middle mb-0 text-nowrap">
       <thead class="bg-light">
         <tr>
-          <th class="ps-4">Tarea</th>
+          <th class="ps-4" style="min-width: 300px; max-width: 450px;">Tarea</th>
           <th>Asignado</th>
           <th>Cliente</th>
           <th>Estado</th>
@@ -111,7 +111,7 @@
           {% set status_colors = {'BACKLOG': 'secondary', 'IN_PROGRESS': 'primary', 'IN_REVIEW': 'info', 'COMPLETED': 'success', 'CANCELLED': 'danger'} %}
           {% for task in tasks %}
           <tr {% if task.is_blocked() %}class="table-warning"{% endif %}>
-            <td class="ps-4">
+            <td class="ps-4" style="white-space: normal; max-width: 450px;">
               <div class="d-flex align-items-center">
                 {% if task.parent_task_id %}
                   <span class="text-muted me-2" style="font-size: 0.8rem;">↳</span>

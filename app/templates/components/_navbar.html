@@ -1,9 +1,9 @@
 <nav class="navbar navbar-expand-lg">
   <div class="container-fluid px-3 px-lg-4">
     <!-- Logo & Brand -->
-    <a class="navbar-brand d-flex align-items-center gap-2" href="{{ url_for('main.index') }}">
-      <img src="{{ url_for('static', filename='images/sbwlogo.png') }}" alt="" height="32" class="d-inline-block">
-      <span class="fw-bold d-none d-sm-inline">{{ sys_app_name }}</span>
+    <a class="navbar-brand d-flex align-items-center gap-2" href="/">
+      <img src="/static/images/sbwlogo.png" alt="" height="32" class="d-inline-block">
+      <span class="fw-bold d-none d-sm-inline">Login S.A.</span>
     </a>
 
     <!-- Mobile Menu Toggle -->
@@ -15,15 +15,10 @@
     <div class="navbar-nav ms-auto flex-row align-items-center gap-2 gap-lg-3">
       
       <!-- Global Search (collapsible on mobile) -->
-      <div class="nav-item d-none d-md-block" id="globalSearchContainer" data-search-allowed="{{ 1 if ((current_user.role and current_user.role.name in ['PMP','Admin','Participante']) or not current_user.is_internal) else 0 }}">
+      <div class="nav-item d-none d-md-block" id="globalSearchContainer" data-search-allowed="1">
         <div class="search-input-wrapper">
           <i class="fa-solid fa-search search-icon"></i>
-          <input type="search" 
-                 id="globalSearchInput" 
-                 class="form-control global-search-input" 
-                 placeholder="Buscar..." 
-                 autocomplete="off"
-                 aria-label="Buscar">
+          <input type="search" id="globalSearchInput" class="form-control global-search-input" placeholder="Buscar..." autocomplete="off" aria-label="Buscar">
           <kbd class="search-shortcut d-none d-xl-inline">⌘K</kbd>
         </div>
         <!-- Search Results Dropdown -->
@@ -32,26 +27,16 @@
         </div>
       </div>
 
-      <!-- Quick Actions: New Project -->
-      {% if current_user.is_authenticated and current_user.is_internal and current_user.role and current_user.role.name in ['Admin','PMP'] %}
-      <button class="nav-item btn btn-primary btn-sm d-flex align-items-center gap-1" data-bs-toggle="modal" data-bs-target="#createProjectModal">
-        <i class="fa-solid fa-plus"></i>
-        <span class="d-none d-lg-inline">Nuevo</span>
-      </button>
-      {% endif %}
-
       <!-- Notifications -->
       <div class="nav-item dropdown" id="notificationDropdown">
         <button class="btn btn-icon" data-bs-toggle="dropdown" aria-expanded="false" id="notificationBtn" title="Notificaciones">
           <i class="fa-solid fa-bell"></i>
-          {% if unread_notifications_count > 0 %}
-          <span class="badge-dot"></span>
-          {% endif %}
+          
         </button>
         <div class="dropdown-menu dropdown-menu-end notification-dropdown">
           <div class="dropdown-header d-flex justify-content-between align-items-center">
             <span class="fw-semibold">Notificaciones</span>
-            <button id="markAllBtn" class="btn btn-link btn-sm p-0 text-primary" onclick="markAllAsRead()" title="Marcar todas como leídas" {% if unread_notifications_count <= 0 %}disabled aria-disabled="true"{% endif %}>
+            <button id="markAllBtn" class="btn btn-link btn-sm p-0 text-primary" onclick="markAllAsRead()" title="Marcar todas como leídas" disabled="" aria-disabled="true">
               Marcar leídas
             </button>
           </div>
@@ -61,7 +46,7 @@
             </div>
           </div>
           <div class="dropdown-footer">
-            <a href="{{ url_for('main.notifications') }}" class="text-primary text-decoration-none">
+            <a href="/notifications" class="text-primary text-decoration-none">
               Ver todas <i class="fa-solid fa-arrow-right ms-1"></i>
             </a>
           </div>
@@ -69,51 +54,47 @@
       </div>
 
       <!-- User Role Badge -->
-      {% if current_user.is_authenticated %}
+      
       <div class="nav-item d-none d-lg-flex align-items-center">
-        {% set user_role = current_user.role.name if current_user.role else 'Sin Rol' %}
-        {% set role_icon = {'Admin': 'fa-shield-halved', 'PMP': 'fa-user-tie', 'Participante': 'fa-user', 'Cliente': 'fa-building'}.get(user_role, 'fa-user-slash') %}
-        {% set role_color = {'Admin': 'danger', 'PMP': 'primary', 'Participante': 'success', 'Cliente': 'info'}.get(user_role, 'secondary') %}
-        <span class="role-badge badge bg-{{ role_color }}-subtle text-{{ role_color }} d-flex align-items-center gap-1">
-          <i class="fa-solid {{ role_icon }} fa-xs"></i>
-          <span>{{ user_role }}</span>
+        
+        
+        
+        <span class="role-badge badge bg-danger-subtle text-danger d-flex align-items-center gap-1">
+          <i class="fa-solid fa-shield-halved fa-xs"></i>
+          <span>Admin</span>
         </span>
       </div>
-      {% endif %}
+      
 
       <!-- User Menu -->
-      {% if current_user.is_authenticated %}
+      
       <div class="nav-item dropdown">
         <button class="btn btn-icon user-menu-btn d-flex align-items-center gap-2" data-bs-toggle="dropdown">
           <div class="user-avatar">
-            {{ (current_user.first_name or current_user.email)[0]|upper }}
+            T
           </div>
-          <span class="d-none d-lg-inline user-name">{{ current_user.first_name or current_user.email.split('@')[0] }}</span>
+          <span class="d-none d-lg-inline user-name">Tadeo</span>
           <i class="fa-solid fa-chevron-down fa-xs d-none d-lg-inline"></i>
         </button>
         <ul class="dropdown-menu dropdown-menu-end">
           <li class="dropdown-header">
-            <div class="fw-semibold">{{ current_user.first_name }} {{ current_user.last_name or '' }}</div>
-            <small class="text-muted">{{ current_user.email }}</small>
-            {% set user_role = current_user.role.name if current_user.role else 'Sin Rol' %}
-            {% set role_color = {'Admin': 'danger', 'PMP': 'primary', 'Participante': 'success', 'Cliente': 'info'}.get(user_role, 'secondary') %}
-            <span class="badge bg-{{ role_color }}-subtle text-{{ role_color }} mt-1">{{ user_role }}</span>
+            <div class="fw-semibold">Tadeo Quenhan</div>
+            <small class="text-muted">tadeo.quenhan@grupo-olam.com</small>
+            
+            
+            <span class="badge bg-danger-subtle text-danger mt-1">Admin</span>
           </li>
           <li><hr class="dropdown-divider"></li>
-          <li><a class="dropdown-item" href="{{ url_for('main.profile') }}"><i class="fa-solid fa-user me-2 text-muted"></i>Mi Perfil</a></li>
-          {% if current_user.is_internal and current_user.role and current_user.role.name in ['Admin','PMP'] %}
-          <li><a class="dropdown-item" href="{{ url_for('main.admin_users') }}"><i class="fa-solid fa-users-gear me-2 text-muted"></i>Usuarios</a></li>
-          <li><a class="dropdown-item" href="{{ url_for('main.admin_settings_page') }}"><i class="fa-solid fa-gear me-2 text-muted"></i>Configuración</a></li>
-          {% endif %}
+          <li><a class="dropdown-item" href="/profile"><i class="fa-solid fa-user me-2 text-muted"></i>Mi Perfil</a></li>
+          
+          <li><a class="dropdown-item" href="/admin/users"><i class="fa-solid fa-users-gear me-2 text-muted"></i>Usuarios</a></li>
+          <li><a class="dropdown-item" href="/admin/settings"><i class="fa-solid fa-gear me-2 text-muted"></i>Configuración</a></li>
+          
           <li><hr class="dropdown-divider"></li>
-          <li><a class="dropdown-item text-danger" href="{{ url_for('auth.logout') }}"><i class="fa-solid fa-right-from-bracket me-2"></i>Cerrar Sesión</a></li>
+          <li><a class="dropdown-item text-danger" href="/auth/logout"><i class="fa-solid fa-right-from-bracket me-2"></i>Cerrar Sesión</a></li>
         </ul>
       </div>
-      {% else %}
-      <a class="btn btn-primary btn-sm" href="{{ url_for('auth.login') }}">
-        Iniciar Sesión
-      </a>
-      {% endif %}
+      
     </div>
   </div>
 </nav>
@@ -129,49 +110,71 @@
       </div>
       <form action="{{ url_for('main.create_project') }}" method="POST">
         <div class="modal-body">
-          <div class="mb-3">
-            <label class="form-label">Nombre del Proyecto</label>
-            <input type="text" class="form-control" name="name" required placeholder="Ej. Migración a la Nube">
-          </div>
-          <div class="mb-3">
-            <label class="form-label">Descripción</label>
-            <textarea class="form-control" name="description" rows="3" placeholder="Breve descripción del alcance..."></textarea>
-          </div>
-          <div class="row">
-            <div class="col-md-6 mb-3">
-              <label class="form-label">Presupuesto (Horas)</label>
-              <input type="number" class="form-control" name="budget_hours" step="0.1" placeholder="0.0">
+          <div class="row g-3">
+            <div class="col-12">
+              <label class="form-label fw-semibold">Nombre <span class="text-danger">*</span></label>
+              <input type="text" name="name" class="form-control" required placeholder="Nombre del proyecto">
             </div>
-            <div class="col-md-6 mb-3">
-              <label class="form-label">Fecha de Inicio</label>
-              <input type="date" class="form-control" name="start_date">
+            <div class="col-12">
+              <label class="form-label fw-semibold">Descripción</label>
+              <textarea name="description" class="form-control" rows="3" placeholder="Descripción del proyecto"></textarea>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-semibold">Tipo de Proyecto</label>
+              <select name="project_type" class="form-select">
+                <option value="APP_DEVELOPMENT">Desarrollo de Aplicación</option>
+                <option value="WEB_DEVELOPMENT">Desarrollo Web</option>
+                <option value="MOBILE_APP">Aplicación Móvil</option>
+                <option value="CONSULTING">Consultoría</option>
+                <option value="SUPPORT">Soporte</option>
+                <option value="INFRASTRUCTURE">Infraestructura</option>
+                <option value="DATA_ANALYTICS">Analítica de Datos</option>
+                <option value="OTHER">Otro</option>
+              </select>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-semibold">Horas Presupuestadas</label>
+              <input type="number" name="budget_hours" class="form-control" min="0" step="0.5" placeholder="Ej: 100">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-semibold">Fecha Inicio</label>
+              <input type="date" name="start_date" class="form-control">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-semibold">Fecha Fin</label>
+              <input type="date" name="end_date" class="form-control">
+            </div>
+            <div class="col-12">
+              <label class="form-label fw-semibold">
+                <i class="fa-solid fa-user-tie me-1"></i>Clientes Asociados (opcional)
+              </label>
+              <select name="client_ids" class="form-select">
+                <option value="">-- Seleccionar Cliente --</option>
+                {% for client in available_clients %}
+                <option value="{{ client.id }}">
+                  {{ client.first_name }} {{ client.last_name }} ({{ client.email }})
+                </option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-12">
+              <label class="form-label fw-semibold">
+                <i class="fa-solid fa-users me-1"></i>Asignados (Internos) — Múltiples
+              </label>
+              <select name="member_ids" class="form-select" multiple>
+                {% for member in available_members %}
+                <option value="{{ member.id }}">{{ member.first_name or member.email }}</option>
+                {% endfor %}
+              </select>
+              <small class="text-muted">Mantén presionado Ctrl/Cmd para seleccionar múltiples usuarios</small>
             </div>
           </div>
-          <div class="mb-3">
-            <label class="form-label">Fecha de Fin</label>
-            <input type="date" class="form-control" name="end_date">
-          </div>
-          {% if available_clients %}
-          <div class="mb-3">
-            <label class="form-label">Clientes Asociados <small class="text-muted">(opcional)</small></label>
-            <div class="border rounded p-2" style="max-height: 150px; overflow-y: auto;">
-              {% for client in available_clients %}
-                <div class="form-check">
-                  <input class="form-check-input" type="checkbox" name="client_ids" 
-                    value="{{ client.id }}" id="new_client_{{ client.id }}">
-                  <label class="form-check-label" for="new_client_{{ client.id }}">
-                    {{ client.first_name }} {{ client.last_name }}
-                    <small class="text-muted">({{ client.email }})</small>
-                  </label>
-                </div>
-              {% endfor %}
-            </div>
-          </div>
-          {% endif %}
         </div>
         <div class="modal-footer">
-          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-          <button type="submit" class="btn btn-primary">Crear Proyecto</button>
+          <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn btn-primary">
+            <i class="fa-solid fa-save me-1"></i>Crear Proyecto
+          </button>
         </div>
       </form>
     </div>

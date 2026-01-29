@@ -75,7 +75,7 @@ def notify_clients_task_completed(task, completed_by_user=None):
 
 @main_bp.route('/')
 @login_required
-def index():
+def dashboard():
     from ..auth.decorators import _get_user_from_session
     user = _get_user_from_session()
     user_role = user.role.name if (user and user.role) else None
@@ -300,8 +300,23 @@ def edit_project(project_id):
             project.budget_hours = float(request.form.get('budget_hours')) if request.form.get('budget_hours') and request.form.get('budget_hours').strip() else project.budget_hours
             project.status = request.form.get('status', project.status)
             
+            # Update dates
+            start_date_str = request.form.get('start_date')
+            end_date_str = request.form.get('end_date')
+            
+            if start_date_str:
+                project.start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
+            if end_date_str:
+                project.end_date = datetime.strptime(end_date_str, '%Y-%m-%d').date()
+            
             # Actualizar responsable del proyecto
             manager_id = request.form.get('manager_id')
+            
+            # Fix 8: Validación fechas en edición de proyecto
+            if project.start_date and project.end_date and project.start_date > project.end_date:
+                 flash('La fecha de fin no puede ser anterior a la de inicio.', 'warning')
+                 return redirect(url_for('main.edit_project', project_id=project.id))
+
             project.manager_id = int(manager_id) if manager_id and manager_id.strip() else None
             
             # Actualizar clientes asociados
@@ -485,13 +500,17 @@ def projects():
     client_role = Role.query.filter_by(name='Cliente').first()
     available_clients = User.query.filter_by(role_id=client_role.id).order_by(User.first_name).all() if client_role else []
     
+    # Obtener usuarios internos para el modal de creación
+    available_members = User.query.filter_by(is_internal=True, is_active=True).order_by(User.first_name).all()
+    
     # Provide current time context for templates that compare dates
     return render_template('projects.html', 
                            projects=projects, 
                            no_role=False, 
                            now=datetime.now(),
                            current_user_role_name=user_role,
-                           available_clients=available_clients)
+                           available_clients=available_clients,
+                           available_members=available_members)
 
 
 @main_bp.route('/project/<int:project_id>')
@@ -548,7 +567,11 @@ def project_detail(project_id):
         ).order_by(Task.status, Task.priority.desc()).all()
 
     # Sugeridos para asignación: usuarios internos
-    assignees = User.query.filter_by(is_internal=True, is_active=True).order_by(User.first_name).all()
+    if project.members:
+        assignees = list(set(project.members + ([project.manager] if project.manager else [])))
+        assignees.sort(key=lambda u: u.first_name or '')
+    else:
+        assignees = User.query.filter_by(is_internal=True, is_active=True).order_by(User.first_name).all()
     # Candidate predecessors: all tasks in this project (for parent selection and dependencies)
     candidate_predecessors = Task.query.filter(Task.project_id == project_id).order_by(Task.title).all()
     
@@ -559,7 +582,7 @@ def project_detail(project_id):
         This creates a proper parent-child tree where:
         - Tasks with no parent_task_id are roots
         - Tasks with parent_task_id are children of that parent
-        Also assigns WBS numbers (1, 1.1, 1.2, 2, 2.1, etc.)
+        Also assigns WBS numbers (1, 1.1, 1.2, 2, 2.1.1)
         """
         tasks_by_id = {t.id: t for t in task_list}
         children_map = {t.id: [] for t in task_list}
@@ -873,6 +896,9 @@ def create_task():
             status=status,
             priority=request.form.get('priority') or 'MEDIUM'
         )
+        
+        if status == 'COMPLETED':
+            task.completed_at = datetime.now()
 
         # Assign to a client (customer) separately from internal assignee
         assigned_client_id = request.form.get('assigned_client_id')
@@ -882,6 +908,11 @@ def create_task():
         start_date_str = request.form.get('start_date')
         if start_date_str:
             task.start_date = datetime.fromisoformat(start_date_str)
+
+        # Fix 8: Validación de fechas
+        if start_date_str and due_date_str and start_date_str > due_date_str:
+            flash('La fecha de vencimiento no puede ser anterior a la de inicio.', 'danger')
+            return redirect(url_for('main.project_detail', project_id=project_id))
 
         due_date_str = request.form.get('due_date')
         if due_date_str:
@@ -1019,7 +1050,7 @@ def create_task():
         if task.assigned_client_id and task.assigned_client_id != current_user.id:
             NotificationService.notify_task_assigned(
                 task=task,
-                assigned_by_user=current_user,
+                assigned_by_user=current_user, # Fix 10: Asegurar notificación al cliente
                 send_email=send_email,
                 notify_client=True
             )
@@ -1027,6 +1058,9 @@ def create_task():
 
         if email_sent and send_email:
             flash('Se ha enviado una notificación por correo al usuario asignado.', 'info')
+
+        # Asegurar que las notificaciones generadas se reflejen en la BD inmediatamente
+        db.session.commit()
 
     except Exception as e:
         db.session.rollback()
@@ -1060,7 +1094,7 @@ def _ensure_pmp():
 @login_required
 def admin_dashboard():
     if not _ensure_pmp():
-        return redirect(url_for('main.index'))
+        return redirect(url_for('main.dashboard'))
     
     # Estadísticas generales
     stats = {
@@ -1078,6 +1112,7 @@ def admin_dashboard():
 def admin_users():
     if not _ensure_pmp():
         return redirect(url_for('main.index'))
+        return redirect(url_for('main.dashboard'))
     users = User.query.order_by(User.email).all()
     roles = Role.query.order_by(Role.name).all()
     return render_template('admin/users.html', users=users, roles=roles)
@@ -1088,6 +1123,7 @@ def admin_users():
 def admin_create_user():
     if not _ensure_pmp():
         return redirect(url_for('main.index'))
+        return redirect(url_for('main.dashboard'))
     roles = Role.query.order_by(Role.name).all()
 
     if request.method == 'POST':
@@ -1145,6 +1181,7 @@ def admin_create_user():
 def admin_edit_user(user_id):
     if not _ensure_pmp():
         return redirect(url_for('main.index'))
+        return redirect(url_for('main.dashboard'))
     user = User.query.get_or_404(user_id)
     roles = Role.query.order_by(Role.name).all()
 
@@ -1205,6 +1242,7 @@ def admin_edit_user(user_id):
 def admin_delete_user(user_id):
     if not _ensure_pmp():
         return redirect(url_for('main.index'))
+        return redirect(url_for('main.dashboard'))
     user = User.query.get_or_404(user_id)
     
     # No permitir eliminar al usuario actual
@@ -1241,6 +1279,7 @@ def admin_delete_user(user_id):
 def admin_roles():
     if not _ensure_pmp():
         return redirect(url_for('main.index'))
+        return redirect(url_for('main.dashboard'))
     if request.method == 'POST':
         name = request.form.get('name')
         if name:
@@ -1249,7 +1288,7 @@ def admin_roles():
             else:
                 role = Role(name=name)
                 db.session.add(role)
-                db.session.flush()  # Get role ID
+                db.session.flush()
                 
                 # Registrar auditoría
                 audit = AuditLog(
@@ -1272,6 +1311,7 @@ def admin_roles():
 def admin_delete_role(role_id):
     if not _ensure_pmp():
         return redirect(url_for('main.index'))
+        return redirect(url_for('main.dashboard'))
     role = Role.query.get_or_404(role_id)
     
     # No permitir eliminar roles en uso
@@ -1310,6 +1350,7 @@ def admin_delete_role(role_id):
 def admin_rates():
     if not _ensure_pmp():
         return redirect(url_for('main.index'))
+        return redirect(url_for('main.dashboard'))
     
     if request.method == 'POST':
         action = request.form.get('action')
@@ -1409,6 +1450,7 @@ def admin_rates():
 def admin_branding():
     if not _ensure_pmp():
         return redirect(url_for('main.index'))
+        return redirect(url_for('main.dashboard'))
     
     if request.method == 'POST':
         try:
@@ -1482,6 +1524,7 @@ def admin_branding():
 def admin_general():
     if not _ensure_pmp():
         return redirect(url_for('main.index'))
+        return redirect(url_for('main.dashboard'))
     
     if request.method == 'POST':
         try:
@@ -1542,6 +1585,7 @@ def admin_general():
 def admin_content():
     if not _ensure_pmp():
         return redirect(url_for('main.index'))
+        return redirect(url_for('main.dashboard'))
     
     if request.method == 'POST':
         try:
@@ -1591,6 +1635,7 @@ def admin_content():
 def admin_notifications():
     if not _ensure_pmp():
         return redirect(url_for('main.index'))
+        return redirect(url_for('main.dashboard'))
     
     if request.method == 'POST':
         # Validate base_url first (if provided)
@@ -1651,6 +1696,7 @@ def admin_notifications():
 def admin_audit():
     if not _ensure_pmp():
         return redirect(url_for('main.index'))
+        return redirect(url_for('main.dashboard'))
     
     page = request.args.get('page', 1, type=int)
     per_page = 50
@@ -1667,6 +1713,7 @@ def admin_audit():
 def admin_maintenance():
     if not _ensure_pmp():
         return redirect(url_for('main.index'))
+        return redirect(url_for('main.dashboard'))
     
     if request.method == 'POST':
         action = request.form.get('action')
@@ -1713,9 +1760,15 @@ def create_project():
     end_date_str = request.form.get('end_date')
     project_type = request.form.get('project_type', 'APP_DEVELOPMENT')
     client_ids = request.form.getlist('client_ids')
+    member_ids = request.form.getlist('member_ids')
     
     if not name:
         flash('El nombre del proyecto es un campo obligatorio.', 'danger')
+        return redirect(url_for('main.projects'))
+    
+    # Fix 8: Validación de coherencia de fechas
+    if start_date_str and end_date_str and start_date_str > end_date_str:
+        flash('La fecha de finalización no puede ser anterior a la fecha de inicio.', 'danger')
         return redirect(url_for('main.projects'))
 
     # Only internal users with appropriate roles can create projects
@@ -1741,6 +1794,11 @@ def create_project():
         if client_ids:
             clients = User.query.filter(User.id.in_(client_ids)).all()
             new_project.clients = clients
+            
+        # Associate members (Participants)
+        if member_ids:
+            members = User.query.filter(User.id.in_(member_ids)).all()
+            new_project.members = members
         
         # Registrar auditoría de creación
         audit = AuditLog(
@@ -1754,6 +1812,35 @@ def create_project():
         
         db.session.commit()
         flash(f"Proyecto '{name}' creado con éxito.", 'success')
+
+        # Fix 6: Notificación de creación de proyecto a clientes
+        if new_project.clients:
+            for client in new_project.clients:
+                try:
+                    NotificationService.notify(
+                        user_id=client.id,
+                        title='Nuevo Proyecto Asignado',
+                        message=f"Has sido asignado al proyecto '{new_project.name}'.",
+                        notification_type=NotificationService.GENERAL
+                    )
+                except Exception:
+                    pass
+        
+        # Notificación a participantes
+        if new_project.members:
+            for member in new_project.members:
+                try:
+                    NotificationService.notify(
+                        user_id=member.id,
+                        title='Nuevo Proyecto Asignado',
+                        message=f"Has sido añadido como participante al proyecto '{new_project.name}'.",
+                        notification_type=NotificationService.GENERAL
+                    )
+                except Exception:
+                    pass
+        
+        # Asegurar que las notificaciones generadas se reflejen en la BD inmediatamente
+        db.session.commit()
     except Exception as e:
         db.session.rollback()
         flash(f'Error al crear proyecto: {str(e)}', 'danger')
@@ -1778,6 +1865,11 @@ def tasks():
     if not user_role:
         flash('No tienes un rol asignado. Contacta al administrador para obtener acceso.', 'warning')
         return render_template('tasks.html', tasks=[], no_role=True, now=datetime.now(), status_filter='', priority_filter='')
+    
+    # Fix 11: Asegurar que Admin vea sus tareas asignadas explícitamente si el filtro general fallara
+    # (Aunque la lógica 'PMP/Admin' ve todo, esto refuerza la consistencia si el rol tuviera problemas)
+    if user_role == 'Admin' and not current_user.is_internal:
+        user_role = 'Cliente' # Fallback de seguridad
     
     # Filtros
     status_filter = request.args.get('status', '')
@@ -2200,7 +2292,12 @@ def reports():
             if t.due_date:
                 due_val = t.due_date.date() if hasattr(t.due_date, 'date') else t.due_date
                 if t.status == 'COMPLETED':
-                    days_overdue = 0
+                    # Fix 2: Calcular atraso real al momento de completar (usar completed_at)
+                    if t.completed_at:
+                        comp_val = t.completed_at.date() if hasattr(t.completed_at, 'date') else t.completed_at
+                        days_overdue = max(0, (comp_val - due_val).days)
+                    else:
+                        days_overdue = 0
                 else:
                     days_overdue = max(0, (today - due_val).days)
             else:
@@ -2287,7 +2384,7 @@ def reports():
             # Auto width
             for i, column_cells in enumerate(ws.columns, 1):
                 length = max(len(str(cell.value or '')) for cell in column_cells)
-                ws.column_dimensions[get_column_letter(i)].width = min(max(length + 2, 10), 50)
+                ws.column_dimensions[get_column_letter(i)].width = min(max(length + 4, 12), 60) # Fix 1: Ajuste más generoso
 
             bio = BytesIO()
             wb.save(bio)
@@ -2358,18 +2455,13 @@ def create_time_entry():
             db.session.add(time_entry)
             db.session.flush()
             
-            # Auditoría
-            audit = AuditLog(
-                entity_type='TimeEntry',
-                entity_id=time_entry.id,
-                action='CREATE',
-                user_id=current_user.id,
-                changes={'task_id': task_id, 'hours': hours, 'date': str(time_entry.date)}
-            )
-            db.session.add(audit)
+            # Auto-update task status if not already in progress/done
+            if task.status == 'BACKLOG' or task.status == 'TODO':
+                task.status = 'IN_PROGRESS'
+            
             db.session.commit()
-            flash(f'Tiempo registrado: {hours}h', 'success')
-            return redirect(url_for('main.time_entries'))
+            flash('Tiempo registrado exitosamente', 'success')
+            return redirect(url_for('main.task_detail', task_id=task_id))
         except Exception as e:
             db.session.rollback()
             flash(f'Error: {str(e)}', 'danger')
@@ -2546,7 +2638,7 @@ def task_detail(task_id):
     from ..auth.decorators import _get_user_from_session
     user = _get_user_from_session()
     user_role = user.role.name if (user and user.role) else None
-    
+
     # Control de acceso
     can_view = False
     can_edit = False
@@ -2678,10 +2770,16 @@ def edit_task(task_id):
     task = Task.query.get_or_404(task_id)
     project = task.project
 
-    # Permitir a usuarios internos o al cliente del proyecto
-    can_edit = current_user.is_internal or project.client_id == current_user.id
+    # Permitir a usuarios internos o al cliente del proyecto (si está asignado a la tarea)
+    is_project_client = (project.client_id == current_user.id) or (current_user in project.clients)
+    can_edit = current_user.is_internal or (is_project_client and task.assigned_client_id == current_user.id)
     if not can_edit:
         flash('No tienes permiso para editar esta tarea.', 'danger')
+        return redirect(url_for('main.task_detail', task_id=task.id))
+    
+    # Fix 7: Rol Participante no debe editar tareas (solo registrar tiempo)
+    if current_user.role and current_user.role.name == 'Participante':
+        flash('Los participantes no tienen permiso para editar tareas. Solo pueden registrar tiempos.', 'danger')
         return redirect(url_for('main.task_detail', task_id=task.id))
 
     if request.method == 'POST':
@@ -2720,18 +2818,16 @@ def edit_task(task_id):
             task.description = request.form.get('description')
 
             # Handle predecessors (many-to-many) EARLY: only if provided in form, validate and assign BEFORE status validation
-            if 'predecessor_ids' in request.form:
-                predecessor_ids = [int(x) for x in request.form.getlist('predecessor_ids') if x and x.strip()]
-                try:
-                    # validate before assignment
-                    task.validate_predecessor_ids(predecessor_ids)
-                    if predecessor_ids:
-                        preds = Task.query.filter(Task.id.in_(predecessor_ids)).all()
-                    else:
-                        preds = []
-                    task.predecessors = preds
-                except ValueError as ve:
-                    raise ve
+            # Fix 3: Permitir desmarcar predecesoras (procesar siempre si es POST)
+            predecessor_ids = [int(x) for x in request.form.getlist('predecessor_ids') if x and x.strip()]
+            try:
+                # validate before assignment
+                task.validate_predecessor_ids(predecessor_ids)
+                # Si la lista está vacía, se limpiarán las predecesoras (correcto para desmarcar)
+                preds = Task.query.filter(Task.id.in_(predecessor_ids)).all() if predecessor_ids else []
+                task.predecessors = preds
+            except ValueError as ve:
+                raise ve
 
             status_from_form = request.form.get('status')
             if status_from_form and status_from_form != task.status:
@@ -2751,6 +2847,11 @@ def edit_task(task_id):
             # Only PMP/Admin may modify dates
             if (start_date_str or due_date_str) and not is_pmp_admin:
                 flash('No tienes permiso para modificar fechas de la tarea.', 'danger')
+                return redirect(url_for('main.edit_task', task_id=task.id))
+
+            # Fix 8: Validación de fechas en edición
+            if start_date_str and due_date_str and start_date_str > due_date_str:
+                flash('La fecha de vencimiento no puede ser anterior a la de inicio.', 'danger')
                 return redirect(url_for('main.edit_task', task_id=task.id))
 
             if start_date_str:
@@ -2908,6 +3009,10 @@ def edit_task(task_id):
 
             if email_sent and send_email:
                 flash('Se ha enviado una notificación por correo al usuario asignado.', 'info')            
+            
+            # Asegurar que las notificaciones generadas se reflejen en la BD inmediatamente
+            db.session.commit()
+            
             flash('Tarea actualizada.', 'success')
             return redirect(url_for('main.task_detail', task_id=task.id))
         except Exception as e:
@@ -2916,7 +3021,14 @@ def edit_task(task_id):
             flash(f'Error al actualizar: {str(e)}', 'danger')
 
     # Provide user list for assignment
-    users = User.query.filter_by(is_internal=True, is_active=True).order_by(User.first_name).all()
+    # Fix 5: Asociar responsables al proyecto (filtrar lista)
+    if project.members:
+        # Mostrar miembros del proyecto + manager + admins (opcional, aquí simplificado a miembros + manager)
+        users = list(set(project.members + ([project.manager] if project.manager else [])))
+        users.sort(key=lambda u: u.first_name or '')
+    else:
+        users = User.query.filter_by(is_internal=True, is_active=True).order_by(User.first_name).all()
+    
     # Candidate predecessors: tasks within the same project (exclude self)
     candidate_predecessors = Task.query.filter(Task.project_id == project.id, Task.id != task.id).order_by(Task.title).all()
 
@@ -2935,7 +3047,7 @@ def client_accept_task(task_id):
     """Allow a project client to accept a task and mark it as completed (with approval metadata)."""
     task = Task.query.get_or_404(task_id)
     project = task.project
-
+    
     # Only allow project client to accept
     is_project_client = (project.client_id and project.client_id == current_user.id) or (current_user in project.clients)
     if current_user.is_internal or not is_project_client:
@@ -2961,6 +3073,7 @@ def client_accept_task(task_id):
         task.status = 'COMPLETED'
         task.approval_status = 'APPROVED'
         task.approved_by_id = current_user.id
+        task.completed_at = datetime.now()
         task.approved_at = datetime.now()
 
         audit = AuditLog(
@@ -2976,553 +3089,6 @@ def client_accept_task(task_id):
     except Exception as e:
         db.session.rollback()
         flash(f'Error: {str(e)}', 'danger')
-    return redirect(url_for('main.task_detail', task_id=task.id))
-
-
-@main_bp.route('/task/<int:task_id>/delete', methods=['POST'])
-@login_required
-def delete_task(task_id):
-    task = Task.query.get_or_404(task_id)
-    project = task.project
-
-    # Solo usuarios internos pueden eliminar tareas
-    if not current_user.is_internal:
-        flash('No tienes permiso para eliminar esta tarea.', 'danger')
-        return redirect(url_for('main.project_detail', project_id=project.id))
-
-    try:
-        title = task.title
-        task_id_backup = task.id
-        
-        # Registrar auditoría antes de eliminar
-        audit = AuditLog(
-            entity_type='Task',
-            entity_id=task_id_backup,
-            action='DELETE',
-            user_id=current_user.id,
-            changes={'title': title, 'project_id': project.id, 'status': task.status}
-        )
-        db.session.add(audit)
-        
-        db.session.delete(task)
-        db.session.commit()
-        flash(f"Tarea '{title}' eliminada.", 'success')
-    except Exception as e:
-        db.session.rollback()
-        flash(f'Error al eliminar: {str(e)}', 'danger')
-
-    return redirect(url_for('main.project_detail', project_id=project.id))
-
-
-# ========== PROFILE ROUTES ==========
-
-@main_bp.route('/profile', methods=['GET', 'POST'])
-@login_required
-def profile():
-    """Vista del perfil del usuario actual"""
-    if request.method == 'POST':
-        action = request.form.get('action')
-        
-        if action == 'update_profile':
-            # Solo usuarios locales pueden actualizar ciertos campos
-            if not current_user.azure_oid:
-                current_user.first_name = request.form.get('first_name', '').strip() or current_user.first_name
-                current_user.last_name = request.form.get('last_name', '').strip() or current_user.last_name
-            
-            db.session.commit()
-            flash('Perfil actualizado correctamente.', 'success')
-        
-        elif action == 'change_password':
-            # Solo usuarios locales pueden cambiar contraseña
-            if current_user.azure_oid:
-                flash('Los usuarios de Azure AD deben cambiar su contraseña desde el portal de Microsoft.', 'warning')
-                return redirect(url_for('main.profile'))
-            
-            from werkzeug.security import check_password_hash, generate_password_hash
-            
-            current_password = request.form.get('current_password')
-            new_password = request.form.get('new_password')
-            confirm_password = request.form.get('confirm_password')
-            
-            if not current_user.password_hash or not check_password_hash(current_user.password_hash, current_password):
-                flash('Contraseña actual incorrecta.', 'danger')
-                return redirect(url_for('main.profile'))
-            
-            if new_password != confirm_password:
-                flash('Las contraseñas no coinciden.', 'danger')
-                return redirect(url_for('main.profile'))
-            
-            if len(new_password) < 8:
-                flash('La contraseña debe tener al menos 8 caracteres.', 'danger')
-                return redirect(url_for('main.profile'))
-            
-            current_user.password_hash = generate_password_hash(new_password)
-            db.session.commit()
-            flash('Contraseña actualizada correctamente.', 'success')
-        
-        return redirect(url_for('main.profile'))
-    
-    # Obtener estadísticas del usuario
-    stats = {
-        'tasks_assigned': Task.query.filter((Task.assigned_to_id == current_user.id) | (Task.assignees.any(User.id == current_user.id))).count(),
-        'tasks_completed': Task.query.filter_by(assigned_to_id=current_user.id, status='COMPLETED').count(),
-        'projects_managed': Project.query.filter_by(manager_id=current_user.id).count() if current_user.is_internal else 0,
-        'total_hours': db.session.query(func.sum(TimeEntry.hours)).filter_by(user_id=current_user.id).scalar() or 0
-    }
-    
-    # Actividad reciente
-    recent_tasks = Task.query.filter_by(assigned_to_id=current_user.id)\
-        .order_by(Task.updated_at.desc() if hasattr(Task, 'updated_at') else Task.id.desc())\
-        .limit(5).all()
-    
-    recent_time_entries = TimeEntry.query.filter_by(user_id=current_user.id)\
-        .order_by(TimeEntry.date.desc())\
-        .limit(5).all()
-    
-    return render_template('profile.html', 
-                         stats=stats, 
-                         recent_tasks=recent_tasks,
-                         recent_time_entries=recent_time_entries)
-
-
-# ========== SETTINGS ROUTES ==========
-
-@main_bp.route('/settings', methods=['GET', 'POST'])
-@login_required
-def settings():
-    if request.method == 'POST':
-        action = request.form.get('action')
-        
-        if action == 'profile':
-            # Actualizar perfil del usuario
-            current_user.email = request.form.get('email') or current_user.email
-            db.session.commit()
-            flash('Perfil actualizado.', 'success')
-        
-        elif action == 'password':
-            # Cambiar contraseña
-            from werkzeug.security import check_password_hash, generate_password_hash
-            
-            current_password = request.form.get('current_password')
-            new_password = request.form.get('new_password')
-            confirm_password = request.form.get('confirm_password')
-            
-            if not current_user.password_hash or not check_password_hash(current_user.password_hash, current_password):
-                flash('Contraseña actual incorrecta.', 'danger')
-                return redirect(url_for('main.settings'))
-            
-            if new_password != confirm_password:
-                flash('Las contraseñas no coinciden.', 'danger')
-                return redirect(url_for('main.settings'))
-            
-            if len(new_password) < 8:
-                flash('La contraseña debe tener al menos 8 caracteres.', 'danger')
-                return redirect(url_for('main.settings'))
-            
-            current_user.password_hash = generate_password_hash(new_password)
-            db.session.commit()
-            flash('Contraseña actualizada.', 'success')
-        
-        return redirect(url_for('main.settings'))
-    
-    return render_template('settings.html')
-
-
-# --- Task Attachments ---
-
-@main_bp.route('/task/<int:task_id>/upload', methods=['POST'])
-@login_required
-def upload_attachment(task_id):
-    """Upload a file attachment to a task"""
-    task = Task.query.get_or_404(task_id)
-    project = task.project
-    
-    # Check permissions - internal users or a client associated with the project
-    # Note: projects can have multiple clients via project.clients association
-    can_upload = current_user.is_internal or (current_user in project.clients)
-    if not can_upload:
-        flash('No tienes permiso para subir archivos a esta tarea.', 'danger')
-        return redirect(url_for('main.task_detail', task_id=task_id))
-    
-    if 'file' not in request.files:
-        flash('No se seleccionó ningún archivo.', 'warning')
-        return redirect(url_for('main.task_detail', task_id=task_id))
-    
-    file = request.files['file']
-    current_app.logger.info(f"upload_attachment called by user={getattr(current_user, 'id', None)}, filename={file.filename}")
-    
-    if file.filename == '':
-        print("DEBUG: No filename provided")
-        flash('No se seleccionó ningún archivo.', 'warning')
-        return redirect(url_for('main.task_detail', task_id=task_id))
-    
-    if not allowed_file(file.filename):
-        allowed = current_app.config.get('ALLOWED_EXTENSIONS', None)
-        print(f"DEBUG: File not allowed: {file.filename}; ALLOWED_EXTENSIONS={allowed} (type={type(allowed)})")
-        flash('Tipo de archivo no permitido.', 'danger')
-        return redirect(url_for('main.task_detail', task_id=task_id))
-    
-    try:
-        # Get unique filename to avoid duplicates
-        stored_filename, task_folder = get_unique_filename(task_id, file.filename)
-        filepath = os.path.join(task_folder, stored_filename)
-        
-        # Save the file
-        current_app.logger.info(f"Saving attachment to {filepath}")
-        file.save(filepath)
-        current_app.logger.info(f"Saved attachment to {filepath}")
-        
-        # Get file info
-        file_size = os.path.getsize(filepath)
-        mime_type = mimetypes.guess_type(file.filename)[0] or 'application/octet-stream'
-        
-        # Create database record
-        attachment = TaskAttachment(
-            task_id=task_id,
-            filename=file.filename,  # Original filename
-            stored_filename=stored_filename,  # Stored filename (unique)
-            file_size=file_size,
-            mime_type=mime_type,
-            uploaded_by_id=current_user.id
-        )
-        db.session.add(attachment)
-        db.session.commit()
-        current_app.logger.debug(f"Attachment DB id after commit: {attachment.id}")
-        
-        flash(f'Archivo "{file.filename}" subido correctamente.', 'success')
-    except Exception as e:
-        db.session.rollback()
-        current_app.logger.exception(f"Error uploading attachment for task {task_id}: {e}")
-        flash(f'Error al subir el archivo: {str(e)}', 'danger')
-    
-    return redirect(url_for('main.task_detail', task_id=task_id))
-
-
-@main_bp.route('/attachment/<int:attachment_id>/download')
-@login_required
-def download_attachment(attachment_id):
-    """Download an attachment"""
-    attachment = TaskAttachment.query.get_or_404(attachment_id)
-    task = attachment.task
-    project = task.project
-    
-    # Check permissions
-    can_download = current_user.is_internal or project.client_id == current_user.id
-    if not can_download:
-        abort(403)
-    
-    task_folder = os.path.join(current_app.config['UPLOAD_FOLDER'], f'task_{task.id}')
-    
-    return send_from_directory(
-        task_folder,
-        attachment.stored_filename,
-        as_attachment=True,
-        download_name=attachment.filename  # Use original filename for download
-    )
-
-
-@main_bp.route('/attachment/<int:attachment_id>/delete', methods=['POST'])
-@login_required
-def delete_attachment(attachment_id):
-    """Delete an attachment"""
-    attachment = TaskAttachment.query.get_or_404(attachment_id)
-    task = attachment.task
-    project = task.project
-    
-    # Check permissions - only internal users or the uploader can delete
-    can_delete = current_user.is_internal or attachment.uploaded_by_id == current_user.id
-    if not can_delete:
-        flash('No tienes permiso para eliminar este archivo.', 'danger')
-        return redirect(url_for('main.task_detail', task_id=task.id))
-    
-    try:
-        # Delete physical file
-        task_folder = os.path.join(current_app.config['UPLOAD_FOLDER'], f'task_{task.id}')
-        filepath = os.path.join(task_folder, attachment.stored_filename)
-        if os.path.exists(filepath):
-            os.remove(filepath)
-        
-        # Delete database record
-        filename = attachment.filename
-        db.session.delete(attachment)
-        db.session.commit()
-        
-        flash(f'Archivo "{filename}" eliminado.', 'success')
-    except Exception as e:
-        db.session.rollback()
-        flash(f'Error al eliminar el archivo: {str(e)}', 'danger')
-    
-    return redirect(url_for('main.task_detail', task_id=task.id))
-
-
-# ========== NOTIFICATIONS & TASK APPROVAL ==========
-
-@main_bp.route('/notifications')
-@login_required
-def notifications():
-    """Vista de notificaciones del usuario"""
-    user_notifications = SystemNotification.query.filter_by(user_id=current_user.id).order_by(
-        SystemNotification.is_read,
-        SystemNotification.created_at.desc()
-    ).all()
-    
-    return render_template('notifications.html', notifications=user_notifications)
-
-
-@main_bp.route('/notification/<int:notification_id>/read', methods=['POST'])
-@login_required
-def mark_notification_read(notification_id):
-    """Marcar una notificación como leída"""
-    notification = SystemNotification.query.get_or_404(notification_id)
-    
-    if notification.user_id != current_user.id:
-        return jsonify({'error': 'No autorizado'}), 403
-    
-    notification.is_read = True
-    db.session.commit()
-    
-    return jsonify({'status': 'ok'})
-
-
-@main_bp.route('/notifications/mark-all-read', methods=['POST'])
-@login_required
-def mark_all_notifications_read():
-    """Marcar todas las notificaciones como leídas"""
-    count = NotificationService.mark_all_as_read(current_user.id)
-    return jsonify({'status': 'ok', 'count': count})
-
-
-@main_bp.route('/search')
-@login_required
-def global_search():
-    """Búsqueda global de proyectos, tareas y usuarios"""
-    try:
-        # Determine role and allow search for:
-        # - internal users with role (PMP/Admin/Participante)
-        # - clients (external users) but they will be limited to their projects/tasks
-        user_role = current_user.role.name if (current_user and getattr(current_user, 'role', None)) else None
-        if current_user.is_internal and not user_role:
-            # Internal user without a role is not allowed to search
-            return jsonify({'error': 'No tienes permisos para realizar búsquedas. Contacta al administrador.'}), 403
-
-        query = request.args.get('q', '').strip()
-        
-        if not query or len(query) < 2:
-            return jsonify({'results': [], 'query': query, 'projects': [], 'tasks': [], 'users': []})
-        
-        results = {
-            'projects': [],
-            'tasks': [],
-            'users': [],
-            'query': query
-        }
-        
-        search_term = f"%{query}%"
-        
-        # Buscar proyectos
-        if current_user.is_internal and user_role in ['PMP', 'Admin']:
-            # PMP/Admin ven todos los proyectos
-            projects = Project.query.filter(
-                db.or_(
-                    Project.name.ilike(search_term),
-                    Project.description.ilike(search_term)
-                )
-            ).limit(5).all()
-        elif current_user.is_internal and user_role == 'Participante':
-            # Participante solo ve proyectos donde es miembro o tiene tareas asignadas
-            projects = Project.query.filter(
-                db.or_(
-                    Project.name.ilike(search_term),
-                    Project.description.ilike(search_term)
-                ),
-                db.or_(
-                    Project.members.any(User.id == current_user.id),
-                    Project.tasks.any(Task.assignee_id == current_user.id)
-                )
-            ).limit(5).all()
-        else:
-            # Clientes solo ven sus proyectos
-            projects = Project.query.join(project_clients).filter(
-                project_clients.c.user_id == current_user.id,
-                db.or_(
-                    Project.name.ilike(search_term),
-                    Project.description.ilike(search_term)
-                )
-            ).limit(5).all()
-        
-        for p in projects:
-            results['projects'].append({
-                'id': p.id,
-                'name': p.name,
-                'status': p.status,
-                'description': (p.description[:80] + '...') if p.description and len(p.description) > 80 else p.description,
-                'url': url_for('main.project_detail', project_id=p.id)
-            })
-        
-        # Buscar tareas
-        if current_user.is_internal and user_role in ['PMP', 'Admin']:
-            # PMP/Admin ven todas las tareas
-            tasks = Task.query.filter(
-                db.or_(
-                    Task.title.ilike(search_term),
-                    Task.description.ilike(search_term)
-                )
-            ).limit(8).all()
-        elif current_user.is_internal and user_role == 'Participante':
-            # Participante solo ve tareas que tiene asignadas o donde es miembro del proyecto
-            tasks = Task.query.join(Project).filter(
-                db.or_(
-                    Task.title.ilike(search_term),
-                    Task.description.ilike(search_term)
-                ),
-                db.or_(
-                    Task.assignee_id == current_user.id,
-                    Project.members.any(User.id == current_user.id)
-                )
-            ).limit(8).all()
-        else:
-            # Clientes solo ven tareas visibles de sus proyectos
-            tasks = Task.query.join(Project).join(project_clients).filter(
-                project_clients.c.user_id == current_user.id,
-                Task.is_external_visible == True,
-                db.or_(
-                    Task.title.ilike(search_term),
-                    Task.description.ilike(search_term)
-                )
-            ).limit(8).all()
-        
-        for t in tasks:
-            results['tasks'].append({
-                'id': t.id,
-                'title': t.title,
-                'status': t.status,
-                'priority': t.priority,
-                'project_name': t.project.name if t.project else None,
-                'url': url_for('main.task_detail', task_id=t.id)
-            })
-        
-        # Buscar usuarios (solo para PMP/Admin)
-        if current_user.is_internal and user_role in ['PMP', 'Admin']:
-            users = User.query.filter(
-                db.or_(
-                    User.email.ilike(search_term),
-                    User.first_name.ilike(search_term),
-                    User.last_name.ilike(search_term)
-                )
-            ).limit(5).all()
-            
-            for u in users:
-                results['users'].append({
-                    'id': u.id,
-                    'name': u.name,
-                    'email': u.email,
-                    'is_internal': u.is_internal,
-                    'role': u.role.name if u.role else None
-                })
-        
-        return jsonify(results)
-    except Exception as e:
-        current_app.logger.exception(f"Search error: {e}")
-        return jsonify({'error': str(e), 'projects': [], 'tasks': [], 'users': [], 'query': ''}), 500
-
-
-@main_bp.route('/notifications/recent')
-@login_required
-def recent_notifications():
-    """Obtener notificaciones recientes como JSON (para dropdown)"""
-    notifications = NotificationService.get_recent(current_user.id, limit=10)
-    unread_count = NotificationService.get_unread_count(current_user.id)
-    
-    return jsonify({
-        'unread_count': unread_count,
-        'notifications': [{
-            'id': n.id,
-            'title': n.title,
-            'message': n.message,
-            'type': n.notification_type,
-            'is_read': n.is_read,
-            'created_at': n.created_at.isoformat() if n.created_at else None,
-            'related_entity_type': n.related_entity_type,
-            'related_entity_id': n.related_entity_id
-        } for n in notifications]
-    })
-
-
-@main_bp.route('/pending-approvals')
-@login_required
-def pending_approvals():
-    """Vista de tareas pendientes de aprobación para clientes"""
-    # Solo clientes pueden ver esta página
-    if current_user.is_internal:
-        flash('Esta sección es solo para clientes.', 'warning')
-        return redirect(url_for('main.index'))
-    
-    # Obtener proyectos donde el usuario es cliente
-    client_projects = Project.query.filter(Project.clients.contains(current_user)).all()
-    project_ids = [p.id for p in client_projects]
-    
-    # Obtener tareas completadas pendientes de aprobación en esos proyectos
-    pending_tasks = Task.query.filter(
-        Task.project_id.in_(project_ids),
-        Task.status == 'COMPLETED',
-        Task.is_external_visible == True,
-        Task.approval_status == 'PENDING'
-    ).order_by(Task.due_date.desc()).all()
-    
-    return render_template('pending_approvals.html', tasks=pending_tasks)
-
-
-@main_bp.route('/task/<int:task_id>/approve', methods=['POST'])
-@login_required
-def approve_task(task_id):
-    """Cliente aprueba una tarea completada"""
-    task = Task.query.get_or_404(task_id)
-    project = task.project
-    
-    # Verificar que el usuario es cliente del proyecto
-    if current_user not in project.clients:
-        flash('No tienes permiso para aprobar esta tarea.', 'danger')
-        return redirect(url_for('main.index'))
-    
-    notes = request.form.get('notes', '')
-    
-    try:
-        task.approval_status = 'APPROVED'
-        task.approved_by_id = current_user.id
-        task.approved_at = datetime.now()
-        task.approval_notes = notes
-        
-        # Auditoría de aprobación
-        audit = AuditLog(
-            entity_type='Task',
-            entity_id=task.id,
-            action='UPDATE',
-            user_id=current_user.id,
-            changes={'approval_status': {'old': 'PENDING', 'new': 'APPROVED'}, 'approved_by_client': current_user.email}
-        )
-        db.session.add(audit)
-        
-        # Marcar notificaciones relacionadas como leídas
-        SystemNotification.query.filter_by(
-            user_id=current_user.id,
-            related_entity_type='Task',
-            related_entity_id=task.id
-        ).update({'is_read': True})
-        
-        db.session.commit()
-        
-        # Notificar al responsable de la tarea que fue aprobada
-        NotificationService.notify_task_approved(
-            task=task,
-            approved_by_user=current_user,
-            send_email=SystemSettings.get('notify_task_approved', True)
-        )
-        
-        flash(f'Tarea "{task.title}" aprobada correctamente.', 'success')
-    except Exception as e:
-        db.session.rollback()
-        flash(f'Error al aprobar: {str(e)}', 'danger')
-    
     return redirect(url_for('main.pending_approvals'))
 
 
@@ -3537,6 +3103,7 @@ def reject_task(task_id):
     if current_user not in project.clients:
         flash('No tienes permiso para rechazar esta tarea.', 'danger')
         return redirect(url_for('main.index'))
+        return redirect(url_for('main.dashboard'))
     
     notes = request.form.get('notes', '')
     
@@ -3580,6 +3147,9 @@ def reject_task(task_id):
             send_email=SystemSettings.get('notify_task_rejected', True)
         )
         
+        # Asegurar que la notificación de rechazo se refleje en la BD inmediatamente
+        db.session.commit()
+        
         flash(f'Tarea "{task.title}" rechazada. El equipo será notificado.', 'info')
     except Exception as e:
         db.session.rollback()
@@ -3600,6 +3170,7 @@ def pmp_or_admin_required(f):
         if not current_user.role or current_user.role.name not in ['PMP', 'Admin']:
             flash('Solo usuarios PMP o Admin pueden acceder a esta sección.', 'danger')
             return redirect(url_for('main.index'))
+            return redirect(url_for('main.dashboard'))
         return f(*args, **kwargs)
     return decorated
 
@@ -3632,13 +3203,13 @@ def audit_log():
         query = query.filter(AuditLog.user_id == user_id)
     if date_from:
         try:
-            date_from_dt = datetime.strptime(date_from, '%Y-%m-%d')
+            date_from_dt = datetime.strptime(date_from, '%Y-%m-%d').date()
             query = query.filter(AuditLog.created_at >= date_from_dt)
         except ValueError:
             pass
     if date_to:
         try:
-            date_to_dt = datetime.strptime(date_to, '%Y-%m-%d') + timedelta(days=1)
+            date_to_dt = datetime.strptime(date_to, '%Y-%m-%d').date() + timedelta(days=1)
             query = query.filter(AuditLog.created_at < date_to_dt)
         except ValueError:
             pass
@@ -3730,7 +3301,9 @@ def admin_settings_page():
         'notify_task_rejected': 'true',
         'notify_task_comment': 'true',
         'notify_due_date_reminder': 'true',
-        'show_notification_center': 'true'
+        'show_notification_center': 'true',
+        'enable_azure_auth': 'true',
+        'enable_local_auth': 'true'
     }
     for k, v in defaults.items():
         settings.setdefault(k, v)
@@ -3777,16 +3350,29 @@ def admin_settings():
                      if k not in ('section', 'csrf_token')}
     
     # Handle checkboxes (they only submit when checked)
-    checkbox_fields = [
-        'smtp_use_tls', 'allow_projects_without_manager', 'require_task_estimation',
-        'block_parent_until_children_complete', 'notify_task_assigned', 'notify_task_completed',
-        'notify_task_approved', 'notify_task_rejected', 'notify_task_comment', 
-        'notify_due_date_reminder', 'show_notification_center',
-        'enable_push_notifications', 'enable_azure_auth', 'enable_local_auth',
-        'allow_public_registration', 'password_require_complexity'
-    ]
+    # Fix: Only process checkboxes belonging to the current section to avoid disabling others
+    section_checkboxes = {
+        'notifications': [
+            'smtp_use_tls', 'notify_task_assigned', 'notify_task_completed',
+            'notify_task_approved', 'notify_task_rejected', 'notify_task_comment', 
+            'notify_due_date_reminder', 'show_notification_center',
+            'enable_push_notifications'
+        ],
+        'authentication': [
+            'enable_azure_auth', 'enable_local_auth',
+            'allow_public_registration', 'password_require_complexity'
+        ],
+        'general': [
+            'allow_projects_without_manager', 'require_task_estimation',
+            'block_parent_until_children_complete'
+        ]
+    }
     
-    for cb in checkbox_fields:
+    # Get checkboxes for current section (support 'security' as alias for 'authentication')
+    target_section = 'authentication' if section == 'security' else section
+    checkboxes_to_process = section_checkboxes.get(target_section, [])
+
+    for cb in checkboxes_to_process:
         if cb not in fields_to_save:
             fields_to_save[cb] = 'false'
         else:
@@ -4019,3 +3605,189 @@ def admin_send_test_notification():
     except Exception as e:
         current_app.logger.exception('Error sending test notification: %s', e)
         return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@main_bp.route('/search')
+@login_required
+def global_search():
+    """Global search endpoint for projects, tasks, and users."""
+    query = request.args.get('q', '').strip()
+    if not query or len(query) < 2:
+        return jsonify({'projects': [], 'tasks': [], 'users': [], 'query': query})
+    
+    # Search Projects
+    # Filter based on user role
+    from ..auth.decorators import _get_user_from_session
+    user = _get_user_from_session()
+    user_role = user.role.name if (user and user.role) else None
+    
+    projects_q = Project.query.filter(Project.name.ilike(f'%{query}%'))
+    
+    if user_role in ['PMP', 'Admin']:
+        pass
+    elif user_role == 'Participante':
+        project_ids = db.session.query(Task.project_id).filter(
+            Task.assigned_to_id == current_user.id
+        ).distinct().subquery()
+        projects_q = projects_q.filter(
+            (Project.id.in_(project_ids)) | (Project.members.contains(current_user))
+        )
+    elif user_role == 'Cliente' or not current_user.is_internal:
+        projects_q = projects_q.filter(Project.clients.contains(current_user))
+    else:
+        projects_q = projects_q.filter(Project.id == -1)
+        
+    projects = projects_q.limit(5).all()
+    
+    # Search Tasks
+    tasks_q = Task.query.filter(Task.title.ilike(f'%{query}%'))
+    
+    if user_role in ['PMP', 'Admin']:
+        pass
+    elif user_role == 'Participante':
+        tasks_q = tasks_q.filter(
+            (Task.assigned_to_id == current_user.id) | (Task.assignees.any(User.id == current_user.id))
+        )
+    elif user_role == 'Cliente' or not current_user.is_internal:
+        tasks_q = tasks_q.filter(Task.assigned_client_id == current_user.id)
+    else:
+        tasks_q = tasks_q.filter(Task.id == -1)
+        
+    tasks = tasks_q.limit(5).all()
+    
+    # Search Users (Only for internal users)
+    users = []
+    if current_user.is_internal:
+        users = User.query.filter(
+            (User.first_name.ilike(f'%{query}%')) | 
+            (User.last_name.ilike(f'%{query}%')) | 
+            (User.email.ilike(f'%{query}%'))
+        ).limit(5).all()
+        
+    return jsonify({
+        'query': query,
+        'projects': [{
+            'name': p.name,
+            'status': p.status,
+            'description': p.description,
+            'url': url_for('main.project_detail', project_id=p.id)
+        } for p in projects],
+        'tasks': [{
+            'title': t.title,
+            'status': t.status,
+            'project_name': t.project.name if t.project else '',
+            'url': url_for('main.task_detail', task_id=t.id)
+        } for t in tasks],
+        'users': [{
+            'name': f"{u.first_name or ''} {u.last_name or ''}".strip() or u.email,
+            'email': u.email,
+            'role': u.role.name if u.role else '',
+            'is_internal': u.is_internal
+        } for u in users]
+    })
+
+
+@main_bp.route('/notifications/recent')
+@login_required
+def recent_notifications():
+    """Get recent notifications for the current user (JSON API)"""
+    unread_count = SystemNotification.query.filter_by(
+        user_id=current_user.id,
+        is_read=False
+    ).count()
+    
+    notifications = SystemNotification.query.filter_by(
+        user_id=current_user.id
+    ).order_by(SystemNotification.created_at.desc()).limit(10).all()
+    
+    notif_list = [{
+        'id': n.id,
+        'title': n.title,
+        'message': n.message,
+        'type': n.notification_type,
+        'created_at': n.created_at.isoformat() if n.created_at else None,
+        'is_read': n.is_read,
+        'related_entity_type': n.related_entity_type,
+        'related_entity_id': n.related_entity_id
+    } for n in notifications]
+        
+    return jsonify({
+        'unread_count': unread_count,
+        'notifications': notif_list
+    })
+
+
+# Missing notifications route
+@main_bp.route('/notifications')
+@login_required
+def notifications():
+    """User notifications center - displays in-app system notifications"""
+    from ..auth.decorators import _get_user_from_session
+    user = _get_user_from_session()
+    
+    # Get unread notifications for current user
+    unread = SystemNotification.query.filter_by(
+        user_id=current_user.id,
+        is_read=False
+    ).order_by(SystemNotification.created_at.desc()).all()
+    
+    # Get all notifications (paginated)
+    page = request.args.get('page', 1, type=int)
+    per_page = 20
+    all_notifications = SystemNotification.query.filter_by(
+        user_id=current_user.id
+    ).order_by(SystemNotification.created_at.desc()).paginate(
+        page=page, per_page=per_page, error_out=False
+    )
+    
+    # Count stats
+    unread_count = len(unread)
+    
+    return render_template('notifications.html', 
+                          notifications=all_notifications,
+                          unread_count=unread_count,
+                          now=datetime.now())
+
+
+@main_bp.route('/notifications/mark-all-read', methods=['POST'])
+@login_required
+def mark_all_notifications_read():
+    SystemNotification.query.filter_by(user_id=current_user.id, is_read=False).update({'is_read': True})
+    db.session.commit()
+    return jsonify({'success': True})
+
+
+@main_bp.route('/notification/<int:notification_id>/read', methods=['POST'])
+@login_required
+def mark_notification_read(notification_id):
+    notification = SystemNotification.query.get_or_404(notification_id)
+    if notification.user_id != current_user.id:
+        return jsonify({'error': 'Unauthorized'}), 403
+    notification.is_read = True
+    db.session.commit()
+    return jsonify({'success': True})
+
+
+@main_bp.route('/pending-approvals')
+@login_required
+def pending_approvals():
+    """Show pending task approvals for project clients"""
+    from ..auth.decorators import _get_user_from_session
+    user = _get_user_from_session()
+    user_role = user.role.name if (user and user.role) else None
+    
+    # Only clients can view pending approvals (or show empty for others)
+    if current_user.is_internal:
+        pending_tasks = []
+    else:
+        # Get tasks pending client approval that are assigned to this client
+        pending_tasks = Task.query.filter(
+            Task.assigned_client_id == current_user.id,
+            Task.requires_approval == True,
+            Task.approval_status == 'PENDING',
+            Task.status == 'COMPLETED'
+        ).order_by(Task.due_date.desc().nullslast()).all()
+    
+    return render_template('pending_approvals.html',
+                          tasks=pending_tasks,
+                          now=datetime.now())

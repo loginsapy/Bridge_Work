@@ -14,13 +14,11 @@ class Config:
     ALERT_MONITOR_FAILURE_THRESHOLD = int(os.environ.get('ALERT_MONITOR_FAILURE_THRESHOLD', '5'))
     ALERT_MONITOR_WINDOW_HOURS = int(os.environ.get('ALERT_MONITOR_WINDOW_HOURS', '1'))
 
-    # Azure / MSAL settings
+    # Azure / MSAL settings - ASEGÚRATE QUE ESTÉN CONFIGURADAS
     AZURE_CLIENT_ID = os.environ.get('AZURE_CLIENT_ID')
     AZURE_CLIENT_SECRET = os.environ.get('AZURE_CLIENT_SECRET')
-    AZURE_AUTHORITY = os.environ.get('AZURE_AUTHORITY')  # e.g. https://login.microsoftonline.com/<tenant>
-    AZURE_SCOPES = os.environ.get('AZURE_SCOPES', 'openid profile email').split()
-    # Fallback scopes to use when tenant rejects reserved scope names (e.g., 'openid'/'profile')
-    AZURE_FALLBACK_SCOPES = os.environ.get('AZURE_FALLBACK_SCOPES', 'User.Read').split()
+    AZURE_AUTHORITY = os.environ.get('AZURE_AUTHORITY', 'https://login.microsoftonline.com/common')
+    AZURE_SCOPES = ['User.Read']  # Scopes needed
 
 
 class DevConfig(Config):

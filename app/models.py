@@ -116,6 +116,7 @@ class Task(db.Model):
     priority = db.Column(db.String(16), nullable=False, default='MEDIUM')
     start_date = db.Column(db.DateTime, nullable=True)
     due_date = db.Column(db.DateTime, nullable=True)
+    completed_at = db.Column(db.DateTime, nullable=True)
     is_external_visible = db.Column(db.Boolean, default=False, index=True)
     is_internal_only = db.Column(db.Boolean, default=False, index=True)  # Solo visible para PMP/Admin
     estimated_hours = db.Column(db.Numeric, nullable=True)
@@ -156,6 +157,17 @@ class Task(db.Model):
         backref=db.backref('successors', lazy='select'),
         lazy='select'
     )
+
+    @property
+    def days_late(self):
+        """Calculate days late using completion_date if available, else due_date"""
+        if not self.due_date:
+            return 0
+        
+        # Use completed_at if task is completed, otherwise use today's date
+        reference_date = self.completed_at if self.completed_at else datetime.utcnow()
+        days = (reference_date.date() - self.due_date.date()).days
+        return max(0, days)  # Don't show negative delays
 
     def reachable_to(self, target_task_id, visited=None):
         """Return True if there is a path from self to task with id target_task_id via successors."""
@@ -310,6 +322,12 @@ class Task(db.Model):
     def set_status(self, new_status: str):
         """Set task status normalizing legacy values."""
         self.status = Task.normalize_status(new_status)
+        
+        # Update completed_at timestamp
+        if self.status == 'COMPLETED':
+            self.completed_at = datetime.now()
+        elif self.status != 'COMPLETED':
+            self.completed_at = None
     
     def is_blocked(self):
         """Check if task is blocked by incomplete predecessors.
@@ -575,4 +593,3 @@ class HourlyRate(db.Model):
     def get_default():
         """Obtiene la tarifa por defecto"""
         return HourlyRate.query.filter_by(is_default=True, is_active=True).first()
-

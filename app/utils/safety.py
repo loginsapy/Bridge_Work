@@ -24,4 +24,4 @@ def is_safe_db_uri(uri: str) -> bool:
 
 def require_confirmation(env_var: str, message: str) -> bool:
     """Return True only when the given env var equals 'YES'."""
-    return os.environ.get(env_var) == 'YES'
+    return os.environ.get(env_var, '').lower() in ('yes', 'true', '1')

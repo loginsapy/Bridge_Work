@@ -40,6 +40,14 @@
   z-index: 10;
   cursor: pointer;
   user-select: none;
+  white-space: nowrap;
+}
+
+/* Permitir que la columna de la tarea se ajuste y tenga un ancho mínimo */
+.board-table th:nth-child(3),
+.board-table td:nth-child(3) {
+    white-space: normal;
+    word-break: break-word;
 }
 
 .board-table th:hover {
@@ -50,6 +58,7 @@
   padding: 0;
   border-bottom: 1px solid var(--monday-border);
   vertical-align: middle;
+  white-space: nowrap;
 }
 
 .board-table tr:hover {
@@ -79,16 +88,18 @@
   color: var(--monday-dark);
 }
 
-.cell-title input {
+.cell-title .task-title-input {
   border: none;
   background: transparent;
   font-size: 14px;
   font-weight: 500;
   width: 100%;
   padding: 4px;
+  line-height: 1.4;
+  cursor: text;
 }
 
-.cell-title input:focus {
+.cell-title .task-title-input[contenteditable="true"]:focus {
   outline: 2px solid var(--monday-blue);
   border-radius: 4px;
   background: white;
@@ -674,6 +685,12 @@ tr.table-warning:hover {
   </nav>
 </div>
 
+<div class="alert alert-warning alert-dismissible fade show mb-3" role="alert">
+  <i class="fa-solid fa-calendar-check me-2"></i>
+  <strong>Pendiente:</strong> Reunión con el equipo de desarrollo (avisará Negofin Sebastian).
+  <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+</div>
+
 <!-- Toolbar Monday-style -->
 <div class="board-toolbar mb-3">
   <div class="toolbar-left">
@@ -790,19 +807,19 @@ tr.table-warning:hover {
   </div>
 
   <div class="table-responsive">
-    <table class="board-table" id="boardTable">
+    <table class="board-table table-auto-columns" id="boardTable">
       <thead>
         <tr>
           <th class="row-checkbox">{% if current_user.is_internal %}<input type="checkbox" id="selectAll">{% endif %}</th>
           <th class="row-grip"></th>
-          <th style="min-width:280px">Tarea</th>
-          <th style="min-width:130px">Estado</th>
-          <th style="min-width:130px">Prioridad</th>
-          <th style="min-width:160px">Asignado</th>
-          <th style="min-width:110px">Inicio</th>
-          <th style="min-width:110px">Vencimiento</th>
-          <th style="min-width:80px">Horas Est.</th>
-          <th style="width:120px; text-align:center">Acciones</th>
+          <th style="min-width: 340px;">Tarea</th>
+          <th>Estado</th>
+          <th>Prioridad</th>
+          <th>Asignado</th>
+          <th>Inicio</th>
+          <th>Vencimiento</th>
+          <th>Horas</th>
+          <th></th>
         </tr>
       </thead>
       <tbody id="tasksBody">
@@ -830,9 +847,10 @@ tr.table-warning:hover {
                   <span class="toggle-placeholder" style="display:inline-block;width:20px;"></span>
                 {% endif %}
                 {% if current_user.is_internal %}
-                <input type="text" value="{{ task.title }}" onblur="updateTask({{ task.id }}, 'title', this.value)" onkeypress="if(event.key==='Enter')this.blur()">
+                <div class="task-title-input" contenteditable="true" 
+                     onblur="updateTask({{ task.id }}, 'title', this.innerText)">{{ task.title }}</div>
                 {% else %}
-                <span class="fw-medium">{{ task.title }}</span>
+                <div class="task-title-input">{{ task.title }}</div>
                 {% endif %}
                 {% if task.is_internal_only %}
                 <span class="badge bg-secondary ms-2" title="Solo visible para PMP/Admin"><i class="fa-solid fa-lock fa-xs"></i></span>
@@ -945,6 +963,9 @@ tr.table-warning:hover {
             <td>
               <div class="cell task-actions-visible">
                 <a href="{{ url_for('main.task_detail', task_id=task.id) }}" class="action-btn-visible" title="Ver detalles"><i class="fa-solid fa-eye"></i></a>
+                {% if current_user.is_internal or (task.assigned_client_id == current_user.id) %}
+                <a href="{{ url_for('main.edit_task', task_id=task.id) }}" class="action-btn-visible" title="Editar"><i class="fa-solid fa-pen"></i></a>
+                {% endif %}
                 {% if current_user.is_internal %}
                 <a href="{{ url_for('main.edit_task', task_id=task.id) }}" class="action-btn-visible" title="Editar"><i class="fa-solid fa-pen"></i></a>
                 <button class="action-btn-visible delete" onclick="event.stopPropagation(); deleteTask({{ task.id }})" title="Eliminar"><i class="fa-solid fa-trash"></i></button>

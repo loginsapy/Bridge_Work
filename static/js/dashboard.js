@@ -255,8 +255,14 @@ function initSidebarToggle() {
   const sidebar = document.getElementById('sidebar-wrapper');
 
   if (sidebarToggle && sidebar) {
-    sidebarToggle.addEventListener('click', function () {
-      sidebar.classList.toggle('show');
+    sidebarToggle.addEventListener('click', function (e) {
+      e.preventDefault();
+      if (window.innerWidth >= 992) {
+        document.body.classList.toggle('sb-sidenav-toggled');
+        localStorage.setItem('sb|sidebar-toggle', document.body.classList.contains('sb-sidenav-toggled'));
+      } else {
+        sidebar.classList.toggle('show');
+      }
     });
 
     // Close sidebar when clicking outside on mobile

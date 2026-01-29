@@ -65,7 +65,7 @@
   background: white;
   border-radius: 12px;
   box-shadow: 0 2px 8px rgba(0,0,0,0.06);
-  overflow: hidden;
+  overflow-x: auto;
 }
 
 .monday-table {
@@ -92,6 +92,7 @@
   padding: 12px 16px;
   border-bottom: 1px solid var(--monday-grey-lighter);
   font-size: 14px;
+  white-space: nowrap;
 }
 
 .monday-table td:first-child {
@@ -441,14 +442,14 @@ tr:hover .actions-cell {
     <table class="monday-table">
       <thead>
         <tr>
-          <th style="min-width: 250px;">{{ _('project') }}</th>
-          <th style="min-width: 120px;">{{ _('status') }}</th>
-          <th style="min-width: 150px;">{{ _('progress') }}</th>
-          <th style="min-width: 120px;">Responsable</th>
-          <th style="min-width: 100px;">{{ _('client') }}</th>
-          <th style="min-width: 120px;">{{ _('hours') }}</th>
-          <th style="min-width: 140px;">{{ _('due_date') }}</th>
-          <th style="width: 80px;"></th>
+          <th>{{ _('project') }}</th>
+          <th>{{ _('status') }}</th>
+          <th>{{ _('progress') }}</th>
+          <th>Responsable</th>
+          <th>{{ _('client') }}</th>
+          <th>{{ _('hours') }}</th>
+          <th>{{ _('due_date') }}</th>
+          <th></th>
         </tr>
       </thead>
       <tbody>
@@ -682,9 +683,10 @@ tr:hover .actions-cell {
             </div>
             <div class="col-12">
               <label class="form-label fw-semibold">
-                <i class="fa-solid fa-user-tie me-1"></i>{{ _('clients') if sys_language == 'en' else 'Clientes Asignados' }}
+                <i class="fa-solid fa-user-tie me-1"></i>Clientes Asociados (opcional)
               </label>
-              <select name="client_ids" class="form-select" multiple size="4">
+              <select name="client_ids" class="form-select">
+                <option value="">-- Seleccionar Cliente --</option>
                 {% for client in available_clients %}
                 <option value="{{ client.id }}">
                   {{ client.first_name or client.email }} {{ client.last_name or '' }}
@@ -692,7 +694,19 @@ tr:hover .actions-cell {
                 </option>
                 {% endfor %}
               </select>
-              <small class="text-muted">Mantén presionado Ctrl/Cmd para seleccionar múltiples clientes</small>
+            </div>
+            <div class="col-12">
+              <label class="form-label fw-semibold">
+                <i class="fa-solid fa-users me-1"></i>Asignados (Internos) — Múltiples
+              </label>
+              <select name="member_ids" class="form-select" multiple>
+                {% for member in available_members %}
+                <option value="{{ member.id }}">
+                  {{ member.first_name or member.email }}
+                </option>
+                {% endfor %}
+              </select>
+              <small class="text-muted">Mantén presionado Ctrl/Cmd para seleccionar múltiples usuarios</small>
             </div>
           </div>
         </div>

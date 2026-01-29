@@ -1,70 +1,199 @@
-<div id="sidebar-wrapper">
+<style>
+  #sidebar-wrapper {
+    min-height: 100vh;
+    width: 250px;
+    position: fixed;
+    top: 0;
+    left: 0;
+    overflow-y: auto;
+    z-index: 1000;
+    transition: width 0.25s ease;
+  }
 
-  <!-- Main Navigation -->
+  #page-content-wrapper {
+    margin-left: 250px;
+    width: auto !important; /* Override w-100 to prevent overflow */
+    transition: margin-left 0.25s ease;
+  }
+
+  /* Collapsed state */
+  body.sb-sidenav-toggled #sidebar-wrapper {
+    width: 70px;
+  }
+
+  body.sb-sidenav-toggled #page-content-wrapper {
+    margin-left: 70px;
+  }
+
+  body.sb-sidenav-toggled #sidebar-wrapper .sidebar-link span,
+  body.sb-sidenav-toggled #sidebar-wrapper .sidebar-brand,
+  body.sb-sidenav-toggled #sidebar-wrapper .sidebar-divider {
+    display: none;
+  }
+
+  body.sb-sidenav-toggled #sidebar-wrapper .sidebar-link {
+    text-align: center;
+    padding: 1rem 0;
+  }
+
+  body.sb-sidenav-toggled #sidebar-wrapper .sidebar-link i {
+    margin: 0;
+    font-size: 1.2rem;
+  }
+
+  /* Toggle button positioning */
+  #sidebarToggleInternal {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    z-index: 1001;
+    transition: right 0.25s ease;
+  }
+
+  body.sb-sidenav-toggled #sidebarToggleInternal {
+    right: 50%;
+    transform: translateX(50%);
+  }
+
+  body.sb-sidenav-toggled #sidebarToggleInternal i {
+    transform: rotate(180deg);
+  }
+
+  /* Expand sidebar on hover when collapsed */
+  body.sb-sidenav-toggled #sidebar-wrapper:hover {
+    width: 250px;
+    box-shadow: 5px 0 15px rgba(0,0,0,0.1);
+  }
+
+  body.sb-sidenav-toggled #sidebar-wrapper:hover .sidebar-link span {
+    display: inline;
+  }
+
+  body.sb-sidenav-toggled #sidebar-wrapper:hover .sidebar-brand {
+    display: flex;
+  }
+
+  body.sb-sidenav-toggled #sidebar-wrapper:hover .sidebar-divider {
+    display: block;
+  }
+
+  body.sb-sidenav-toggled #sidebar-wrapper:hover .sidebar-link {
+    text-align: left;
+    padding: 0.75rem 1rem;
+  }
+
+  body.sb-sidenav-toggled #sidebar-wrapper:hover .sidebar-link i {
+    margin-right: 0.5rem;
+    font-size: 1rem;
+  }
+
+  body.sb-sidenav-toggled #sidebar-wrapper:hover #sidebarToggleInternal {
+    right: 10px;
+    transform: none;
+  }
+
+  body.sb-sidenav-toggled #sidebar-wrapper:hover #sidebarToggleInternal i {
+    transform: rotate(0deg);
+  }
+</style>
+
+<aside class="sidebar bg-dark text-white py-4" id="sidebar-wrapper">
+  <!-- Toggle Button (Outside Sidebar Content) -->
+  <button class="btn btn-light shadow-sm" id="sidebarToggleInternal">
+    <i class="fa-solid fa-chevron-left"></i>
+  </button>
+
+  <div class="sidebar-brand d-flex justify-content-between align-items-center px-3 mb-3">
+    <div class="d-flex align-items-center gap-2 brand-text">
+
+    </div>
+  </div>
   <div class="sidebar-nav">
-    <a href="/" class="sidebar-link {{ 'active' if request.path == '/' }}">
+    <!-- Dashboard -->
+    <a href="{{ url_for('main.dashboard') }}" class="sidebar-link {% if request.endpoint == 'main.dashboard' %}active{% endif %}">
       <i class="fa-solid fa-house"></i>
       <span>{{ _('dashboard') }}</span>
     </a>
-    <a href="/projects" class="sidebar-link {{ 'active' if request.path.startswith('/project') }}">
+    
+    <!-- Projects -->
+    <a href="{{ url_for('main.projects') }}" class="sidebar-link {% if request.endpoint in ['main.projects', 'main.project_detail'] %}active{% endif %}">
       <i class="fa-solid fa-table-cells-large"></i>
       <span>{{ _('projects') }}</span>
     </a>
-    <a href="/tasks" class="sidebar-link {{ 'active' if request.path.startswith('/task') }}">
+    
+    <!-- Tasks -->
+    <a href="{{ url_for('main.tasks') }}" class="sidebar-link {% if request.endpoint in ['main.tasks', 'main.task_detail'] %}active{% endif %}">
       <i class="fa-solid fa-circle-check"></i>
       <span>{{ _('tasks') }}</span>
     </a>
-    <a href="/time" class="sidebar-link {{ 'active' if request.path.startswith('/time') }}">
+    
+    <!-- Time Entries -->
+    <a href="{{ url_for('main.time_entries') }}" class="sidebar-link {% if request.endpoint in ['main.time_entries', 'main.create_time_entry'] %}active{% endif %}">
       <i class="fa-regular fa-clock"></i>
       <span>{{ _('time_entries') }}</span>
     </a>
     
-    {% if current_user.is_authenticated and current_user.is_internal and current_user.role and current_user.role.name in ('PMP', 'Admin') %}
+    <!-- Admin Links (PMP/Admin only) -->
+    {% if current_user.is_internal and current_user.role and current_user.role.name in ['PMP', 'Admin'] %}
     <div class="sidebar-divider"></div>
-    
-    <a href="/team" class="sidebar-link {{ 'active' if request.path.startswith('/team') }}">
+    <a href="{{ url_for('main.team') }}" class="sidebar-link {% if request.endpoint == 'main.team' %}active{% endif %}">
       <i class="fa-solid fa-user-group"></i>
       <span>{{ _('team') }}</span>
     </a>
-    <a href="/clients" class="sidebar-link {{ 'active' if request.path.startswith('/client') }}">
+    <a href="{{ url_for('main.clients') }}" class="sidebar-link {% if request.endpoint == 'main.clients' %}active{% endif %}">
       <i class="fa-solid fa-building"></i>
       <span>{{ _('clients') }}</span>
     </a>
-    <a href="/reports" class="sidebar-link {{ 'active' if request.path.startswith('/report') }}">
+    <a href="{{ url_for('main.reports') }}" class="sidebar-link {% if request.endpoint == 'main.reports' %}active{% endif %}">
       <i class="fa-solid fa-chart-simple"></i>
       <span>{{ _('reports') }}</span>
     </a>
-    <a href="/audit" class="sidebar-link {{ 'active' if request.path.startswith('/audit') }}">
+    <a href="{{ url_for('main.audit_log') }}" class="sidebar-link {% if request.endpoint == 'main.audit_log' %}active{% endif %}">
       <i class="fa-solid fa-clipboard-list"></i>
-      <span>Auditoría</span>
+      <span>{{ _('audit') }}</span>
     </a>
     
     <div class="sidebar-divider"></div>
-    {% endif %}
     
-    <a href="/notifications" class="sidebar-link {{ 'active' if request.path.startswith('/notification') }}">
+    <a href="{{ url_for('main.notifications') }}" class="sidebar-link {% if request.endpoint == 'main.notifications' %}active{% endif %}">
       <i class="fa-regular fa-bell"></i>
       <span>{{ _('notifications') }}</span>
-      {% if unread_notifications_count %}
-        <span class="sidebar-badge">{{ unread_notifications_count }}</span>
-      {% endif %}
     </a>
-    {% if current_user.is_authenticated and not current_user.is_internal %}
-    <a href="/pending-approvals" class="sidebar-link {{ 'active' if request.path.startswith('/pending-approval') }}">
-      <i class="fa-solid fa-clipboard-check"></i>
-      <span>{{ _('pending') }}</span>
-      {% if pending_approvals_count %}
-        <span class="sidebar-badge warning">{{ pending_approvals_count }}</span>
-      {% endif %}
-    </a>
-    {% endif %}
     
-    {% if current_user.is_authenticated and current_user.is_internal and current_user.role and current_user.role.name == 'Admin' %}
+    <!-- Admin Dashboard -->
     <div class="sidebar-divider"></div>
-    <a href="{{ safe_url_for('main.admin_settings_page') }}" class="sidebar-link {{ 'active' if request.path.startswith('/admin') }}">
+    <a href="{{ url_for('main.admin_settings_page') }}" class="sidebar-link {% if 'admin' in request.endpoint %}active{% endif %}">
       <i class="fa-solid fa-gear"></i>
-      <span>{{ _('settings') }}</span>
+      <span>{{ _('administration') }}</span>
     </a>
     {% endif %}
   </div>
-</div>
+</aside>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Toggle button logic
+    const toggle = document.getElementById('sidebarToggleInternal');
+    if (toggle) {
+        toggle.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation(); // Prevent bubbling
+            document.body.classList.toggle('sb-sidenav-toggled');
+            // Save state
+            localStorage.setItem('sb|sidebar-toggle', document.body.classList.contains('sb-sidenav-toggled'));
+        });
+    }
+    
+    // Restore state
+    if (localStorage.getItem('sb|sidebar-toggle') === 'true') {
+        document.body.classList.add('sb-sidenav-toggled');
+    }
+});
+</script>

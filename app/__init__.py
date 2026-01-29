@@ -201,6 +201,9 @@ def create_app(config_object="config.DevConfig"):
                 # Catch BuildError and other url_for related RuntimeErrors (e.g., no SERVER_NAME in non-request contexts)
                 app.logger.warning('safe_url_for: could not build endpoint %s: %s', endpoint, e)
                 return '#'
+
+        if current_user.is_authenticated:
+            try:
                 context['unread_notifications_count'] = SystemNotification.query.filter_by(
                     user_id=current_user.id, 
                     is_read=False
@@ -234,7 +237,8 @@ def create_app(config_object="config.DevConfig"):
                 context['unread_notifications_count'] = 0
                 context['available_clients'] = []
                 context['pending_approvals_count'] = 0
-            # Ensure we return the context dict for Flask to update the template context
+        
+        # Ensure we return the context dict for Flask to update the template context
         return context
     # Additional blueprints will be registered here
 

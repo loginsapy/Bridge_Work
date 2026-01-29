@@ -353,12 +353,9 @@
         <i class="fa-solid fa-pen me-2"></i>
         <span class="btn-text">Editar</span>
       </a>
-      <form method="POST" action="{{ url_for('main.delete_task', task_id=task.id) }}" style="display:inline;"
-            onsubmit="return confirm('¿Eliminar esta tarea?');">
-        <button type="submit" class="action-btn btn-delete">
-          <i class="fa-solid fa-trash me-2"></i>Eliminar
-        </button>
-      </form>
+      <button type="button" class="action-btn btn-delete" onclick="deleteTask()">
+        <i class="fa-solid fa-trash me-2"></i>Eliminar
+      </button>
     </div>
     {% elif (task.project.client_id and task.project.client_id == current_user.id) or (current_user in task.project.clients) %}
       {% if task.assigned_client_id == current_user.id %}
@@ -441,7 +438,7 @@
           {% endif %}
         {% endif %}
       </div>
-      <table class="time-table">
+      <table class="time-table table-auto-columns">
         <thead>
           <tr>
             <th>Fecha</th>
@@ -532,12 +529,10 @@
               <i class="fa-solid fa-download"></i>
             </a>
             {% if current_user.is_internal or att.uploaded_by_id == current_user.id %}
-            <form action="{{ url_for('main.delete_attachment', attachment_id=att.id) }}" method="POST" style="display:inline;"
-                  onsubmit="return confirm('¿Eliminar este archivo?');">
-              <button type="submit" class="attachment-btn delete" title="Eliminar">
+              <button type="button" class="attachment-btn delete" title="Eliminar" 
+                      onclick="deleteAttachment('{{ url_for('api.delete_attachment', attachment_id=att.id) }}')">
                 <i class="fa-solid fa-trash"></i>
               </button>
-            </form>
             {% endif %}
           </div>
         </li>
@@ -552,7 +547,7 @@
 
       <!-- Upload Form -->
       {% if current_user.is_internal or (task.project.client_id and task.project.client_id == current_user.id) or (task.assigned_client_id and task.assigned_client_id == current_user.id) %}
-      <form action="{{ url_for('main.upload_attachment', task_id=task.id) }}" method="POST" enctype="multipart/form-data" id="uploadForm">
+      <form id="uploadForm" onsubmit="event.preventDefault(); uploadFiles();">
         <div class="upload-zone" id="uploadZone" onclick="document.getElementById('fileInput').click();">
           <i class="fa-solid fa-cloud-upload-alt d-block"></i>
           <div><strong>Arrastra archivos aquí</strong> o haz clic para seleccionar</div>
@@ -690,7 +685,7 @@ function handleFileSelect(input) {
     
     // Auto submit only for internal users
     if (allowAutoSubmit) {
-      document.getElementById('uploadForm').submit();
+      uploadFiles();
     }
   }
 }
@@ -725,5 +720,66 @@ uploadZone.addEventListener('drop', (e) => {
     handleFileSelect(fileInput);
   }
 });
+
+function deleteTask() {
+  if (!confirm('¿Eliminar esta tarea?')) return;
+  
+  fetch("{{ url_for('api.delete_task', task_id=task.id) }}", {
+    method: 'POST'
+  })
+  .then(response => {
+    if (response.ok) {
+      window.location.href = "{{ url_for('main.project_detail', project_id=task.project_id) }}";
+    } else {
+      alert('Error al eliminar la tarea');
+    }
+  })
+  .catch(err => alert('Error de conexión'));
+}
+
+function uploadFiles() {
+  const input = document.getElementById('fileInput');
+  if (!input.files.length) return;
+  
+  const formData = new FormData();
+  for (const file of input.files) {
+    formData.append('file', file);
+  }
+  
+  const btn = document.getElementById('uploadBtn');
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Subiendo...';
+  }
+  
+  fetch("{{ url_for('api.upload_attachment', task_id=task.id) }}", {
+    method: 'POST',
+    body: formData
+  })
+  .then(response => {
+    if (response.ok) {
+      window.location.reload();
+    } else {
+      alert('Error al subir archivo');
+      if (btn) { btn.disabled = false; btn.innerHTML = 'Guardar'; }
+    }
+  })
+  .catch(err => {
+    console.error(err);
+    alert('Error de conexión');
+    if (btn) { btn.disabled = false; btn.innerHTML = 'Guardar'; }
+  });
+}
+
+function deleteAttachment(url) {
+  if (!confirm('¿Eliminar este archivo?')) return;
+  
+  fetch(url, { method: 'POST' })
+  .then(response => {
+    if (response.ok) window.location.reload();
+    else alert('Error al eliminar archivo');
+  })
+  .catch(err => alert('Error de conexión'));
+}
 </script>
 {% endblock %}

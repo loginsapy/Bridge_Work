@@ -465,12 +465,10 @@
               <i class="fa-solid fa-download"></i>
             </a>
             {% if current_user.is_internal or att.uploaded_by_id == current_user.id %}
-            <form action="{{ url_for('main.delete_attachment', attachment_id=att.id) }}" method="POST" style="display:inline;"
-                  onsubmit="return confirm('¿Eliminar este archivo?');">
-              <button type="submit" class="att-btn delete" title="Eliminar">
+              <button type="button" class="att-btn delete" title="Eliminar"
+                      onclick="deleteAttachment('{{ url_for('api.delete_attachment', attachment_id=att.id) }}')">
                 <i class="fa-solid fa-trash"></i>
               </button>
-            </form>
             {% endif %}
           </div>
         </div>
@@ -487,11 +485,9 @@
       </div>
       <div class="card-body">
         <p class="small text-muted mb-3">Eliminar esta tarea es irreversible. Los registros de tiempo se perderán.</p>
-        <form method="POST" action="{{ url_for('main.delete_task', task_id=task.id) }}" onsubmit="return confirm('¿Eliminar tarea? Esta acción no se puede deshacer.');">
-          <button type="submit" class="btn btn-outline-danger w-100">
-            <i class="fa-solid fa-trash me-2"></i> Eliminar Tarea
-          </button>
-        </form>
+        <button type="button" class="btn btn-outline-danger w-100" onclick="deleteTask()">
+          <i class="fa-solid fa-trash me-2"></i> Eliminar Tarea
+        </button>
       </div>
     </div>
   </div>
@@ -583,5 +579,57 @@ document.querySelector('form')?.addEventListener('submit', function(e) {
   icon.classList.add('d-none');
   text.textContent = 'Guardando y notificando...';
 });
+
+// Allow toggling predecessor checkboxes
+document.querySelectorAll('input[name="predecessor_ids"]').forEach(checkbox => {
+  checkbox.addEventListener('change', function() {
+    // This checkbox can now be checked and unchecked freely
+    console.log(`Predecessor ${this.value} is now ${this.checked ? 'selected' : 'deselected'}`);
+  });
+});
+
+// Validate date coherence
+document.querySelector('form').addEventListener('submit', function(e) {
+  const startDate = new Date(document.querySelector('input[name="start_date"]').value);
+  const dueDate = new Date(document.querySelector('input[name="due_date"]').value);
+  
+  if (startDate && dueDate && startDate > dueDate) {
+    e.preventDefault();
+    alert('Error: La fecha de inicio no puede ser posterior a la fecha de vencimiento');
+    return false;
+  }
+});
+
+// Update due_date min attribute when start_date changes
+document.querySelector('input[name="start_date"]').addEventListener('change', function() {
+  document.querySelector('input[name="due_date"]').min = this.value;
+});
+
+function deleteTask() {
+  if (!confirm('¿Eliminar tarea? Esta acción no se puede deshacer.')) return;
+  
+  fetch("{{ url_for('api.delete_task', task_id=task.id) }}", {
+    method: 'POST'
+  })
+  .then(response => {
+    if (response.ok) {
+      window.location.href = "{{ url_for('main.project_detail', project_id=project.id) }}";
+    } else {
+      alert('Error al eliminar la tarea');
+    }
+  })
+  .catch(err => alert('Error de conexión'));
+}
+
+function deleteAttachment(url) {
+  if (!confirm('¿Eliminar este archivo?')) return;
+  
+  fetch(url, { method: 'POST' })
+  .then(response => {
+    if (response.ok) window.location.reload();
+    else alert('Error al eliminar archivo');
+  })
+  .catch(err => alert('Error de conexión'));
+}
 </script>
 {% endblock %}

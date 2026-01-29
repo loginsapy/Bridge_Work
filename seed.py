@@ -1,6 +1,7 @@
 from app import create_app, db
 from app.models import User, Project, Task, TimeEntry, Role
 from datetime import datetime, timedelta
+from app.utils.safety import is_safe_db_uri, require_confirmation
 import random
 
 app = create_app()
@@ -12,16 +13,17 @@ def seed_database():
         uri = app.config.get('SQLALCHEMY_DATABASE_URI', '') or ''
 
         # Safety: require explicit env var to allow destructive reset (avoid accidental data loss)
-        reset_allowed = os.environ.get('ALLOW_DB_RESET') == '1'
-        if not reset_allowed:
-            print("⚠️  ALLOW_DB_RESET != '1' -> Aborting DB reset to avoid accidental data loss.")
-            return
+        if not require_confirmation('ALLOW_DB_RESET', ''):
+            print("⚠️  ALLOW_DB_RESET no está configurado.")
+            confirm = input("¿Confirmas que deseas borrar y recrear la base de datos? (s/n): ")
+            if confirm.lower() not in ('s', 'si', 'y', 'yes', '1'):
+                print("Abortando para evitar pérdida de datos.")
+                return
 
         # Additional safety: if the DB URI points to a remote Postgres, require an extra confirmation
-        if (uri.startswith('postgres') or uri.startswith('postgresql')) and not ('localhost' in uri or '127.0.0.1' in uri):
-            if os.environ.get('CONFIRM_REMOTE_DB_RESET') != 'YES':
-                print("⚠️ Remote Postgres detected. To reset a REMOTE DB set CONFIRM_REMOTE_DB_RESET=YES in addition to ALLOW_DB_RESET=1.")
-                return
+        if not is_safe_db_uri(uri) and not require_confirmation('CONFIRM_REMOTE_DB_RESET', ''):
+            print("⚠️  Base de datos remota detectada. Para resetear una BD remota, configura CONFIRM_REMOTE_DB_RESET a 'yes'.")
+            return
 
         if uri.startswith('postgres') or uri.startswith('postgresql'):
             from sqlalchemy import text
@@ -102,12 +104,14 @@ def seed_database():
         for project in projects:
             num_tasks = random.randint(3, 8)
             for i in range(num_tasks):
+                task_status = random.choice(statuses) if project.status == 'ACTIVE' else 'COMPLETED' if project.status == 'COMPLETED' else 'BACKLOG'
                 task = Task(
                     title=f'Tarea {i+1} - {project.name[:10]}...',
                     project_id=project.id,
                     assigned_to_id=random.choice(users).id,
-                    status=random.choice(statuses) if project.status == 'ACTIVE' else 'COMPLETED' if project.status == 'COMPLETED' else 'BACKLOG',
-                    due_date=datetime.now() + timedelta(days=random.randint(-5, 15))
+                    status=task_status,
+                    due_date=datetime.now() + timedelta(days=random.randint(-5, 15)),
+                    completed_at=(datetime.now() - timedelta(days=random.randint(1, 30))) if task_status == 'COMPLETED' else None
                 )
                 db.session.add(task)
                 tasks.append(task)
