@@ -48,6 +48,10 @@ def login():
 def login_microsoft():
     """Initiate Microsoft OAuth flow"""
     try:
+        # Logout any existing user to avoid session conflicts
+        if current_user.is_authenticated:
+            logout_user()
+        
         if not current_app.config.get('AZURE_CLIENT_ID'):
             flash('Microsoft authentication is not configured', 'danger')
             return redirect(url_for('auth.login'))
@@ -152,12 +156,15 @@ def callback():
         
         # Extract claims
         azure_oid = user_info.get('oid')  # Object ID (unique identifier)
-        email = user_info.get('email') or user_info.get('upn')  # Email or UPN
+        email = user_info.get('email') or user_info.get('upn') or user_info.get('preferred_username')  # Email or UPN
         name = user_info.get('name', '')
         given_name = user_info.get('given_name', '')
         family_name = user_info.get('family_name', '')
         
+        current_app.logger.info(f'OAuth user_info: oid={azure_oid}, email={email}, name={name}')
+        
         if not email:
+            current_app.logger.error(f'No email found in token. user_info keys: {user_info.keys()}')
             flash('No se encontró email en la respuesta de Microsoft', 'danger')
             return redirect(url_for('auth.login'))
         
@@ -192,10 +199,18 @@ def callback():
             if family_name:
                 user.last_name = family_name
         
-        db.session.commit()
+        try:
+            db.session.commit()
+            current_app.logger.info(f'User saved/updated: id={user.id}, email={user.email}')
+        except SQLAlchemyError as e:
+            db.session.rollback()
+            current_app.logger.exception(f'Database error saving user: {e}')
+            flash('Error al guardar usuario en la base de datos', 'danger')
+            return redirect(url_for('auth.login'))
         
         # Log the user in
         login_user(user, remember=True)
+        current_app.logger.info(f'User logged in successfully: {user.email}')
         
         # Clear OAuth session data
         session.pop('oauth_state', None)

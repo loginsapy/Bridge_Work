@@ -71,18 +71,18 @@
       <div class="nav-item dropdown">
         <button class="btn btn-icon user-menu-btn d-flex align-items-center gap-2" data-bs-toggle="dropdown">
           <div class="user-avatar">
-            T
+            {{ current_user.first_name[0] if current_user.first_name else current_user.email[0]|upper }}
           </div>
-          <span class="d-none d-lg-inline user-name">Tadeo</span>
+          <span class="d-none d-lg-inline user-name">{{ current_user.first_name or current_user.email.split('@')[0] }}</span>
           <i class="fa-solid fa-chevron-down fa-xs d-none d-lg-inline"></i>
         </button>
         <ul class="dropdown-menu dropdown-menu-end">
           <li class="dropdown-header">
-            <div class="fw-semibold">Tadeo Quenhan</div>
-            <small class="text-muted">tadeo.quenhan@grupo-olam.com</small>
+            <div class="fw-semibold">{{ current_user.first_name }} {{ current_user.last_name }}</div>
+            <small class="text-muted">{{ current_user.email }}</small>
             
             
-            <span class="badge bg-danger-subtle text-danger mt-1">Admin</span>
+            <span class="badge bg-danger-subtle text-danger mt-1">{{ current_user.role.name if current_user.role else 'Sin rol' }}</span>
           </li>
           <li><hr class="dropdown-divider"></li>
           <li><a class="dropdown-item" href="/profile"><i class="fa-solid fa-user me-2 text-muted"></i>Mi Perfil</a></li>

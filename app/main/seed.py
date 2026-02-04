@@ -1,5 +1,5 @@
 from app import create_app, db
-from app.models import User, Project, Task, TimeEntry
+from app.models import User, Project, Task, TimeEntry, Role
 from datetime import datetime, timedelta
 import random
 
@@ -11,6 +11,17 @@ def seed_database():
         # db.drop_all()
         # db.create_all()
         
+        # 0. Crear Roles (Necesario para que los usuarios tengan permisos)
+        roles_list = ['Admin', 'PMP', 'Participante', 'Cliente']
+        roles_map = {}
+        for r_name in roles_list:
+            role = Role.query.filter_by(name=r_name).first()
+            if not role:
+                role = Role(name=r_name)
+                db.session.add(role)
+            roles_map[r_name] = role
+        db.session.commit()
+
         if User.query.first():
             print("⚠️  La base de datos ya tiene datos. Si quieres reiniciar, usa db.drop_all() en el script.")
             return
@@ -18,13 +29,13 @@ def seed_database():
         print("🌱 Generando datos de prueba...")
 
         # 1. Usuarios
-        admin = User(email='admin@bridgework.com', first_name='Admin', last_name='System')
+        admin = User(email='admin@bridgework.com', first_name='Admin', last_name='System', is_internal=True, role=roles_map['Admin'])
         admin.set_password('admin123')
         
-        dev1 = User(email='ana@bridgework.com', first_name='Ana', last_name='García')
+        dev1 = User(email='ana@bridgework.com', first_name='Ana', last_name='García', is_internal=True, role=roles_map['Participante'])
         dev1.set_password('password')
         
-        dev2 = User(email='carlos@bridgework.com', first_name='Carlos', last_name='Ruiz')
+        dev2 = User(email='carlos@bridgework.com', first_name='Carlos', last_name='Ruiz', is_internal=True, role=roles_map['Participante'])
         dev2.set_password('password')
         
         users = [admin, dev1, dev2]
@@ -76,7 +87,6 @@ def seed_database():
                 for _ in range(random.randint(1, 5)):
                     entry = TimeEntry(
                         user_id=task.assigned_to_id,
-                        project_id=task.project_id,
                         task_id=task.id,
                         hours=round(random.uniform(0.5, 4.0), 1),
                         date=datetime.now() - timedelta(days=random.randint(0, 30)),

@@ -123,7 +123,7 @@ def dashboard():
         # Participante ve solo proyectos donde tiene tareas asignadas (incluyendo multi-asignados)
         user_project_ids = db.session.query(Task.project_id).filter(
             (Task.assigned_to_id == current_user.id) | (Task.assignees.any(User.id == current_user.id))
-        ).distinct().subquery()
+        ).distinct().scalar_subquery()
         
         active_projects_count = db.session.query(func.count(Project.id)).filter(
             Project.status == 'ACTIVE',
@@ -148,7 +148,7 @@ def dashboard():
         # Cliente u otros roles: proyectos donde es cliente
         client_project_ids = db.session.query(Project.id).filter(
             Project.clients.contains(current_user)
-        ).subquery()
+        ).scalar_subquery()
         
         active_projects_count = db.session.query(func.count(Project.id)).filter(
             Project.status == 'ACTIVE',
@@ -476,7 +476,7 @@ def projects():
         # OR donde forma parte del equipo (`members`).
         project_ids = db.session.query(Task.project_id).filter(
             Task.assigned_to_id == current_user.id
-        ).distinct().subquery()
+        ).distinct().scalar_subquery()
         projects = Project.query.filter(
             (Project.id.in_(project_ids)) | (Project.members.contains(current_user))
         ).order_by(Project.start_date.desc()).all()
@@ -3628,7 +3628,7 @@ def global_search():
     elif user_role == 'Participante':
         project_ids = db.session.query(Task.project_id).filter(
             Task.assigned_to_id == current_user.id
-        ).distinct().subquery()
+        ).distinct().scalar_subquery()
         projects_q = projects_q.filter(
             (Project.id.in_(project_ids)) | (Project.members.contains(current_user))
         )
