@@ -82,10 +82,10 @@ def create_app(config_object="config.DevConfig"):
         from flask_login import current_user
         from .services import license_service
         
-        # Skip license check for static files, login, and license endpoints
+        # Skip license check for static files, login, logout, and license endpoints
         skip_paths = [
             '/static/', '/login', '/logout', '/callback', '/metrics',
-            '/api/license/', '/admin/settings'
+            '/api/license/', '/admin/settings', '/auth/'
         ]
         
         if any(request.path.startswith(p) for p in skip_paths):
@@ -101,9 +101,11 @@ def create_app(config_object="config.DevConfig"):
             if not license_status.get('is_valid', False):
                 # Admin can access settings to activate license
                 if current_user.role and current_user.role.name == 'Admin':
-                    if not request.path.startswith('/admin'):
-                        flash('El sistema no tiene una licencia válida. Por favor active una licencia.', 'warning')
-                        return redirect(url_for('main.admin_settings_page'))
+                    # Allow admin to access admin routes
+                    if request.path.startswith('/admin'):
+                        return None
+                    flash('El sistema no tiene una licencia válida. Por favor active una licencia.', 'warning')
+                    return redirect(url_for('main.admin_settings_page'))
                 else:
                     # Non-admin users see a blocking message
                     from flask import render_template_string
@@ -332,6 +334,20 @@ def create_app(config_object="config.DevConfig"):
                 context['available_clients'] = []
                 context['pending_approvals_count'] = 0
         
+        # Compute DB name for display in UI footer/sidebar
+        db_uri = app.config.get('SQLALCHEMY_DATABASE_URI', '')
+        db_name = ''
+        if db_uri.startswith('sqlite'):
+            db_name = db_uri.split('///')[-1] or db_uri
+        else:
+            try:
+                from urllib.parse import urlparse
+                parsed = urlparse(db_uri)
+                db_name = parsed.path.lstrip('/') or parsed.netloc
+            except Exception:
+                db_name = db_uri
+        context['sys_db_name'] = db_name
+
         # Ensure we return the context dict for Flask to update the template context
         return context
     # Additional blueprints will be registered here
