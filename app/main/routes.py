@@ -978,17 +978,31 @@ def create_task():
             task.assigned_client_id = int(assigned_client_id)
 
         start_date_str = request.form.get('start_date')
-        if start_date_str:
-            task.start_date = datetime.fromisoformat(start_date_str)
+        due_date_str = request.form.get('due_date')
 
-        # Fix 8: Validación de fechas
-        if start_date_str and due_date_str and start_date_str > due_date_str:
+        # Parse dates if provided and validate
+        start_dt = None
+        due_dt = None
+        if start_date_str:
+            try:
+                start_dt = datetime.fromisoformat(start_date_str)
+                task.start_date = start_dt
+            except Exception:
+                flash('Formato de fecha de inicio inválido.', 'danger')
+                return redirect(url_for('main.project_detail', project_id=project_id))
+
+        if due_date_str:
+            try:
+                due_dt = datetime.fromisoformat(due_date_str)
+                task.due_date = due_dt
+            except Exception:
+                flash('Formato de fecha de vencimiento inválido.', 'danger')
+                return redirect(url_for('main.project_detail', project_id=project_id))
+
+        # Fix 8: Validación de fechas: if both provided ensure start <= due
+        if start_dt and due_dt and start_dt > due_dt:
             flash('La fecha de vencimiento no puede ser anterior a la de inicio.', 'danger')
             return redirect(url_for('main.project_detail', project_id=project_id))
-
-        due_date_str = request.form.get('due_date')
-        if due_date_str:
-            task.due_date = datetime.fromisoformat(due_date_str)
 
         estimated_hours = request.form.get('estimated_hours')
         if estimated_hours and estimated_hours.strip():
@@ -1833,6 +1847,15 @@ def create_project():
     project_type = request.form.get('project_type', 'APP_DEVELOPMENT')
     client_ids = request.form.getlist('client_ids')
     member_ids = request.form.getlist('member_ids')
+    # Sanitize incoming id lists: remove empty strings and cast to int
+    try:
+        client_ids = [int(x) for x in client_ids if x and str(x).strip()]
+    except ValueError:
+        client_ids = []
+    try:
+        member_ids = [int(x) for x in member_ids if x and str(x).strip()]
+    except ValueError:
+        member_ids = []
     
     if not name:
         flash('El nombre del proyecto es un campo obligatorio.', 'danger')

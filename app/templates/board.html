@@ -2089,16 +2089,19 @@ document.addEventListener('keydown', function(e) {
 function deleteTask(taskId) {
   if (!confirm('¿Eliminar esta tarea?')) return;
   
-  fetch(`/task/${taskId}/delete`, {
-    method: 'POST'
+  fetch(`/api/tasks/${taskId}`, {
+    method: 'DELETE',
+    headers: { 'Accept': 'application/json' }
   })
-  .then(r => {
-    if (r.ok || r.redirected) location.reload();
-    else throw new Error('Delete failed');
+  .then(async r => {
+    if (r.ok) return location.reload();
+    const data = await r.json().catch(() => ({}));
+    const msg = data && data.error ? data.error : 'Delete failed';
+    throw new Error(msg);
   })
   .catch(err => {
     console.error(err);
-    alert('Error al eliminar');
+    alert(err.message || 'Error al eliminar');
   });
 }
 

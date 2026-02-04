@@ -458,12 +458,16 @@ def delete_task(task_id):
     try:
         # Auditoría antes de borrar
         from app.models import AuditLog
+        # AuditLog fields: entity_type, entity_id, action, user_id, changes
         audit = AuditLog(
             user_id=getattr(current_user, 'id', None),
-            action='delete',
+            action='DELETE',
             entity_type='task',
             entity_id=t.id,
-            description=f"Tarea '{t.title}' eliminada por {getattr(current_user, 'email', 'sistema')}"
+            changes={
+                'message': f"Tarea '{t.title}' eliminada por {getattr(current_user, 'email', 'sistema')}",
+                'task_title': t.title
+            }
         )
         db.session.add(audit)
         db.session.delete(t)

@@ -389,6 +389,13 @@ tr:hover .actions-cell {
 #gridView.active { display: grid; }
 #tableView { display: none; }
 #tableView.active { display: block; }
+/* Pagination: ensure active page number is visible with app primary color */
+.pagination .page-item.active .page-link {
+  background: var(--monday-blue) !important;
+  color: #fff !important;
+  border-color: var(--monday-blue) !important;
+}
+.pagination .page-link { color: var(--monday-dark); }
 </style>
 {% endblock %}
 
