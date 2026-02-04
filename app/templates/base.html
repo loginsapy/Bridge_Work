@@ -240,7 +240,7 @@
       initAssigneesControl('#createTaskModal');
 
       // Initialize for project members in create project modal(s)
-      document.querySelectorAll('#createProjectModal').forEach(modal => {
+      document.querySelectorAll('#createProjectModal, #createProjectModalLocal').forEach(modal => {
         const select = modal.querySelector('select[name="member_ids"]');
         if(select) {
            new Choices(select, { removeItemButton: true, placeholderValue: 'Selecciona miembros...' });

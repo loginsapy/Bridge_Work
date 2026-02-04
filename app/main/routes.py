@@ -500,30 +500,34 @@ def projects():
         flash('No tienes un rol asignado. Contacta al administrador para obtener acceso.', 'warning')
         return render_template('projects.html', projects=[], no_role=True)
     
+    # Paginación: página actual desde querystring
+    page = request.args.get('page', 1, type=int)
+    per_page = 10
+
     # PMP o Admin: puede ver todo
     if user_role in ['PMP', 'Admin']:
-        projects = Project.query.order_by(Project.start_date.desc()).all()
+        base_query = Project.query.order_by(Project.start_date.desc())
     # Participante: solo proyectos donde tiene tareas asignadas
     elif user_role == 'Participante':
-        # Participante puede ver proyectos donde tiene tareas asignadas
-        # OR donde forma parte del equipo (`members`).
         project_ids = db.session.query(Task.project_id).filter(
             Task.assigned_to_id == current_user.id
         ).distinct().scalar_subquery()
-        projects = Project.query.filter(
+        base_query = Project.query.filter(
             (Project.id.in_(project_ids)) | (Project.members.contains(current_user))
-        ).order_by(Project.start_date.desc()).all()
+        ).order_by(Project.start_date.desc())
     # Cliente: solo proyectos donde es cliente
     elif user_role == 'Cliente' or not current_user.is_internal:
-        projects = Project.query.filter(Project.clients.contains(current_user)).order_by(Project.start_date.desc()).all()
+        base_query = Project.query.filter(Project.clients.contains(current_user)).order_by(Project.start_date.desc())
     else:
-        # Cualquier otro rol: no ve nada por defecto
-        projects = []
-    
+        base_query = Project.query.filter(False)
+
+    pagination = base_query.paginate(page=page, per_page=per_page, error_out=False)
+    projects = pagination.items
+
     # Calcular progreso y horas para cada proyecto en tiempo real
     for p in projects:
         total_hours = db.session.query(func.sum(TimeEntry.hours)).join(Task).filter(Task.project_id == p.id).scalar() or 0
-        p.hours_spent = total_hours # Atributo temporal para la vista
+        p.hours_spent = total_hours
         if p.budget_hours and p.budget_hours > 0:
             p.progress = min((total_hours / p.budget_hours) * 100, 100)
         else:
@@ -543,7 +547,9 @@ def projects():
                            now=datetime.now(),
                            current_user_role_name=user_role,
                            available_clients=available_clients,
-                           available_members=available_members)
+                           available_members=available_members,
+                           pagination=pagination,
+                           per_page=per_page)
 
 
 @main_bp.route('/project/<int:project_id>')
@@ -2347,9 +2353,10 @@ def reports():
                 'client': client_name,
                 'start_date': t.start_date.date() if t.start_date else None,
                 'due_date': t.due_date.date() if t.due_date else None,
+                'completed_at': t.completed_at.date() if t.completed_at else None,
                 'estimated_hours': t.estimated_hours,
                 'hours_logged': float(hours_logged),
-                'days_overdue': int(days_overdue)
+                'days_overdue': days_overdue
             })
 
         # Compute pagination metadata for template (only when not exporting)
@@ -2399,7 +2406,7 @@ def reports():
             ws = wb.active
             ws.title = f"Project-{project.id}-Summary"
 
-            headers = ['Task ID', 'Title', 'Status', 'Priority', 'Assignees', 'Assigned Client', 'Start Date', 'Due Date', 'Atraso (días)', 'Estimated Hours', 'Hours Logged']
+            headers = ['Task ID', 'Title', 'Status', 'Priority', 'Assignees', 'Assigned Client', 'Start Date', 'Due Date', 'Completed At', 'Atraso (días)', 'Estimated Hours', 'Hours Logged']
             ws.append(headers)
             for row in task_rows:
                 ws.append([
@@ -2411,7 +2418,8 @@ def reports():
                     (row['client'] + ' (Cliente Externo)') if row.get('client') else '',
                     row['start_date'].isoformat() if row['start_date'] else '',
                     row['due_date'].isoformat() if row['due_date'] else '',
-                    int(row.get('days_overdue', 0)),
+                    row['completed_at'].isoformat() if row.get('completed_at') else '',
+                    row.get('days_overdue', 0),
                     float(row['estimated_hours']) if row['estimated_hours'] is not None else '',
                     row['hours_logged']
                 ])

@@ -482,6 +482,7 @@
             <th>Cliente</th>
             <th>Inicio</th>
             <th>Vencimiento</th>
+            <th>Finalizado</th>
             <th>Atraso (días)</th>
             <th>Estimadas</th>
             <th>Horas</th>
@@ -498,6 +499,7 @@
             <td>{% if r.client %}<span class="client-icon me-1" title="{{ r.client }} (Cliente Externo)" aria-label="{{ r.client }} (Cliente Externo)"><i class="fa-solid fa-building"></i></span> {{ r.client }}{% else %}-{% endif %}</td>
             <td>{{ r.start_date|fecha_es('corto_año') if r.start_date else '-' }}</td>
             <td>{{ r.due_date|fecha_es('corto_año') if r.due_date else '-' }}</td>
+            <td>{{ r.completed_at|fecha_es('corto_año') if r.completed_at else '-' }}</td>
             <td>
               {% if r.days_overdue > 0 %}
               <span class="text-danger" title="{{ r.days_overdue }} día(s) de retraso">+{{ r.days_overdue }}</span>

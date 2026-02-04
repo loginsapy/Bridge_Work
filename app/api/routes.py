@@ -451,7 +451,21 @@ def update_task(task_id):
 @api_bp.route("/tasks/<int:task_id>", methods=["DELETE"])
 def delete_task(task_id):
     t = Task.query.get_or_404(task_id)
+    from flask_login import current_user
+    # Solo PMP y Admin pueden borrar
+    if not (getattr(current_user, 'is_authenticated', False) and getattr(current_user, 'is_internal', False) and getattr(current_user, 'role', None) and current_user.role.name in ('PMP', 'Admin')):
+        return jsonify({'error': 'Solo PMP o Admin pueden borrar tareas'}), 403
     try:
+        # Auditoría antes de borrar
+        from app.models import AuditLog
+        audit = AuditLog(
+            user_id=getattr(current_user, 'id', None),
+            action='delete',
+            entity_type='task',
+            entity_id=t.id,
+            description=f"Tarea '{t.title}' eliminada por {getattr(current_user, 'email', 'sistema')}"
+        )
+        db.session.add(audit)
         db.session.delete(t)
         db.session.commit()
     except SQLAlchemyError as e:

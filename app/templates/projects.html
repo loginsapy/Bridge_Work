@@ -428,7 +428,7 @@ tr:hover .actions-cell {
       </button>
     </div>
     {% if current_user_role_name in ['PMP', 'Admin'] %}
-    <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createProjectModal">
+    <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createProjectModalLocal">
       <i class="fa-solid fa-plus me-1"></i>{{ _('new_project') }}
     </button>
     {% endif %}
@@ -551,12 +551,13 @@ tr:hover .actions-cell {
     <h4>{{ _('no_projects') }}</h4>
     <p>{{ _('create_first_project') }}</p>
     {% if current_user_role_name in ['PMP','Admin'] %}
-    <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createProjectModal">
+    <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createProjectModalLocal">
       <i class="fa-solid fa-plus me-2"></i>{{ _('create_project') }}
     </button>
     {% endif %}
   </div>
   {% endif %}
+
 </div>
 
 <!-- Grid View -->
@@ -632,16 +633,45 @@ tr:hover .actions-cell {
   </div>
   {% endfor %}
 </div>
+
+{% endif %}
+
+{# Global pagination controls (shared between table & grid views) #}
+{% if pagination and pagination.pages > 1 %}
+<nav aria-label="Projects pagination" class="mt-3">
+  <div class="d-flex justify-content-between align-items-center">
+    <small class="text-muted">Mostrando {{ (pagination.page-1)*per_page + 1 }} - {{ (pagination.page-1)*per_page + projects|length }} de {{ pagination.total }} proyectos</small>
+    <ul class="pagination mb-0">
+      <li class="page-item {% if not pagination.has_prev %}disabled{% endif %}">
+        <a class="page-link" href="{{ url_for('main.projects', page=pagination.prev_num) }}" aria-label="Anterior">
+          <span aria-hidden="true">&laquo;</span>
+        </a>
+      </li>
+      {% set start = pagination.page - 2 if pagination.page - 2 > 0 else 1 %}
+      {% set end = pagination.page + 2 if pagination.page + 2 <= pagination.pages else pagination.pages %}
+      {% for p in range(start, end+1) %}
+      <li class="page-item {% if p == pagination.page %}active{% endif %}">
+        <a class="page-link" href="{{ url_for('main.projects', page=p) }}">{{ p }}</a>
+      </li>
+      {% endfor %}
+      <li class="page-item {% if not pagination.has_next %}disabled{% endif %}">
+        <a class="page-link" href="{{ url_for('main.projects', page=pagination.next_num) }}" aria-label="Siguiente">
+          <span aria-hidden="true">&raquo;</span>
+        </a>
+      </li>
+    </ul>
+  </div>
+</nav>
 {% endif %}
 
 <!-- Create Project Modal -->
 {% if current_user_role_name in ['PMP','Admin'] %}
-<div class="modal fade" id="createProjectModal" tabindex="-1" aria-labelledby="createProjectModalLabel" aria-hidden="true">
+<div class="modal fade" id="createProjectModalLocal" tabindex="-1" aria-labelledby="createProjectModalLocalLabel" aria-hidden="true">
   <div class="modal-dialog modal-lg">
     <div class="modal-content">
       <form method="POST" action="{{ url_for('main.create_project') }}">
         <div class="modal-header">
-          <h5 class="modal-title" id="createProjectModalLabel">
+          <h5 class="modal-title" id="createProjectModalLocalLabel">
             <i class="fa-solid fa-folder-plus me-2 text-primary"></i>{{ _('new_project') if sys_language == 'en' else 'Nuevo Proyecto' }}
           </h5>
           <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
@@ -712,9 +742,12 @@ tr:hover .actions-cell {
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancelar</button>
-          <button type="submit" class="btn btn-primary">
+          <button id="createProjectSubmitBtn" type="submit" class="btn btn-primary" onclick="return handleCreateProjectClick(event)">
             <i class="fa-solid fa-save me-1"></i>{{ _('create') if sys_language == 'en' else 'Crear Proyecto' }}
           </button>
+          <span id="createProjectWaitMsg" class="ms-3 text-primary d-none" style="font-weight:500;">
+            <i class="fa-solid fa-spinner fa-spin me-1"></i>Aguarde un momento por favor... Generando el Proyecto y Notificando a Participantes
+          </span>
         </div>
       </form>
     </div>
@@ -755,6 +788,111 @@ tr:hover .actions-cell {
 {% block scripts %}
 {{ super() }}
 <script>
+// Global click handler: provide immediate visual feedback and reliable submit behavior
+window.handleCreateProjectClick = function(e) {
+  try {
+    var btn = document.getElementById('createProjectSubmitBtn');
+    var modal = document.getElementById('createProjectModalLocal');
+    var form = modal ? modal.querySelector('form') : null;
+    var waitMsg = document.getElementById('createProjectWaitMsg');
+    if (!form || !btn || !waitMsg) return true; // fallback: allow submit
+
+    if (form.dataset.submitting === '1') {
+      e.preventDefault();
+      console.debug('handleCreateProjectClick: already submitting, blocking');
+      return false;
+    }
+
+    // Prevent default to force UI update then submit programmatically
+    e.preventDefault();
+    form.dataset.submitting = '1';
+    btn.disabled = true;
+    try { btn.dataset.originalHtml = btn.innerHTML; btn.innerHTML = '<i class="fa-solid fa-save me-1"></i>Enviando...'; } catch(err){}
+    waitMsg.classList.remove('d-none'); waitMsg.style.display = 'inline-block'; waitMsg.style.visibility = 'visible';
+    console.debug('handleCreateProjectClick: UI updated, forcing repaint');
+    requestAnimationFrame(function(){ requestAnimationFrame(function(){ console.debug('handleCreateProjectClick: submitting'); form.submit(); }); });
+    return false;
+  } catch(err){ console.error('handleCreateProjectClick error', err); return true; }
+};
+
+// Previene doble submit y muestra mensaje de espera en el modal de crear proyecto
+document.addEventListener('DOMContentLoaded', function() {
+  var modal = document.getElementById('createProjectModalLocal');
+  if (!modal) return;
+  var form = modal.querySelector('form');
+  var submitBtn = document.getElementById('createProjectSubmitBtn');
+  var waitMsg = document.getElementById('createProjectWaitMsg');
+  if (form && submitBtn && waitMsg) {
+    // Evita envíos duplicados: marca el form como 'submitting'
+    form.addEventListener('submit', function(e) {
+      // Block duplicates
+      if (form.dataset.submitting === '1' && e.isTrusted) {
+        e.preventDefault();
+        console.debug('createProject: duplicate submit blocked');
+        return;
+      }
+
+      // If this is a user-initiated submit, prevent default to force repaint and then submit programmatically
+      if (e.isTrusted) {
+        e.preventDefault();
+        form.dataset.submitting = '1';
+        submitBtn.disabled = true;
+        try {
+          submitBtn.dataset.originalHtml = submitBtn.innerHTML;
+          submitBtn.innerHTML = '<i class="fa-solid fa-save me-1"></i>Enviando...';
+        } catch (err) {
+          // ignore
+        }
+        waitMsg.classList.remove('d-none');
+        waitMsg.style.display = 'inline-block';
+        waitMsg.style.visibility = 'visible';
+        waitMsg.style.opacity = '1';
+        waitMsg.setAttribute('aria-live', 'polite');
+        console.debug('createProject: visual state set, forcing repaint');
+        requestAnimationFrame(function() {
+          requestAnimationFrame(function() {
+            console.debug('createProject: submitting form after repaint (programmatic)');
+            form.submit();
+          });
+        });
+      } else {
+        // programmatic submit allowed to proceed
+        console.debug('createProject: programmatic submit proceeding');
+      }
+    });
+
+    // También manejamos clicks directos en el botón (por si el submit se dispara de esa forma)
+    submitBtn.addEventListener('click', function(ev) {
+      if (submitBtn.disabled) {
+        ev.preventDefault();
+        return;
+      }
+      // Si no está aún en submitting, dejamos que el submit del form lo gestione
+    });
+
+    // Al abrir el modal, reestablece el estado para evitar vestigios de envíos previos
+    modal.addEventListener('show.bs.modal', function() {
+      delete form.dataset.submitting;
+      submitBtn.disabled = false;
+      if (submitBtn.dataset && submitBtn.dataset.originalHtml) {
+        submitBtn.innerHTML = submitBtn.dataset.originalHtml;
+      }
+      waitMsg.classList.add('d-none');
+      waitMsg.style.display = '';
+    });
+
+    // Al cerrar el modal también reseteamos el estado (por si el usuario cancela)
+    modal.addEventListener('hidden.bs.modal', function() {
+      delete form.dataset.submitting;
+      submitBtn.disabled = false;
+      if (submitBtn.dataset && submitBtn.dataset.originalHtml) {
+        submitBtn.innerHTML = submitBtn.dataset.originalHtml;
+      }
+      waitMsg.classList.add('d-none');
+      waitMsg.style.display = '';
+    });
+  }
+});
 function switchView(view) {
   const buttons = document.querySelectorAll('.view-switcher button');
   buttons.forEach(btn => btn.classList.remove('active'));

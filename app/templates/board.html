@@ -1007,7 +1007,7 @@ tr.table-warning:hover {
                 {% if current_user.is_internal or (task.assigned_client_id == current_user.id) %}
                 <a href="{{ url_for('main.edit_task', task_id=task.id) }}" class="action-btn-visible" title="Editar"><i class="fa-solid fa-pen"></i></a>
                 {% endif %}
-                {% if current_user.is_internal %}
+                {% if current_user.is_internal and current_user.role and current_user.role.name in ('PMP', 'Admin') %}
                 <button class="action-btn-visible delete" onclick="event.stopPropagation(); deleteTask({{ task.id }})" title="Eliminar"><i class="fa-solid fa-trash"></i></button>
                 {% endif %}
               </div>
