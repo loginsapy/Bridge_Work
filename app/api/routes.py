@@ -290,6 +290,13 @@ def create_task():
         if not (getattr(current_user, 'is_authenticated', False) and current_user.is_internal and getattr(current_user, 'role', None) and current_user.role.name in ('PMP', 'Admin')):
             return jsonify({'error': 'No tienes permiso para establecer fechas'}), 403
 
+    # Validar coherencia de fechas
+    start_date = validated.get('start_date')
+    due_date = validated.get('due_date')
+    is_valid, error_msg = Task.validate_dates(start_date, due_date)
+    if not is_valid:
+        return jsonify({'error': error_msg}), 400
+
     t = Task(
         project_id=validated.get("project_id"),
         parent_task_id=validated.get("parent_task_id"),
@@ -350,6 +357,14 @@ def update_task(task_id):
                 'error': error_msg,
                 **(blockers or {})
             }), 400
+
+    # Validar coherencia de fechas antes de actualizar
+    if 'start_date' in data or 'due_date' in data:
+        new_start = parse_datetime(data['start_date']) if 'start_date' in data else t.start_date
+        new_due = parse_datetime(data['due_date']) if 'due_date' in data else t.due_date
+        is_valid, error_msg = Task.validate_dates(new_start, new_due)
+        if not is_valid:
+            return jsonify({'error': error_msg}), 400
 
     # Capture old assignment values to detect changes
     old_assigned_to = t.assigned_to_id

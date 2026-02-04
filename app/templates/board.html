@@ -110,6 +110,16 @@
   padding: 4px 8px;
 }
 
+/* Deviation cell */
+.deviation-cell {
+  padding: 4px 8px;
+  text-align: center;
+}
+.deviation-cell .badge {
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
 .status-pill {
   display: inline-block;
   padding: 6px 16px;
@@ -812,6 +822,8 @@ tr.table-warning:hover {
           <th>Asignado</th>
           <th>Inicio</th>
           <th>Vencimiento</th>
+          <th>Finalizado</th>
+          <th>Desvío</th>
           <th>Horas</th>
           <th></th>
         </tr>
@@ -840,7 +852,7 @@ tr.table-warning:hover {
                 {% else %}
                   <span class="toggle-placeholder" style="display:inline-block;width:20px;"></span>
                 {% endif %}
-                {% if current_user.is_internal %}
+                {% if current_user.is_internal and current_user.role and current_user.role.name in ('PMP', 'Admin') %}
                 <div class="task-title-input" contenteditable="true" 
                      onblur="updateTask({{ task.id }}, 'title', this.innerText)">{{ task.title }}</div>
                 {% else %}
@@ -945,6 +957,41 @@ tr.table-warning:hover {
               </div>
             </td>
             <td>
+              {# Fecha de finalización (completed_at) #}
+              <div class="cell date-cell">
+                {% if task.completed_at %}
+                <span title="Finalizado: {{ task.completed_at.strftime('%d/%m/%Y %H:%M') }}">
+                  {{ task.completed_at.strftime('%d/%m/%Y') }}
+                </span>
+                {% else %}
+                <span class="text-muted">—</span>
+                {% endif %}
+              </div>
+            </td>
+            <td>
+              {# Desvío en días #}
+              <div class="cell deviation-cell">
+                {% set deviation = task.time_deviation_days %}
+                {% if deviation is not none %}
+                  {% if deviation > 0 %}
+                  <span class="badge bg-danger" title="{{ deviation }} día(s) de retraso">
+                    <i class="fa-solid fa-arrow-up"></i> +{{ deviation }}d
+                  </span>
+                  {% elif deviation < 0 %}
+                  <span class="badge bg-success" title="{{ (-deviation) }} día(s) de anticipación">
+                    <i class="fa-solid fa-arrow-down"></i> {{ deviation }}d
+                  </span>
+                  {% else %}
+                  <span class="badge bg-secondary" title="A tiempo">
+                    <i class="fa-solid fa-check"></i> 0d
+                  </span>
+                  {% endif %}
+                {% else %}
+                <span class="text-muted">—</span>
+                {% endif %}
+              </div>
+            </td>
+            <td>
               <div class="cell hours-cell">
                 {% if current_user.is_internal %}
                 <input type="number" step="0.5" value="{{ task.estimated_hours or '' }}" placeholder="—"
@@ -961,7 +1008,6 @@ tr.table-warning:hover {
                 <a href="{{ url_for('main.edit_task', task_id=task.id) }}" class="action-btn-visible" title="Editar"><i class="fa-solid fa-pen"></i></a>
                 {% endif %}
                 {% if current_user.is_internal %}
-                <a href="{{ url_for('main.edit_task', task_id=task.id) }}" class="action-btn-visible" title="Editar"><i class="fa-solid fa-pen"></i></a>
                 <button class="action-btn-visible delete" onclick="event.stopPropagation(); deleteTask({{ task.id }})" title="Eliminar"><i class="fa-solid fa-trash"></i></button>
                 {% endif %}
               </div>
@@ -1783,6 +1829,10 @@ function updateTaskFields(taskId, payload) {
         showDescendantModal(taskId, json.incomplete_children);
         return Promise.reject('children_incomplete');
       }
+      // Mostrar mensaje de error específico del servidor
+      if (json && json.error) {
+        return Promise.reject({ type: 'server_error', message: json.error });
+      }
       throw new Error('Update failed');
     }
     return r.json();
@@ -1792,8 +1842,12 @@ function updateTaskFields(taskId, payload) {
   })
   .catch(err => {
     if (err === 'predecessors_incomplete' || err === 'children_incomplete') return;
+    if (err && err.type === 'server_error') {
+      alert(err.message);
+      return;
+    }
     console.error(err);
-    alert('Error al actualizar');
+    alert('Error al actualizar la tarea');
   });
 }
 
@@ -1816,6 +1870,10 @@ function updateTask(taskId, field, value) {
         showDescendantModal(taskId, json.incomplete_children);
         return Promise.reject('children_incomplete');
       }
+      // Mostrar mensaje de error específico del servidor
+      if (json && json.error) {
+        return Promise.reject({ type: 'server_error', message: json.error });
+      }
       throw new Error('Update failed');
     }
     return r.json();
@@ -1826,8 +1884,12 @@ function updateTask(taskId, field, value) {
   })
   .catch(err => {
     if (err === 'predecessors_incomplete' || err === 'descendants_incomplete') return;
+    if (err && err.type === 'server_error') {
+      alert(err.message);
+      return;
+    }
     console.error(err);
-    alert('Error al actualizar');
+    alert('Error al actualizar la tarea');
   });
 }
 

@@ -2324,14 +2324,16 @@ def reports():
             # Calculate days overdue (Option 1): for non-completed tasks only
             if t.due_date:
                 due_val = t.due_date.date() if hasattr(t.due_date, 'date') else t.due_date
-                if t.status == 'COMPLETED':
-                    # Fix 2: Calcular atraso real al momento de completar (usar completed_at)
+                if t.status in ('COMPLETED', 'ACCEPTED'):
+                    # Calcular atraso real al momento de completar (usar completed_at)
                     if t.completed_at:
                         comp_val = t.completed_at.date() if hasattr(t.completed_at, 'date') else t.completed_at
-                        days_overdue = max(0, (comp_val - due_val).days)
+                        days_overdue = (comp_val - due_val).days  # Puede ser negativo (anticipación)
                     else:
-                        days_overdue = 0
+                        # Si no tiene completed_at, usar hoy como referencia
+                        days_overdue = (today - due_val).days
                 else:
+                    # Tarea no completada: calcular desde hoy
                     days_overdue = max(0, (today - due_val).days)
             else:
                 days_overdue = 0

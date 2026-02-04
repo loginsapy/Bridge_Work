@@ -328,11 +328,44 @@ class Task(db.Model):
         """Set task status normalizing legacy values."""
         self.status = Task.normalize_status(new_status)
         
-        # Update completed_at timestamp
-        if self.status == 'COMPLETED':
-            self.completed_at = datetime.now()
-        elif self.status != 'COMPLETED':
+        # Update completed_at timestamp when task is completed or accepted
+        if self.status in ('COMPLETED', 'ACCEPTED'):
+            if not self.completed_at:  # Solo establecer si no tiene fecha previa
+                self.completed_at = datetime.now()
+        else:
             self.completed_at = None
+    
+    @staticmethod
+    def validate_dates(start_date, due_date):
+        """Validar que las fechas sean coherentes.
+        
+        Returns:
+            tuple: (is_valid: bool, error_message: str or None)
+        """
+        if start_date and due_date:
+            # Comparar solo las fechas (sin hora/timezone) para evitar problemas de compatibilidad
+            start_d = start_date.date() if hasattr(start_date, 'date') else start_date
+            due_d = due_date.date() if hasattr(due_date, 'date') else due_date
+            if due_d < start_d:
+                return False, 'La fecha de vencimiento no puede ser anterior a la fecha de inicio'
+        return True, None
+    
+    @property
+    def time_deviation_days(self):
+        """Calcula el desvío en días entre la fecha de vencimiento y la fecha de finalización.
+        
+        Retorna:
+        - Número positivo: días de retraso
+        - Número negativo: días de anticipación
+        - None: si no hay fecha de vencimiento o no está completada
+        """
+        if not self.due_date:
+            return None
+        if not self.completed_at and self.status not in ('COMPLETED', 'ACCEPTED'):
+            return None
+        
+        reference_date = self.completed_at if self.completed_at else datetime.now()
+        return (reference_date.date() - self.due_date.date()).days
     
     def is_blocked(self):
         """Check if task is blocked by incomplete predecessors.

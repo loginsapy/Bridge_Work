@@ -498,7 +498,15 @@
             <td>{% if r.client %}<span class="client-icon me-1" title="{{ r.client }} (Cliente Externo)" aria-label="{{ r.client }} (Cliente Externo)"><i class="fa-solid fa-building"></i></span> {{ r.client }}{% else %}-{% endif %}</td>
             <td>{{ r.start_date|fecha_es('corto_año') if r.start_date else '-' }}</td>
             <td>{{ r.due_date|fecha_es('corto_año') if r.due_date else '-' }}</td>
-            <td>{{ r.days_overdue }}</td>
+            <td>
+              {% if r.days_overdue > 0 %}
+              <span class="text-danger" title="{{ r.days_overdue }} día(s) de retraso">+{{ r.days_overdue }}</span>
+              {% elif r.days_overdue < 0 %}
+              <span class="text-success" title="{{ (-r.days_overdue) }} día(s) de anticipación">{{ r.days_overdue }}</span>
+              {% else %}
+              <span class="text-muted">0</span>
+              {% endif %}
+            </td>
             <td>{{ r.estimated_hours if r.estimated_hours is not none else '-' }}</td>
             <td>{{ '%.1f'|format(r.hours_logged) }}</td>
           </tr>
