@@ -394,6 +394,14 @@ def update_task(task_id):
             return jsonify({'error': 'assignees must be a list of user ids'}), 400
         users = User.query.filter(User.id.in_(list(new_ids))).all()
         t.assignees = users
+        # Maintain backward compatibility: set assigned_to_id to first assignee or clear it
+        if users:
+            try:
+                t.assigned_to_id = users[0].id
+            except Exception:
+                t.assigned_to_id = None
+        else:
+            t.assigned_to_id = None
 
     try:
         db.session.commit()

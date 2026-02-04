@@ -1566,7 +1566,7 @@ tr.table-warning:hover {
                     <option value="{{ t.id }}">#{{ t.id }} — {{ t.title }} {% if t.status == 'COMPLETED' %}✓{% endif %}</option>
                     {% endfor %}
                   </select>
-                  <span class="hierarchy-help">Debe completarse antes de esta tarea</span>
+                  <span class="hierarchy-help">Debe completarse antes de esta tarea — Selección múltiple: Ctrl+clic (o Cmd+clic en Mac). Para deseleccionar, Ctrl+clic sobre la opción seleccionada.</span>
                 </div>
               </div>
             </div>
@@ -1804,7 +1804,41 @@ function setAssignee(userId) {
       const current = Array.isArray(data.assignees) ? data.assignees.map(x => parseInt(x)) : [];
       const uid = parseInt(userId);
       if (!current.includes(uid)) current.push(uid);
-      updateTaskFields(currentTaskId, { assignees: current });
+      // Show a small wait indicator while the server processes assignment (may send emails)
+      let waitEl = document.getElementById('assignWaitMsg');
+      if (!waitEl) {
+        waitEl = document.createElement('div');
+        waitEl.id = 'assignWaitMsg';
+        waitEl.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-1"></i> Aguarde... Enviando notificación';
+        // Make it a fixed, high-contrast banner so it's clearly visible on the board
+        waitEl.style.cssText = 'position:fixed; top:12px; right:12px; background:linear-gradient(90deg,#0d6efd,#6610f2); color:#fff; padding:10px 14px; font-size:0.95rem; border-radius:8px; box-shadow:0 8px 24px rgba(13,110,253,0.18); z-index:2100; display:flex; align-items:center; gap:8px;';
+        // mark start time so we can ensure a minimum visible duration
+        waitEl.dataset.startTime = Date.now();
+        // Create an overlay that blocks user interaction with the board while processing
+        let overlay = document.getElementById('assignOverlay');
+        if (!overlay) {
+          overlay = document.createElement('div');
+          overlay.id = 'assignOverlay';
+          overlay.style.cssText = 'position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.06); z-index:2000; cursor:wait;';
+          overlay.setAttribute('aria-hidden', 'true');
+          document.body.appendChild(overlay);
+        }
+        document.body.appendChild(waitEl);
+      } else {
+        // update start time in case re-used
+        waitEl.dataset.startTime = Date.now();
+        // ensure overlay exists
+        if (!document.getElementById('assignOverlay')) {
+          const overlay = document.createElement('div');
+          overlay.id = 'assignOverlay';
+          overlay.style.cssText = 'position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.06); z-index:2000; cursor:wait;';
+          overlay.setAttribute('aria-hidden', 'true');
+          document.body.appendChild(overlay);
+        }
+      }
+      // Call update and ensure we remove the wait indicator on error (success triggers reload)
+      updateTaskFields(currentTaskId, { assignees: current })
+        .catch(() => { try { document.getElementById('assignWaitMsg')?.remove(); document.getElementById('assignOverlay')?.remove(); } catch(e){} });
     })
     .catch(err => {
       console.error('Error fetching task:', err);
@@ -1813,7 +1847,7 @@ function setAssignee(userId) {
 }
 
 function updateTaskFields(taskId, payload) {
-  fetch(`/api/tasks/${taskId}`, {
+  return fetch(`/api/tasks/${taskId}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload)
@@ -1838,16 +1872,33 @@ function updateTaskFields(taskId, payload) {
     return r.json();
   })
   .then(data => {
+    // Ensure any 'assignWaitMsg' banner is visible for at least a short time
+    try {
+      const waitEl = document.getElementById('assignWaitMsg');
+      const minVisible = 700; // ms
+      if (waitEl && waitEl.dataset && waitEl.dataset.startTime) {
+        const start = parseInt(waitEl.dataset.startTime || '0');
+        const elapsed = Date.now() - start;
+        const delay = Math.max(0, minVisible - elapsed);
+        setTimeout(() => location.reload(), delay);
+        return;
+      }
+    } catch (e) {
+      // ignore and reload immediately
+    }
     location.reload();
   })
   .catch(err => {
-    if (err === 'predecessors_incomplete' || err === 'children_incomplete') return;
+    if (err === 'predecessors_incomplete' || err === 'children_incomplete') return Promise.reject(err);
     if (err && err.type === 'server_error') {
       alert(err.message);
-      return;
+      return Promise.reject(err);
     }
     console.error(err);
     alert('Error al actualizar la tarea');
+    // remove any assign wait indicator and overlay if present
+    try { document.getElementById('assignWaitMsg')?.remove(); document.getElementById('assignOverlay')?.remove(); } catch(e){}
+    return Promise.reject(err);
   });
 }
 

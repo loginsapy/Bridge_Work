@@ -330,7 +330,7 @@
                   <option value="{{ t.id }}" {% if t in task.predecessors %}selected{% endif %}>{{ t.title }} (#{{ t.id }}) {% if t.status == 'COMPLETED' %}✓{% endif %}</option>
                 {% endfor %}
               </select>
-              <small class="text-muted d-block">Tareas que deben completarse antes de esta (bloquean completar).</small>
+              <small class="text-muted d-block">Tareas que deben completarse antes de esta (bloquean completar). Selección múltiple: Ctrl+clic (Cmd+clic en Mac). Para deseleccionar, Ctrl+clic sobre la opción seleccionada.</small>
             </div>
             {% endif %}          </div>
 
