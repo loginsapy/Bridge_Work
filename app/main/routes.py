@@ -521,8 +521,41 @@ def projects():
     else:
         base_query = Project.query.filter(False)
 
-    pagination = base_query.paginate(page=page, per_page=per_page, error_out=False)
-    projects = pagination.items
+    # Evitar duplicados y problemas con JSON en Postgres.
+    # Estrategia: contar project ids distintos, obtener los ids paginados mediante GROUP BY,
+    # y luego cargar los objetos Project por esos ids.
+    from ..models import Project as _Project
+    from sqlalchemy import desc
+    import math
+    from types import SimpleNamespace
+
+    # Total de proyectos distintos para la paginación
+    ids_subq = base_query.with_entities(_Project.id).group_by(_Project.id).subquery()
+    total = db.session.query(func.count()).select_from(ids_subq).scalar() or 0
+
+    # Obtener ids paginados (ordenados por fecha de inicio más reciente)
+    offset = (page - 1) * per_page
+    id_rows = base_query.with_entities(_Project.id, func.max(_Project.start_date).label('sdate'))
+    id_rows = id_rows.group_by(_Project.id).order_by(desc('sdate')).limit(per_page).offset(offset).all()
+    ids = [r[0] for r in id_rows]
+
+    # Cargar los proyectos correspondientes (mantener orden por start_date desc)
+    if ids:
+        projects = Project.query.filter(Project.id.in_(ids)).order_by(Project.start_date.desc()).all()
+    else:
+        projects = []
+
+    # Construir objeto de paginación mínimo para la plantilla
+    pages = int(math.ceil(total / float(per_page))) if per_page else 0
+    pagination = SimpleNamespace(
+        page=page,
+        pages=pages,
+        has_prev=(page > 1),
+        has_next=(page < pages),
+        prev_num=(page - 1 if page > 1 else None),
+        next_num=(page + 1 if page < pages else None),
+        total=total
+    )
 
     # Calcular progreso y horas para cada proyecto en tiempo real
     for p in projects:
