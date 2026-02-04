@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from sqlalchemy import Enum as SAEnum
 from flask_login import UserMixin
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -593,3 +593,52 @@ class HourlyRate(db.Model):
     def get_default():
         """Obtiene la tarifa por defecto"""
         return HourlyRate.query.filter_by(is_default=True, is_active=True).first()
+
+
+class License(db.Model):
+    """Modelo para almacenar información de licencia del sistema"""
+    __tablename__ = 'licenses'
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    license_key = db.Column(db.String(64), nullable=False)
+    product_code = db.Column(db.String(64), default='BRIDGEWORK')
+    hardware_id = db.Column(db.String(128), nullable=True)
+    status = db.Column(db.String(32), default='PENDING')  # PENDING, ACTIVE, EXPIRED, INVALID
+    activated_at = db.Column(db.DateTime, nullable=True)
+    last_validated_at = db.Column(db.DateTime, nullable=True)
+    expires_at = db.Column(db.DateTime, nullable=True)
+    license_type = db.Column(db.String(32), nullable=True)  # TRIAL, STANDARD, ENTERPRISE
+    max_users = db.Column(db.Integer, nullable=True)
+    features = db.Column(db.JSON, nullable=True)  # Features enabled by license
+    customer_name = db.Column(db.String(255), nullable=True)
+    customer_email = db.Column(db.String(255), nullable=True)
+    error_message = db.Column(db.String(512), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.now)
+    updated_at = db.Column(db.DateTime, default=datetime.now, onupdate=datetime.now)
+    
+    @staticmethod
+    def get_active():
+        """Obtiene la licencia activa del sistema"""
+        return License.query.filter_by(status='ACTIVE').first()
+    
+    @staticmethod
+    def get_current():
+        """Obtiene la licencia actual (activa o la más reciente)"""
+        active = License.get_active()
+        if active:
+            return active
+        return License.query.order_by(License.created_at.desc()).first()
+    
+    def is_valid(self):
+        """Verifica si la licencia es válida"""
+        if self.status != 'ACTIVE':
+            return False
+        if self.expires_at and self.expires_at < datetime.now():
+            return False
+        return True
+    
+    def needs_validation(self, days=15):
+        """Verifica si la licencia necesita revalidación"""
+        if not self.last_validated_at:
+            return True
+        from datetime import timedelta
+        return (datetime.now() - self.last_validated_at) > timedelta(days=days)

@@ -11,9 +11,9 @@
   }
 
   #page-content-wrapper {
-    margin-left: 250px;
-    width: auto !important; /* Override w-100 to prevent overflow */
-    transition: margin-left 0.25s ease;
+    margin-left: 250px !important;
+    width: calc(100% - 250px) !important;
+    transition: margin-left 0.25s ease, width 0.25s ease;
   }
 
   /* Collapsed state */
@@ -22,7 +22,8 @@
   }
 
   body.sb-sidenav-toggled #page-content-wrapper {
-    margin-left: 70px;
+    margin-left: 70px !important;
+    width: calc(100% - 70px) !important;
   }
 
   body.sb-sidenav-toggled #sidebar-wrapper .sidebar-link span,
@@ -116,6 +117,7 @@
     </div>
   </div>
   <div class="sidebar-nav">
+    {% if license_valid %}
     <!-- Dashboard -->
     <a href="{{ url_for('main.dashboard') }}" class="sidebar-link {% if request.endpoint == 'main.dashboard' %}active{% endif %}">
       <i class="fa-solid fa-house"></i>
@@ -173,6 +175,26 @@
       <i class="fa-solid fa-gear"></i>
       <span>{{ _('administration') }}</span>
     </a>
+    {% endif %}
+    {% else %}
+    <!-- Sin licencia válida - solo mostrar configuración para Admin -->
+    {% if current_user.is_internal and current_user.role and current_user.role.name == 'Admin' %}
+    <div class="alert alert-warning mx-2 mb-3" style="font-size: 0.8rem;">
+      <i class="fa-solid fa-exclamation-triangle me-1"></i>
+      <strong>Sin Licencia</strong><br>
+      <small>Active una licencia para habilitar todas las funciones.</small>
+    </div>
+    <a href="{{ url_for('main.admin_settings_page') }}" class="sidebar-link {% if 'admin' in request.endpoint %}active{% endif %}">
+      <i class="fa-solid fa-gear"></i>
+      <span>{{ _('administration') }}</span>
+    </a>
+    {% else %}
+    <div class="alert alert-danger mx-2" style="font-size: 0.8rem;">
+      <i class="fa-solid fa-lock me-1"></i>
+      <strong>Sistema Bloqueado</strong><br>
+      <small>Contacte al administrador para activar la licencia.</small>
+    </div>
+    {% endif %}
     {% endif %}
   </div>
 </aside>

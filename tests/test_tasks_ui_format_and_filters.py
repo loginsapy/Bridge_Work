@@ -34,7 +34,7 @@ def test_tasks_page_has_all_status_filters_and_wbs_and_multi_assignees(client, d
     assert 'U1' in html
     assert 'U2' in html
     # Check the status filter buttons include TODO and COMPLETED
-    assert 'data-status="COMPLETED"' in html}
+    assert 'data-status="COMPLETED"' in html
     assert 'data-status="DONE"' in html
 
     # The tasks page should include the project-style header and completion percentage

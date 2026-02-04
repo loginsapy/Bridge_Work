@@ -247,6 +247,39 @@ def dashboard():
     )
 
 
+@main_bp.route('/profile')
+@login_required
+def profile():
+    """User profile page"""
+    # Get user's tasks statistics
+    user_tasks = Task.query.filter(
+        (Task.assigned_to_id == current_user.id) | (Task.assignees.any(User.id == current_user.id))
+    )
+    total_tasks = user_tasks.count()
+    completed_tasks = user_tasks.filter(Task.status == 'COMPLETED').count()
+    
+    # Get user's time entries statistics
+    total_hours = db.session.query(func.sum(TimeEntry.hours)).filter(
+        TimeEntry.user_id == current_user.id
+    ).scalar() or 0
+    
+    # Get user's projects count
+    user_project_ids = db.session.query(Task.project_id).filter(
+        (Task.assigned_to_id == current_user.id) | (Task.assignees.any(User.id == current_user.id))
+    ).distinct().scalar_subquery()
+    projects_count = Project.query.filter(Project.id.in_(user_project_ids)).count()
+    
+    # Build stats object for template
+    stats = {
+        'tasks_assigned': total_tasks,
+        'tasks_completed': completed_tasks,
+        'projects_managed': projects_count,
+        'total_hours': total_hours
+    }
+    
+    return render_template('profile.html', stats=stats)
+
+
 # Mockup preview routes for design review
 @main_bp.route('/mock/dashboard')
 def mock_dashboard():
@@ -659,9 +692,9 @@ def reorder_project_tasks(project_id):
     """
     # Only internal users with role 'PMP' or 'Admin' can reorder tasks
     if not current_user.is_internal:
-        return jsonify({'error': 'Permission denied'}), 403
+        return jsonify({'error': 'Solo usuarios internos pueden reordenar tareas', 'permission_denied': True}), 403
     if not getattr(current_user, 'role', None) or current_user.role.name not in ['PMP', 'Admin']:
-        return jsonify({'error': 'Permission denied'}), 403
+        return jsonify({'error': 'Solo usuarios con rol PMP o Admin pueden reordenar tareas', 'permission_denied': True}), 403
 
     data = request.get_json() or {}
     ids = data.get('ordered_task_ids')
@@ -2668,6 +2701,42 @@ def task_detail(task_id):
     return render_template('task_detail.html', task=task, time_entries=time_entries, total_hours=total_hours, now=datetime.now(), can_edit=can_edit)
 
 
+@main_bp.route('/attachment/<int:attachment_id>/download')
+@login_required
+def download_attachment(attachment_id):
+    """Download a task attachment"""
+    attachment = TaskAttachment.query.get_or_404(attachment_id)
+    task = attachment.task
+    
+    # Check permissions - user must be able to view the task
+    can_view = False
+    if current_user.is_internal:
+        can_view = True
+    else:
+        # Clients can only download attachments from tasks they can view
+        if task.is_external_visible or task.assigned_client_id == current_user.id:
+            can_view = True
+    
+    if not can_view:
+        flash('No tienes permiso para descargar este archivo.', 'danger')
+        return redirect(url_for('main.projects'))
+    
+    # Build the file path
+    task_folder = os.path.join(current_app.config['UPLOAD_FOLDER'], f'task_{task.id}')
+    filepath = os.path.join(task_folder, attachment.stored_filename)
+    
+    if not os.path.exists(filepath):
+        flash('Archivo no encontrado.', 'danger')
+        return redirect(url_for('main.task_detail', task_id=task.id))
+    
+    return send_file(
+        filepath,
+        mimetype=attachment.mime_type or 'application/octet-stream',
+        as_attachment=True,
+        download_name=attachment.filename
+    )
+
+
 @main_bp.route('/task/<int:task_id>/move', methods=['POST'])
 @login_required
 def move_task(task_id):
@@ -3282,6 +3351,7 @@ def admin_required(f):
 def admin_settings_page():
     """Admin settings page"""
     from app.models import SystemSettings, Role
+    from app.services import license_service
     
     # Get all users
     users = User.query.order_by(User.created_at.desc()).all()
@@ -3329,11 +3399,17 @@ def admin_settings_page():
         'active_users': User.query.filter_by(is_active=True).count()
     }
     
+    # Get license info
+    license_info = license_service.check_license_status()
+    hardware_id = license_service.get_hardware_id()
+    
     return render_template('admin_settings.html', 
                          users=users, 
                          roles=roles,
                          settings=settings,
-                         stats=stats)
+                         stats=stats,
+                         license_info=license_info,
+                         hardware_id=hardware_id)
 
 
 @main_bp.route('/admin/settings', methods=['POST'])
@@ -3691,30 +3767,40 @@ def global_search():
 @login_required
 def recent_notifications():
     """Get recent notifications for the current user (JSON API)"""
-    unread_count = SystemNotification.query.filter_by(
-        user_id=current_user.id,
-        is_read=False
-    ).count()
-    
-    notifications = SystemNotification.query.filter_by(
-        user_id=current_user.id
-    ).order_by(SystemNotification.created_at.desc()).limit(10).all()
-    
-    notif_list = [{
-        'id': n.id,
-        'title': n.title,
-        'message': n.message,
-        'type': n.notification_type,
-        'created_at': n.created_at.isoformat() if n.created_at else None,
-        'is_read': n.is_read,
-        'related_entity_type': n.related_entity_type,
-        'related_entity_id': n.related_entity_id
-    } for n in notifications]
+    from .. import db
+    try:
+        unread_count = SystemNotification.query.filter_by(
+            user_id=current_user.id,
+            is_read=False
+        ).count()
         
-    return jsonify({
-        'unread_count': unread_count,
-        'notifications': notif_list
-    })
+        notifications = SystemNotification.query.filter_by(
+            user_id=current_user.id
+        ).order_by(SystemNotification.created_at.desc()).limit(10).all()
+        
+        notif_list = [{
+            'id': n.id,
+            'title': n.title,
+            'message': n.message,
+            'type': n.notification_type,
+            'created_at': n.created_at.isoformat() if n.created_at else None,
+            'is_read': n.is_read,
+            'related_entity_type': n.related_entity_type,
+            'related_entity_id': n.related_entity_id
+        } for n in notifications]
+            
+        return jsonify({
+            'unread_count': unread_count,
+            'notifications': notif_list
+        })
+    except Exception as e:
+        current_app.logger.exception('Error fetching recent notifications: %s', e)
+        # If the DB session is in a broken state, rollback to clear it
+        try:
+            db.session.rollback()
+        except Exception:
+            current_app.logger.exception('Error rolling back DB session')
+        return jsonify({'error': 'Error fetching notifications'}), 500
 
 
 # Missing notifications route

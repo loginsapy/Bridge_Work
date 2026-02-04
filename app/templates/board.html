@@ -685,12 +685,6 @@ tr.table-warning:hover {
   </nav>
 </div>
 
-<div class="alert alert-warning alert-dismissible fade show mb-3" role="alert">
-  <i class="fa-solid fa-calendar-check me-2"></i>
-  <strong>Pendiente:</strong> Reunión con el equipo de desarrollo (avisará Negofin Sebastian).
-  <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-</div>
-
 <!-- Toolbar Monday-style -->
 <div class="board-toolbar mb-3">
   <div class="toolbar-left">
@@ -2049,10 +2043,14 @@ function deleteTask(taskId) {
 // Drag and drop
 const tbody = document.getElementById('tasksBody');
 
+// Check if user can reorder tasks (PMP or Admin only)
+const canReorderTasks = {{ 'true' if current_user.is_internal and current_user.role and current_user.role.name in ['PMP', 'Admin'] else 'false' }};
+
 // Predecessor modal markup (inserted at end of file via template block)
 
 let draggedRow = null;
 let draggedGroup = [];
+let orderPersisted = false; // Flag to prevent double persist
 
 function getDescendants(row) {
   const tbodyEl = document.getElementById('tasksBody');
@@ -2076,14 +2074,34 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function attachDragHandlers() {
     const rows = Array.from(tbodyEl.querySelectorAll('tr'));
+    
+    // If user can't reorder, disable drag functionality
+    if (!canReorderTasks) {
+      rows.forEach(row => {
+        row.removeAttribute('draggable');
+        row.style.cursor = 'default';
+      });
+      const grips = tbodyEl.querySelectorAll('.row-grip .fa-grip-vertical');
+      grips.forEach(grip => {
+        grip.removeAttribute('draggable');
+        grip.style.cursor = 'not-allowed';
+        grip.style.opacity = '0.4';
+        grip.title = 'Solo usuarios PMP o Admin pueden reordenar tareas';
+      });
+      return; // Don't attach drag handlers
+    }
+    
     rows.forEach(row => row.style.cursor = row.getAttribute('draggable') ? 'grab' : 'default');
 
     // Attach drag handlers to rows (for browsers that allow dragging of TR)
     rows.forEach(row => {
       row.addEventListener('dragend', () => {
         draggedGroup.forEach(r => r.classList.remove('dragging'));
-        console.debug('dragend, persisting order');
-        persistTaskOrder();
+        if (!orderPersisted) {
+          console.debug('dragend, persisting order');
+          orderPersisted = true;
+          persistTaskOrder();
+        }
         draggedRow = null;
         draggedGroup = [];
       });
@@ -2111,6 +2129,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const grips = Array.from(tbodyEl.querySelectorAll('.row-grip .fa-grip-vertical[draggable]'));
     grips.forEach(handle => {
       handle.addEventListener('dragstart', (e) => {
+        orderPersisted = false; // Reset flag on new drag
         const row = handle.closest('tr');
         if (!row) return;
         draggedRow = row;
@@ -2120,9 +2139,8 @@ document.addEventListener('DOMContentLoaded', () => {
       });
 
       handle.addEventListener('dragend', (e) => {
-        // dragend from handle should be handled by row dragend as well, but ensure cleanup
+        // dragend from handle - let row dragend handle the persist to avoid double call
         draggedGroup.forEach(r => r.classList.remove('dragging'));
-        persistTaskOrder();
         draggedRow = null;
         draggedGroup = [];
       });
@@ -2153,7 +2171,11 @@ function persistTaskOrder() {
     body: JSON.stringify({ ordered_task_ids: ids })
   })
   .then(r => {
-    if (!r.ok) throw new Error('Failed to persist order');
+    if (!r.ok) {
+      return r.json().then(data => {
+        throw new Error(data.error || 'Error al guardar el orden');
+      });
+    }
     return r.json();
   })
   .then(data => {
@@ -2169,7 +2191,16 @@ function persistTaskOrder() {
     // Reload to ensure full consistency across nested rows and other derived fields
     setTimeout(() => location.reload(), 350);
   })
-  .catch(err => { console.error(err); alert('Error al guardar el orden de tareas'); });
+  .catch(err => { 
+    console.error(err); 
+    // Show user-friendly toast/alert with the actual error message
+    const msg = err.message || 'Error al guardar el orden de tareas';
+    if (typeof showToast === 'function') {
+      showToast(msg, 'warning');
+    } else {
+      alert(msg);
+    }
+  });
 }
 
 // Filter functions

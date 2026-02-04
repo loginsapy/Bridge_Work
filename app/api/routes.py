@@ -1,13 +1,16 @@
-from flask import jsonify, request, abort
+from flask import jsonify, request, abort, current_app
 from . import api_bp
 from .. import db
-from ..models import Project, Task, TimeEntry, User
+from ..models import Project, Task, TimeEntry, User, TaskAttachment
 from sqlalchemy.exc import SQLAlchemyError
 from datetime import date, datetime
 from marshmallow import ValidationError
 from .schemas import ProjectSchema, TaskSchema, TimeEntrySchema
 from flask_login import current_user
 from ..auth.decorators import internal_required, client_required
+import os
+import mimetypes
+from werkzeug.utils import secure_filename
 
 # Simple serializers
 
@@ -546,6 +549,141 @@ def delete_time_entry(entry_id):
     return jsonify({"deleted": entry_id}), 200
 
 
+@api_bp.route("/attachments/<int:attachment_id>", methods=["DELETE"])
+def delete_attachment(attachment_id):
+    """Delete a task attachment"""
+    if not current_user.is_authenticated:
+        abort(401)
+    
+    attachment = TaskAttachment.query.get_or_404(attachment_id)
+    task = attachment.task
+    
+    # Check permissions - only internal users or the uploader can delete
+    can_delete = False
+    if current_user.is_internal:
+        can_delete = True
+    elif attachment.uploaded_by_id == current_user.id:
+        can_delete = True
+    
+    if not can_delete:
+        abort(403, description="No tienes permiso para eliminar este archivo")
+    
+    try:
+        # Delete the physical file
+        task_folder = os.path.join(current_app.config['UPLOAD_FOLDER'], f'task_{task.id}')
+        filepath = os.path.join(task_folder, attachment.stored_filename)
+        if os.path.exists(filepath):
+            os.remove(filepath)
+        
+        # Delete from database
+        db.session.delete(attachment)
+        db.session.commit()
+    except SQLAlchemyError as e:
+        db.session.rollback()
+        abort(500, description=str(e))
+    except OSError as e:
+        current_app.logger.error(f"Error deleting file: {e}")
+        # Still delete from DB even if file deletion fails
+        db.session.delete(attachment)
+        db.session.commit()
+    
+    return jsonify({"deleted": attachment_id}), 200
+
+
+def allowed_file(filename):
+    """Check if file extension is allowed"""
+    ALLOWED_EXTENSIONS = current_app.config.get('ALLOWED_EXTENSIONS', {'txt', 'pdf', 'png', 'jpg', 'jpeg', 'gif', 'doc', 'docx', 'xls', 'xlsx'})
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+
+def get_unique_filename(task_id, filename):
+    """Generate a unique filename to avoid duplicates"""
+    safe_name = secure_filename(filename)
+    if not safe_name:
+        safe_name = 'file'
+    
+    name, ext = os.path.splitext(safe_name)
+    if not ext:
+        ext = ''
+    
+    task_folder = os.path.join(current_app.config['UPLOAD_FOLDER'], f'task_{task_id}')
+    os.makedirs(task_folder, exist_ok=True)
+    
+    final_name = safe_name
+    counter = 1
+    while os.path.exists(os.path.join(task_folder, final_name)):
+        final_name = f"{name}_{counter}{ext}"
+        counter += 1
+    
+    return final_name, task_folder
+
+
+@api_bp.route("/tasks/<int:task_id>/attachments", methods=["POST"])
+def upload_attachment(task_id):
+    """Upload attachment(s) to a task"""
+    if not current_user.is_authenticated:
+        abort(401)
+    
+    task = Task.query.get_or_404(task_id)
+    
+    # Check permissions - internal users or assigned client can upload
+    can_upload = False
+    if current_user.is_internal:
+        can_upload = True
+    elif task.assigned_client_id == current_user.id:
+        can_upload = True
+    
+    if not can_upload:
+        return jsonify({"error": "No tienes permiso para subir archivos a esta tarea"}), 403
+    
+    if 'file' not in request.files:
+        return jsonify({"error": "No se encontró archivo"}), 400
+    
+    files = request.files.getlist('file')
+    uploaded = []
+    errors = []
+    
+    for file in files:
+        if file and file.filename:
+            if not allowed_file(file.filename):
+                errors.append(f"Tipo de archivo no permitido: {file.filename}")
+                continue
+            
+            try:
+                stored_filename, task_folder = get_unique_filename(task_id, file.filename)
+                filepath = os.path.join(task_folder, stored_filename)
+                file.save(filepath)
+                
+                file_size = os.path.getsize(filepath)
+                mime_type = mimetypes.guess_type(file.filename)[0] or 'application/octet-stream'
+                
+                attachment = TaskAttachment(
+                    task_id=task_id,
+                    filename=file.filename,
+                    stored_filename=stored_filename,
+                    file_size=file_size,
+                    mime_type=mime_type,
+                    uploaded_by_id=current_user.id
+                )
+                db.session.add(attachment)
+                db.session.commit()
+                
+                uploaded.append({
+                    "id": attachment.id,
+                    "filename": attachment.filename,
+                    "file_size": attachment.file_size
+                })
+            except Exception as e:
+                current_app.logger.error(f"Error uploading attachment: {e}")
+                errors.append(f"Error al subir {file.filename}: {str(e)}")
+    
+    return jsonify({
+        "uploaded": uploaded,
+        "errors": errors,
+        "success": len(uploaded) > 0
+    }), 200 if uploaded else 400
+
+
 # User endpoints (for admin)
 from ..models import User
 
@@ -577,3 +715,91 @@ def get_user(user_id):
     
     user = User.query.get_or_404(user_id)
     return jsonify(user_to_dict(user))
+
+
+# ==================== LICENSE ENDPOINTS ====================
+from ..services import license_service
+
+@api_bp.route("/license/activate", methods=["POST"])
+def activate_license():
+    """Activate a new license"""
+    if not current_user.is_authenticated:
+        abort(401)
+    if not current_user.role or current_user.role.name != 'Admin':
+        abort(403, description="Solo administradores pueden activar licencias")
+    
+    data = request.get_json()
+    current_app.logger.debug('License activation request payload: %s', data)
+    if not data or not data.get('license_key'):
+        return jsonify({"success": False, "message": "Se requiere clave de licencia"}), 400
+    
+    result = license_service.activate_license(data['license_key'])
+    # Log result for debugging
+    if not result.get('success'):
+        current_app.logger.warning('License activation failed: %s', result.get('message'))
+        # Prefer explicit http_status from service when available
+        if result.get('http_status'):
+            return jsonify(result), result.get('http_status')
+        msg = result.get('message', 'Error al activar licencia')
+        # Distinguish network or external-service errors to return appropriate HTTP codes
+        if 'No se pudo conectar' in msg or 'Tiempo de espera' in msg or 'Error al activar licencia:' in msg:
+            return jsonify(result), 503
+        return jsonify(result), 400
+    return jsonify(result), 200
+
+
+@api_bp.route("/license/validate", methods=["POST"])
+def validate_license():
+    """Validate current license"""
+    if not current_user.is_authenticated:
+        abort(401)
+    if not current_user.role or current_user.role.name != 'Admin':
+        abort(403, description="Solo administradores pueden validar licencias")
+    
+    result = license_service.validate_license()
+    if result.get('error_code') in ('network','timeout','external_server_error') or result.get('http_status'):
+        return jsonify(result), result.get('http_status', 503)
+    return jsonify(result), 200
+
+
+@api_bp.route("/license/status", methods=["GET"])
+def license_status():
+    """Get current license status"""
+    if not current_user.is_authenticated:
+        abort(401)
+    
+    result = license_service.check_license_status()
+    # Serialize license object if present
+    if result.get('license'):
+        lic = result['license']
+        result['license'] = {
+            'license_key': lic.license_key[:8] + '...' + lic.license_key[-4:] if len(lic.license_key) > 12 else lic.license_key,
+            'status': lic.status,
+            'license_type': lic.license_type,
+            'customer_name': lic.customer_name,
+            'max_users': lic.max_users,
+            'activated_at': lic.activated_at.isoformat() if lic.activated_at else None,
+            'expires_at': lic.expires_at.isoformat() if lic.expires_at else None,
+            'last_validated_at': lic.last_validated_at.isoformat() if lic.last_validated_at else None
+        }
+    return jsonify(result), 200
+
+
+@api_bp.route("/license/deactivate", methods=["POST"])
+def deactivate_license():
+    """Deactivate current license"""
+    if not current_user.is_authenticated:
+        abort(401)
+    if not current_user.role or current_user.role.name != 'Admin':
+        abort(403, description="Solo administradores pueden desactivar licencias")
+    
+    result = license_service.deactivate_license()
+    if not result.get('success'):
+        current_app.logger.warning('License deactivation failed: %s', result.get('message'))
+        if result.get('http_status'):
+            return jsonify(result), result.get('http_status')
+        if result.get('message') and ('No se pudo conectar' in result.get('message') or 'Tiempo de espera' in result.get('message')):
+            return jsonify(result), 503
+        return jsonify(result), 400
+    return jsonify(result), 200
+

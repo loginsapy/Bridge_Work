@@ -46,6 +46,18 @@ def create_app(config_object="config.DevConfig"):
     app.extensions.setdefault('metrics', {})
     app.extensions['metrics'].setdefault('alerts_sent', 0)
 
+    # Add a global SQLAlchemy error handler to rollback sessions on DB errors
+    from sqlalchemy.exc import SQLAlchemyError
+
+    @app.errorhandler(SQLAlchemyError)
+    def handle_sqlalchemy_error(error):
+        app.logger.exception('Unhandled SQLAlchemyError: %s', error)
+        try:
+            db.session.rollback()
+        except Exception:
+            app.logger.exception('Error rolling back DB session after SQLAlchemyError')
+        return ("Database error", 500)
+
     # Expose /metrics endpoint
     @app.route('/metrics')
     def metrics_endpoint():
@@ -62,6 +74,74 @@ def create_app(config_object="config.DevConfig"):
     # API blueprint
     from .api import api_bp
     app.register_blueprint(api_bp)
+
+    # License check middleware
+    @app.before_request
+    def check_license():
+        from flask import request, redirect, url_for, flash
+        from flask_login import current_user
+        from .services import license_service
+        
+        # Skip license check for static files, login, and license endpoints
+        skip_paths = [
+            '/static/', '/login', '/logout', '/callback', '/metrics',
+            '/api/license/', '/admin/settings'
+        ]
+        
+        if any(request.path.startswith(p) for p in skip_paths):
+            return None
+        
+        # Skip for unauthenticated users (they'll be redirected to login)
+        if not current_user.is_authenticated:
+            return None
+        
+        # Check license status
+        try:
+            license_status = license_service.check_license_status()
+            if not license_status.get('is_valid', False):
+                # Admin can access settings to activate license
+                if current_user.role and current_user.role.name == 'Admin':
+                    if not request.path.startswith('/admin'):
+                        flash('El sistema no tiene una licencia válida. Por favor active una licencia.', 'warning')
+                        return redirect(url_for('main.admin_settings_page'))
+                else:
+                    # Non-admin users see a blocking message
+                    from flask import render_template_string
+                    return render_template_string('''
+                    <!DOCTYPE html>
+                    <html>
+                    <head>
+                        <title>Sistema Bloqueado</title>
+                        <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+                    </head>
+                    <body class="bg-light">
+                        <div class="container mt-5">
+                            <div class="row justify-content-center">
+                                <div class="col-md-6">
+                                    <div class="card shadow">
+                                        <div class="card-body text-center py-5">
+                                            <i class="fa-solid fa-lock text-danger" style="font-size: 4rem;"></i>
+                                            <h3 class="mt-4">Sistema Bloqueado</h3>
+                                            <p class="text-muted">El sistema no tiene una licencia activa.</p>
+                                            <p>Por favor, contacte al administrador del sistema.</p>
+                                            <a href="{{ url_for('auth.logout') }}" class="btn btn-secondary mt-3">
+                                                <i class="fa-solid fa-sign-out-alt me-2"></i>Cerrar Sesión
+                                            </a>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+                    </body>
+                    </html>
+                    '''), 403
+        except Exception as e:
+            app.logger.warning('Error checking license in middleware: %s', e)
+            # Allow access if there's an error checking (avoid blocking users on DB issues)
+            pass
+        
+        return None
 
     # User loader for Flask-Login
     from .models import User, Role, SystemNotification, Task, Project, SystemSettings
@@ -166,13 +246,27 @@ def create_app(config_object="config.DevConfig"):
         from .auth.decorators import _get_user_from_session
         from flask import url_for
         from werkzeug.routing import BuildError
+        from .services import license_service
         # Prefer a DB-bound user object for templates to avoid accessing detached proxy attributes
         user = _get_user_from_session() or current_user
+        
+        # Check license status (cached for performance)
+        try:
+            license_status = license_service.check_license_status()
+            license_valid = license_status.get('is_valid', False)
+        except Exception as e:
+            app.logger.warning('Error checking license status: %s', e)
+            license_valid = False
+            license_status = {'has_license': False, 'is_valid': False}
+        
         context = {
             'current_user': user,
             'available_clients': [], 
             'unread_notifications_count': 0, 
-            'pending_approvals_count': 0, 
+            'pending_approvals_count': 0,
+            # License status
+            'license_valid': license_valid,
+            'license_status': license_status, 
             # System settings (branding)
             # Use org_name if set, otherwise fall back to app_name, then 'BridgeWork'
             'sys_app_name': SystemSettings.get('org_name') or SystemSettings.get('app_name', 'BridgeWork'),

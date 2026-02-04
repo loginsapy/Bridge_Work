@@ -54,16 +54,37 @@
       </div>
 
       <!-- User Role Badge -->
-      
+      {% if current_user.is_authenticated and current_user.role %}
       <div class="nav-item d-none d-lg-flex align-items-center">
-        
-        
-        
+        {% set role_name = current_user.role.name %}
+        {% if role_name == 'Admin' %}
         <span class="role-badge badge bg-danger-subtle text-danger d-flex align-items-center gap-1">
           <i class="fa-solid fa-shield-halved fa-xs"></i>
           <span>Admin</span>
         </span>
+        {% elif role_name == 'PMP' %}
+        <span class="role-badge badge bg-primary-subtle text-primary d-flex align-items-center gap-1">
+          <i class="fa-solid fa-briefcase fa-xs"></i>
+          <span>PMP</span>
+        </span>
+        {% elif role_name == 'Participante' %}
+        <span class="role-badge badge bg-success-subtle text-success d-flex align-items-center gap-1">
+          <i class="fa-solid fa-user fa-xs"></i>
+          <span>Participante</span>
+        </span>
+        {% elif role_name == 'Cliente' %}
+        <span class="role-badge badge bg-warning-subtle text-warning d-flex align-items-center gap-1">
+          <i class="fa-solid fa-building fa-xs"></i>
+          <span>Cliente</span>
+        </span>
+        {% else %}
+        <span class="role-badge badge bg-secondary-subtle text-secondary d-flex align-items-center gap-1">
+          <i class="fa-solid fa-user fa-xs"></i>
+          <span>{{ role_name }}</span>
+        </span>
+        {% endif %}
       </div>
+      {% endif %}
       
 
       <!-- User Menu -->
@@ -80,16 +101,25 @@
           <li class="dropdown-header">
             <div class="fw-semibold">{{ current_user.first_name }} {{ current_user.last_name }}</div>
             <small class="text-muted">{{ current_user.email }}</small>
-            
-            
-            <span class="badge bg-danger-subtle text-danger mt-1">{{ current_user.role.name if current_user.role else 'Sin rol' }}</span>
+            {% set user_role = current_user.role.name if current_user.role else 'Sin rol' %}
+            {% if user_role == 'Admin' %}
+            <span class="badge bg-danger-subtle text-danger mt-1">{{ user_role }}</span>
+            {% elif user_role == 'PMP' %}
+            <span class="badge bg-primary-subtle text-primary mt-1">{{ user_role }}</span>
+            {% elif user_role == 'Participante' %}
+            <span class="badge bg-success-subtle text-success mt-1">{{ user_role }}</span>
+            {% elif user_role == 'Cliente' %}
+            <span class="badge bg-warning-subtle text-warning mt-1">{{ user_role }}</span>
+            {% else %}
+            <span class="badge bg-secondary-subtle text-secondary mt-1">{{ user_role }}</span>
+            {% endif %}
           </li>
           <li><hr class="dropdown-divider"></li>
           <li><a class="dropdown-item" href="/profile"><i class="fa-solid fa-user me-2 text-muted"></i>Mi Perfil</a></li>
-          
+          {% if current_user.role and current_user.role.name == 'Admin' %}
           <li><a class="dropdown-item" href="/admin/users"><i class="fa-solid fa-users-gear me-2 text-muted"></i>Usuarios</a></li>
           <li><a class="dropdown-item" href="/admin/settings"><i class="fa-solid fa-gear me-2 text-muted"></i>Configuración</a></li>
-          
+          {% endif %}
           <li><hr class="dropdown-divider"></li>
           <li><a class="dropdown-item text-danger" href="/auth/logout"><i class="fa-solid fa-right-from-bracket me-2"></i>Cerrar Sesión</a></li>
         </ul>
