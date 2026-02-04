@@ -42,6 +42,11 @@ class User(UserMixin, db.Model):
         self.password_hash = generate_password_hash(password)
 
     def check_password(self, password):
+        """Verifica la contraseña del usuario.
+        Retorna False si no tiene password_hash (usuarios SSO) o si la contraseña es incorrecta.
+        """
+        if not self.password_hash:
+            return False
         return check_password_hash(self.password_hash, password)
 
 

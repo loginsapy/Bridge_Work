@@ -1,5 +1,6 @@
 from flask import render_template, redirect, url_for, request, flash, session, current_app
 from werkzeug.security import check_password_hash
+from urllib.parse import urlparse
 from . import auth_bp
 from app.models import User
 from .utils import get_msal_app
@@ -7,12 +8,20 @@ from flask_login import login_user, logout_user, current_user
 from app import db
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy import func
-from flask import redirect, url_for, session, request
 from msal import ConfidentialClientApplication
 import json
 import base64
 import secrets
 from msal import PublicClientApplication
+
+
+def is_safe_url(target):
+    """Verifica que la URL de redirección sea segura (local al servidor)."""
+    if not target:
+        return False
+    ref_url = urlparse(request.host_url)
+    test_url = urlparse(target)
+    return test_url.scheme in ('', 'http', 'https') and ref_url.netloc == test_url.netloc
 
 
 @auth_bp.route('/login', methods=['GET', 'POST'])
@@ -28,15 +37,23 @@ def login():
         
         user = User.query.filter_by(email=email).first()
         
-        if user and user.check_password(password):
+        if not user:
+            flash('Email o contraseña inválidos.', 'danger')
+        elif not user.password_hash:
+            # Usuario sin contraseña local (probablemente SSO)
+            flash('Esta cuenta no tiene contraseña local. Por favor use Entra ID para iniciar sesión.', 'warning')
+        elif not user.check_password(password):
+            flash('Email o contraseña inválidos.', 'danger')
+        elif not user.is_active:
+            flash('Tu cuenta está desactivada. Contacta al administrador.', 'danger')
+        else:
+            # Login exitoso
             login_user(user, remember=request.form.get('remember_me'))
             next_page = request.args.get('next')
-            if not next_page or url_has_allowed_host_and_scheme(next_page):
+            if not next_page or not is_safe_url(next_page):
                 next_page = url_for('main.dashboard')
-            flash(f'Welcome {user.name}!', 'success')
+            flash(f'¡Bienvenido {user.name}!', 'success')
             return redirect(next_page)
-        else:
-            flash('Invalid email or password.', 'danger')
     
     # For GET requests, prepare OAuth button
     microsoft_enabled = bool(current_app.config.get('AZURE_CLIENT_ID'))

@@ -218,6 +218,18 @@ body.guest-page { background: linear-gradient(180deg, #f6f8fb 0%, #ffffff 60%); 
             <p class="text-muted mb-0">{{ _('choose_login_method') }}</p>
           </div>
 
+          {# Flash Messages para login #}
+          {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            {% for category, message in messages %}
+            <div class="alert alert-{{ category }} alert-dismissible fade show mb-3" role="alert">
+              {{ message }}
+              <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+            {% endfor %}
+          {% endif %}
+          {% endwith %}
+
           <div class="row g-3">
             <div class="col-12">
               {# Decide if SSO is available - default to showing Entra ID tab when configured #}
