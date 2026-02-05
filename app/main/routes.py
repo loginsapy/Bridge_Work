@@ -446,9 +446,14 @@ def delete_project(project_id):
         )
         db.session.add(audit)
         
-        db.session.delete(project)
-        db.session.commit()
-        flash(f"Proyecto '{project_name}' eliminado.", 'success')
+        # Prevent deletion if project has tasks to avoid NOT NULL FK violations
+        task_count = db.session.query(func.count(Task.id)).filter(Task.project_id == project.id).scalar()
+        if task_count and int(task_count) > 0:
+            flash(f"No se puede eliminar el proyecto porque tiene {task_count} tareas asociadas. Elimina o reasigna las tareas primero.", 'danger')
+        else:
+            db.session.delete(project)
+            db.session.commit()
+            flash(f"Proyecto '{project_name}' eliminado.", 'success')
     except Exception as e:
         db.session.rollback()
         flash(f'Error al eliminar: {str(e)}', 'danger')

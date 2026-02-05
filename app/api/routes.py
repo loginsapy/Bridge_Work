@@ -171,6 +171,10 @@ def update_project(project_id):
 @internal_required
 def delete_project(project_id):
     p = Project.query.get_or_404(project_id)
+    # Prevent deletion if project has tasks to avoid FK constraint errors
+    task_count = db.session.query(func.count(Task.id)).filter(Task.project_id == p.id).scalar()
+    if task_count and int(task_count) > 0:
+        return jsonify({"error": f"Project has {task_count} tasks. Remove or reassign tasks before deleting."}), 400
     try:
         db.session.delete(p)
         db.session.commit()
