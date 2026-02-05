@@ -229,5 +229,28 @@ document.addEventListener('DOMContentLoaded', function() {
     window.addEventListener('resize', function(){
       syncLayout();
     });
+
+    // Add tooltip titles to sidebar links (use the visible label) and initialize Bootstrap tooltips
+    try {
+      const sidebarLinks = document.querySelectorAll('#sidebar-wrapper .sidebar-link');
+      sidebarLinks.forEach(link => {
+        if (!link.getAttribute('title')) {
+          const lbl = link.querySelector('span');
+          if (lbl && lbl.textContent.trim()) {
+            link.setAttribute('title', lbl.textContent.trim());
+            link.setAttribute('data-bs-toggle', 'tooltip');
+            link.setAttribute('data-bs-placement', 'right');
+          }
+        }
+      });
+
+      // Initialize Bootstrap tooltips
+      const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+      tooltipTriggerList.forEach(function (el) {
+        try { new bootstrap.Tooltip(el); } catch(e) { /* ignore if bootstrap not available */ }
+      });
+    } catch (e) {
+      console.error('Tooltip init failed', e);
+    }
 });
 </script>
