@@ -1,0 +1,18 @@
+{% extends 'base.html' %}
+
+{% block title %}Elemento eliminado — {{ sys_app_name }}{% endblock %}
+
+{% block content %}
+<div class="card">
+  <div class="card-body text-center py-5">
+    <i class="fa-solid fa-trash-can fa-3x text-muted mb-3"></i>
+    <h4 class="mb-2">Lo sentimos — la {{ entity_type }} no existe</h4>
+    <p class="text-muted">La {{ entity_type }} con ID <strong>{{ entity_id }}</strong> fue eliminada{% if deleted_by %} por {{ deleted_by }}{% endif %} {% if deleted_at %}el {{ deleted_at.strftime('%d %b %Y %H:%M') }}{% endif %}.</p>
+    <p class="small text-muted">Si crees que esto es un error, contacta al administrador o revisa el historial de auditoría.</p>
+    <div class="mt-4">
+      <a href="{{ url_for('main.tasks') }}" class="btn btn-primary me-2">Ir a Tareas</a>
+      <a href="{{ url_for('main.projects') }}" class="btn btn-outline-secondary">Ir a Proyectos</a>
+    </div>
+  </div>
+</div>
+{% endblock %}

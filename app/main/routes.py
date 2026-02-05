@@ -627,7 +627,18 @@ def projects():
 @main_bp.route('/project/<int:project_id>')
 @login_required
 def project_detail(project_id):
-    project = Project.query.get_or_404(project_id)
+    project = Project.query.get(project_id)
+    if not project:
+        from app.models import AuditLog
+        any_log = AuditLog.query.filter_by(entity_type='Project', entity_id=project_id).order_by(AuditLog.created_at.desc()).first()
+        if not any_log:
+            return render_template('item_status.html', entity_type='proyecto', entity_id=project_id, status='never', canonical_entity='Project'), 404
+        deletion = AuditLog.query.filter_by(entity_type='Project', entity_id=project_id, action='DELETE').order_by(AuditLog.created_at.desc()).first()
+        if deletion:
+            deleted_by = deletion.user.name if deletion.user else (f'Usuario {deletion.user_id}' if deletion.user_id else None)
+            deleted_at = deletion.created_at
+            return render_template('item_status.html', entity_type='proyecto', entity_id=project_id, status='deleted', deleted_by=deleted_by, deleted_at=deleted_at, canonical_entity='Project'), 404
+        return render_template('item_status.html', entity_type='proyecto', entity_id=project_id, status='unavailable', canonical_entity='Project'), 404
     from ..auth.decorators import _get_user_from_session
     user = _get_user_from_session()
     user_role = user.role.name if (user and user.role) else None
@@ -1825,8 +1836,17 @@ def admin_audit():
     
     page = request.args.get('page', 1, type=int)
     per_page = 50
-    
-    logs = AuditLog.query.order_by(AuditLog.created_at.desc()).paginate(page=page, per_page=per_page, error_out=False)
+    # Allow optional filtering by entity type and id via query params
+    entity = request.args.get('entity')
+    entity_id = request.args.get('id', type=int)
+
+    q = AuditLog.query
+    if entity:
+        q = q.filter(AuditLog.entity_type == entity)
+    if entity_id:
+        q = q.filter(AuditLog.entity_id == entity_id)
+
+    logs = q.order_by(AuditLog.created_at.desc()).paginate(page=page, per_page=per_page, error_out=False)
     
     return render_template('admin/audit.html', logs=logs)
 
@@ -2822,7 +2842,20 @@ def update_task_status(task_id):
 @main_bp.route('/task/<int:task_id>')
 @login_required
 def task_detail(task_id):
-    task = Task.query.get_or_404(task_id)
+    task = Task.query.get(task_id)
+    if not task:
+        # Task not found — determine if it ever existed by checking audit logs
+        from app.models import AuditLog
+        any_log = AuditLog.query.filter_by(entity_type='Task', entity_id=task_id).order_by(AuditLog.created_at.desc()).first()
+        if not any_log:
+            return render_template('item_status.html', entity_type='tarea', entity_id=task_id, status='never', canonical_entity='Task'), 404
+        # If we have a DELETE record, show deleted message, otherwise show 'unavailable'
+        deletion = AuditLog.query.filter_by(entity_type='Task', entity_id=task_id, action='DELETE').order_by(AuditLog.created_at.desc()).first()
+        if deletion:
+            deleted_by = deletion.user.name if deletion.user else (f'Usuario {deletion.user_id}' if deletion.user_id else None)
+            deleted_at = deletion.created_at
+            return render_template('item_status.html', entity_type='tarea', entity_id=task_id, status='deleted', deleted_by=deleted_by, deleted_at=deleted_at, canonical_entity='Task'), 404
+        return render_template('item_status.html', entity_type='tarea', entity_id=task_id, status='unavailable', canonical_entity='Task'), 404
     project = task.project
     from ..auth.decorators import _get_user_from_session
     user = _get_user_from_session()

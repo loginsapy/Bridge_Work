@@ -1,0 +1,34 @@
+{% extends 'base.html' %}
+
+{% block title %}Estado del elemento — {{ sys_app_name }}{% endblock %}
+
+{% block content %}
+<div class="card">
+  <div class="card-body text-center py-5">
+    {% if status == 'never' %}
+      <i class="fa-solid fa-circle-question fa-3x text-muted mb-3"></i>
+      <h4 class="mb-2">No existe</h4>
+      <p class="text-muted">El {{ entity_type }} con ID <strong>{{ entity_id }}</strong> no existe en el sistema.</p>
+      <p class="small text-muted">Revisa si escribiste correctamente el ID o busca el proyecto desde la lista.</p>
+    {% elif status == 'deleted' %}
+      <i class="fa-solid fa-trash-can fa-3x text-muted mb-3"></i>
+      <h4 class="mb-2">Elemento eliminado</h4>
+      <p class="text-muted">La {{ entity_type }} con ID <strong>{{ entity_id }}</strong> fue eliminada{% if deleted_by %} por {{ deleted_by }}{% endif %}{% if deleted_at %} el {{ deleted_at.strftime('%d %b %Y %H:%M') }}{% endif %}.</p>
+      <p class="small text-muted">Si necesitas más información, contacta al administrador o revisa el historial de auditoría.</p>
+    {% else %}
+      <i class="fa-solid fa-ban fa-3x text-muted mb-3"></i>
+      <h4 class="mb-2">No disponible</h4>
+      <p class="text-muted">La {{ entity_type }} con ID <strong>{{ entity_id }}</strong> ya no está disponible.</p>
+      <p class="small text-muted">Hay registros en la auditoría relacionados con este ID, pero el elemento no puede cargarse. Contacta al administrador para más detalles.</p>
+    {% endif %}
+
+    <div class="mt-4 d-flex justify-content-center gap-2">
+      <a href="{{ url_for('main.projects') }}" class="btn btn-primary">Ir a Proyectos</a>
+      <a href="{{ url_for('main.tasks') }}" class="btn btn-outline-secondary">Ir a Tareas</a>
+      {% if current_user.is_authenticated and current_user.role and current_user.role.name in ['Admin','PMP'] and canonical_entity %}
+      <a href="{{ url_for('main.admin_audit') }}?entity={{ canonical_entity }}&id={{ entity_id }}" class="btn btn-outline-dark">Ver Auditoría</a>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}
