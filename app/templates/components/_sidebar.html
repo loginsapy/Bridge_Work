@@ -10,13 +10,14 @@
     transition: width 0.25s ease;
   }
 
+  /* Content default offset so it's not hidden under the fixed sidebar */
   #page-content-wrapper {
     margin-left: 250px !important;
     width: calc(100% - 250px) !important;
     transition: margin-left 0.25s ease, width 0.25s ease;
   }
 
-  /* Collapsed state */
+  /* Collapsed state (sidebar becomes narrow) */
   body.sb-sidenav-toggled #sidebar-wrapper {
     width: 70px;
   }
@@ -42,76 +43,41 @@
     font-size: 1.2rem;
   }
 
-  /* Toggle button positioning */
+  /* Toggle button positioning and style */
+  /* Toggle sits visually at the edge of the sidebar */
   #sidebarToggleInternal {
     position: absolute;
-    top: 10px;
-    right: 10px;
-    width: 30px;
-    height: 30px;
+    top: 12px;
+    right: -18px; /* poke out past the sidebar edge so it's always visible */
+    width: 36px;
+    height: 36px;
     padding: 0;
     display: flex;
     align-items: center;
     justify-content: center;
-    border-radius: 50%;
-    z-index: 1001;
-    transition: right 0.25s ease;
+    border-radius: 10px;
+    z-index: 1003;
+    transition: transform 0.25s ease, background 0.2s ease;
+    background: #ffffff;
+    box-shadow: 0 6px 18px rgba(0,0,0,0.08);
+    border: none;
   }
 
-  body.sb-sidenav-toggled #sidebarToggleInternal {
-    right: 50%;
-    transform: translateX(50%);
+  #sidebarToggleInternal i {
+    color: rgba(34,34,34,0.9);
+    transition: transform 0.25s ease;
   }
 
   body.sb-sidenav-toggled #sidebarToggleInternal i {
     transform: rotate(180deg);
   }
 
-  /* Expand sidebar on hover when collapsed */
-  body.sb-sidenav-toggled #sidebar-wrapper:hover {
-    width: 250px;
-    box-shadow: 5px 0 15px rgba(0,0,0,0.1);
-  }
-
-  body.sb-sidenav-toggled #sidebar-wrapper:hover .sidebar-link span {
-    display: inline;
-  }
-
-  body.sb-sidenav-toggled #sidebar-wrapper:hover .sidebar-brand {
-    display: flex;
-  }
-
-  body.sb-sidenav-toggled #sidebar-wrapper:hover .sidebar-divider {
-    display: block;
-  }
-
-  body.sb-sidenav-toggled #sidebar-wrapper:hover .sidebar-link {
-    text-align: left;
-    padding: 0.75rem 1rem;
-  }
-
-  body.sb-sidenav-toggled #sidebar-wrapper:hover .sidebar-link i {
-    margin-right: 0.5rem;
-    font-size: 1rem;
-  }
-
-  body.sb-sidenav-toggled #sidebar-wrapper:hover #sidebarToggleInternal {
-    right: 10px;
-    transform: none;
-  }
-
-  body.sb-sidenav-toggled #sidebar-wrapper:hover #sidebarToggleInternal i {
-    transform: rotate(0deg);
-  }
+  /* No hover expansion: sidebar only toggles via the button */
 </style>
 
-<aside class="sidebar bg-dark text-white py-4" id="sidebar-wrapper">
-  <!-- Toggle Button (Outside Sidebar Content) -->
-  <button class="btn btn-light shadow-sm" id="sidebarToggleInternal">
-    <i class="fa-solid fa-chevron-left"></i>
-  </button>
+  <aside class="sidebar bg-dark text-white py-4" id="sidebar-wrapper">
 
-  <div class="sidebar-brand d-flex justify-content-between align-items-center px-3 mb-3">
+  <div class="sidebar-brand d-flex justify-content-between align-items-center px-3 mb-3" style="position: relative;">
     <div class="d-flex align-items-center gap-2 brand-text">
 
     </div>
@@ -199,27 +165,69 @@
   </div>
 
   <div class="sidebar-footer px-3 py-2" style="position:absolute; bottom:10px; left:0; right:0;">
-    <small class="text-white-50"><i class="fa-solid fa-database me-1"></i>BD: {{ sys_db_name or '' }}</small>
+    <button class="btn btn-light shadow-sm" id="sidebarToggleInternal" aria-label="Colapsar barra lateral" title="Colapsar barra lateral" style="position: absolute; right: 12px; top: -42px;">
+      <i class="fa-solid fa-chevron-left"></i>
+    </button>
+    <div style="padding-right:56px;">
+      <small class="text-white-50"><i class="fa-solid fa-database me-1"></i>BD: {{ sys_db_name or '' }}</small>
+    </div>
   </div>
 </aside>
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    // Toggle button logic
+    // Toggle button logic with accessible labels and persisted state
     const toggle = document.getElementById('sidebarToggleInternal');
+    function updateToggleUI(t) {
+      if (!t) return;
+      const icon = t.querySelector('i');
+      const expanded = document.body.classList.contains('sb-sidenav-toggled');
+      t.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+      t.title = expanded ? 'Expandir barra lateral' : 'Colapsar barra lateral';
+      // rotate handled by CSS; ensure icon class remains
+      if (icon) {
+        // no-op: CSS rotation will animate
+      }
+    }
+
+    const sidebar = document.getElementById('sidebar-wrapper');
+    const pageContent = document.getElementById('page-content-wrapper');
+
+    function syncLayout() {
+      if (!sidebar || !pageContent) return;
+      const width = sidebar.offsetWidth || (document.body.classList.contains('sb-sidenav-toggled') ? 70 : 250);
+      pageContent.style.marginLeft = width + 'px';
+      pageContent.style.width = `calc(100% - ${width}px)`;
+    }
+
     if (toggle) {
-        toggle.addEventListener('click', function(e) {
-            e.preventDefault();
-            e.stopPropagation(); // Prevent bubbling
-            document.body.classList.toggle('sb-sidenav-toggled');
-            // Save state
-            localStorage.setItem('sb|sidebar-toggle', document.body.classList.contains('sb-sidenav-toggled'));
-        });
+      toggle.addEventListener('click', function(e) {
+        e.preventDefault();
+        e.stopPropagation(); // Prevent bubbling
+        document.body.classList.toggle('sb-sidenav-toggled');
+        // Save state
+        const toggled = document.body.classList.contains('sb-sidenav-toggled');
+        localStorage.setItem('sb|sidebar-toggle', toggled);
+        updateToggleUI(toggle);
+        // update content margin to match new sidebar width
+        // delay slightly to wait for CSS transition
+        setTimeout(syncLayout, 50);
+      });
     }
-    
-    // Restore state
+
+    // Restore state and sync layout
     if (localStorage.getItem('sb|sidebar-toggle') === 'true') {
-        document.body.classList.add('sb-sidenav-toggled');
+      document.body.classList.add('sb-sidenav-toggled');
+    } else {
+      document.body.classList.remove('sb-sidenav-toggled');
     }
+    // Initial sync
+    updateToggleUI(toggle);
+    syncLayout();
+
+    // Keep layout in sync on resize
+    window.addEventListener('resize', function(){
+      syncLayout();
+    });
 });
 </script>
