@@ -286,9 +286,12 @@ function loadNotifications() {
       list.innerHTML = data.notifications.map(n => {
         const iconData = notificationIcons[n.type] || notificationIcons['general'];
         const unreadClass = n.is_read ? '' : 'bg-light';
-        const href = n.related_entity_type === 'task' && n.related_entity_id 
-          ? `/task/${n.related_entity_id}` 
-          : '{{ url_for("main.notifications") }}';
+        let href = '{{ url_for("main.notifications") }}';
+        if (n.related_entity_type === 'task' && n.related_entity_id) {
+          href = `/task/${n.related_entity_id}`;
+        } else if (n.related_entity_type === 'project' && n.related_entity_id) {
+          href = `/project/${n.related_entity_id}`;
+        }
         
         return `
           <a class="dropdown-item py-3 ${unreadClass}" href="${href}" 

@@ -84,6 +84,10 @@
                         <i class="fa-solid fa-eye me-1"></i>{{ _('view') }}
                       </a>
                     {% endif %}
+                  {% elif notif.related_entity_type == 'project' and notif.related_entity_id %}
+                    <a href="#" onclick="event.preventDefault(); markNotificationAndGo({{ notif.id }}, '{{ url_for('main.project_detail', project_id=notif.related_entity_id) }}');" class="btn btn-sm btn-outline-secondary">
+                      <i class="fa-solid fa-eye me-1"></i>{{ _('view') }}
+                    </a>
                   {% endif %}
                 </div>
               </div>

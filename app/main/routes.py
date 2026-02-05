@@ -1968,6 +1968,21 @@ def create_project():
         flash(f"Proyecto '{name}' creado con éxito.", 'success')
 
         # Fix 6: Notificación de creación de proyecto a clientes
+        # Build external project URL for emails (fallback to base_url or config)
+        try:
+            project_url = url_for('main.project_detail', project_id=new_project.id, _external=True)
+        except Exception:
+            try:
+                from ..models import SystemSettings
+                host = SystemSettings.get('base_url') or current_app.config.get('SERVER_NAME') or current_app.config.get('BASE_URL')
+            except Exception:
+                host = current_app.config.get('SERVER_NAME') or current_app.config.get('BASE_URL')
+            if host:
+                host = host.rstrip('/')
+                project_url = f"{current_app.config.get('PREFERRED_URL_SCHEME','https')}://{host}/project/{new_project.id}"
+            else:
+                project_url = f"/project/{new_project.id}"
+
         if new_project.clients:
             for client in new_project.clients:
                 try:
@@ -1975,11 +1990,20 @@ def create_project():
                         user_id=client.id,
                         title='Nuevo Proyecto Asignado',
                         message=f"Has sido asignado al proyecto '{new_project.name}'.",
-                        notification_type=NotificationService.GENERAL
+                        notification_type=NotificationService.PROJECT_CREATED,
+                        related_entity_type='project',
+                        related_entity_id=new_project.id,
+                        send_email=True,
+                        email_context={
+                            'project': new_project,
+                            'project_url': project_url,
+                            'message': f"Has sido asignado al proyecto '{new_project.name}'.",
+                            'title': 'Nuevo Proyecto Asignado'
+                        }
                     )
                 except Exception:
-                    pass
-        
+                    current_app.logger.exception('Failed to notify client %s for new project %s', client.id, new_project.id)
+
         # Notificación a participantes
         if new_project.members:
             for member in new_project.members:
@@ -1988,10 +2012,19 @@ def create_project():
                         user_id=member.id,
                         title='Nuevo Proyecto Asignado',
                         message=f"Has sido añadido como participante al proyecto '{new_project.name}'.",
-                        notification_type=NotificationService.GENERAL
+                        notification_type=NotificationService.PROJECT_CREATED,
+                        related_entity_type='project',
+                        related_entity_id=new_project.id,
+                        send_email=True,
+                        email_context={
+                            'project': new_project,
+                            'project_url': project_url,
+                            'message': f"Has sido añadido como participante al proyecto '{new_project.name}'.",
+                            'title': 'Nuevo Proyecto Asignado'
+                        }
                     )
                 except Exception:
-                    pass
+                    current_app.logger.exception('Failed to notify member %s for new project %s', member.id, new_project.id)
         
         # Asegurar que las notificaciones generadas se reflejen en la BD inmediatamente
         db.session.commit()
