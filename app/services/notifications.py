@@ -32,6 +32,7 @@ from datetime import datetime
 from flask import current_app, render_template, url_for
 from .. import db
 from ..models import SystemNotification, User, Task, Project
+from ..models import AuditLog
 
 
 class NotificationService:
@@ -101,6 +102,25 @@ class NotificationService:
         current_app.logger.info(
             f"Notification created: {title} for user {user_id} (type: {notification_type})"
         )
+
+        # Audit the creation of the notification
+        try:
+            audit = AuditLog(
+                user_id=user_id if user_id is not None else 0,
+                action='CREATE_NOTIFICATION',
+                entity_type='notification',
+                entity_id=notification.id,
+                changes={
+                    'title': title,
+                    'notification_type': notification_type,
+                    'related_entity_type': related_entity_type,
+                    'related_entity_id': related_entity_id,
+                }
+            )
+            db.session.add(audit)
+            db.session.commit()
+        except Exception:
+            current_app.logger.exception('Failed to write AuditLog for notification create')
         
         # Decide if we should send an email for this notification
         try:
@@ -180,7 +200,8 @@ class NotificationService:
                 user_id=user_id,
                 subject=title,
                 notification_type=notification_type,
-                context=email_context or {'message': message, 'title': title}
+                context=email_context or {'message': message, 'title': title},
+                notification_id=notification.id
             )
         
         return notification
@@ -188,7 +209,8 @@ class NotificationService:
     @classmethod
     def send_email(cls, user_id: int, subject: str, 
                    notification_type: str = 'general',
-                   context: dict = None) -> bool:
+                   context: dict = None,
+                   notification_id: int = None) -> bool:
         """
         Send an email notification to a user.
         
@@ -280,7 +302,26 @@ class NotificationService:
                 current_app.logger.warning(
                     f"Failed to send email to user {user_id}: {subject}"
                 )
-            
+            # Audit the email send result
+            try:
+                audit = AuditLog(
+                    user_id=user_id if user_id is not None else 0,
+                    action='EMAIL_SENT' if success else 'EMAIL_FAILED',
+                    entity_type='notification',
+                    entity_id=notification_id if notification_id is not None else 0,
+                    changes={
+                        'subject': subject,
+                        'notification_type': notification_type,
+                        'provider': type(provider).__name__,
+                        'recipient_email': user.email,
+                        'success': bool(success)
+                    }
+                )
+                db.session.add(audit)
+                db.session.commit()
+            except Exception:
+                current_app.logger.exception('Failed to write AuditLog for email send')
+
             return success
             
         except Exception as e:

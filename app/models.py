@@ -320,9 +320,16 @@ class Task(db.Model):
         Accept legacy synonyms like 'DONE' and normalize to 'COMPLETED'."""
         if status is None:
             return None
-        if isinstance(status, str) and status.upper() == 'DONE':
+        if not isinstance(status, str):
+            return status
+        s = status.strip().upper()
+        # Common synonyms mapping
+        if s == 'DONE':
             return 'COMPLETED'
-        return status
+        # Map various review synonyms to canonical 'IN_REVIEW'
+        if s in ('REVIEW', 'IN_REVIEW', 'REVISION', 'REVISIÓN', 'REVISAR', 'REVIEWING', 'REVIEWED'):
+            return 'IN_REVIEW'
+        return s
 
     def set_status(self, new_status: str):
         """Set task status normalizing legacy values."""

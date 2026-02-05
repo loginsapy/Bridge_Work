@@ -2559,6 +2559,61 @@ def create_time_entry():
                 task.status = 'IN_PROGRESS'
             
             db.session.commit()
+            # Notify project manager or PMP users about new time entry
+            try:
+                from app.services.notifications import NotificationService
+                project = task.project
+                notified = False
+                if project and project.manager_id and project.manager_id != current_user.id:
+                    NotificationService.notify(
+                        user_id=project.manager_id,
+                        title='Nuevo registro de tiempo',
+                        message=f"{current_user.name} registró {time_entry.hours}h en la tarea '{task.title}'",
+                        notification_type=NotificationService.GENERAL,
+                        related_entity_type='task',
+                        related_entity_id=task.id,
+                        send_email=True
+                    )
+                    notified = True
+                if not notified:
+                    from ..models import User, Role
+                    pmps = User.query.join(Role).filter(Role.name == 'PMP', User.is_active == True).all()
+                    for u in pmps:
+                        if u.id == current_user.id:
+                            continue
+                        try:
+                            NotificationService.notify(
+                                user_id=u.id,
+                                title='Nuevo registro de tiempo',
+                                message=f"{current_user.name} registró {time_entry.hours}h en la tarea '{task.title}'",
+                                notification_type=NotificationService.GENERAL,
+                                related_entity_type='task',
+                                related_entity_id=task.id,
+                                send_email=True
+                            )
+                        except Exception:
+                            current_app.logger.exception('Failed to notify PMP %s about time entry %s', u.id, time_entry.id)
+            except Exception:
+                current_app.logger.exception('Error while sending time entry notifications')
+
+            # Audit creation of time entry
+            try:
+                audit = AuditLog(
+                    entity_type='time_entry',
+                    entity_id=time_entry.id,
+                    action='CREATE',
+                    user_id=current_user.id,
+                    changes={
+                        'task_id': time_entry.task_id,
+                        'hours': float(time_entry.hours) if time_entry.hours is not None else None,
+                        'description': time_entry.description
+                    }
+                )
+                db.session.add(audit)
+                db.session.commit()
+            except Exception:
+                current_app.logger.exception('Failed to write AuditLog for time entry create (web)')
+
             flash('Tiempo registrado exitosamente', 'success')
             return redirect(url_for('main.task_detail', task_id=task_id))
         except Exception as e:
@@ -2613,30 +2668,23 @@ def create_time_entry():
 def edit_time_entry(entry_id):
     entry = TimeEntry.query.get_or_404(entry_id)
     
-    # Solo el propietario, PMP o Admin puede editar (PMP/Admin pueden marcar facturado)
-    is_owner = entry.user_id == current_user.id
+    # Only PMP or Admin can edit time entries (participants/owners cannot)
     from ..auth.decorators import _get_user_from_session
     user = _get_user_from_session()
     role_name = user.role.name if (user and user.role) else None
-    if not (is_owner or role_name in ('PMP', 'Admin')):
-        flash('No tienes permiso para editar este registro.', 'danger')
+    if role_name not in ('PMP', 'Admin'):
+        flash('No tienes permiso para editar registros de tiempo. Solo PMP o Admin pueden hacerlo.', 'danger')
         return redirect(url_for('main.time_entries'))
     
     if request.method == 'POST':
         try:
             old_values = {'date': str(entry.date), 'hours': float(entry.hours), 'is_billable': entry.is_billable}
             
-            # Owners, PMP or Admin can modify date/hours/description
-            if is_owner or role_name in ('PMP', 'Admin'):
-                entry.date = datetime.fromisoformat(request.form.get('date')).date()
-                entry.hours = float(request.form.get('hours'))
-                entry.description = request.form.get('description')
-            # PMP and Admin users can change the 'is_billable' flag
-            if role_name in ('PMP', 'Admin'):
-                entry.is_billable = request.form.get('is_billable') == 'on'
-            else:
-                # preserve existing value (ignore any tampering in form)
-                entry.is_billable = entry.is_billable
+            # Only PMP or Admin can modify time entries and billable flag
+            entry.date = datetime.fromisoformat(request.form.get('date')).date()
+            entry.hours = float(request.form.get('hours'))
+            entry.description = request.form.get('description')
+            entry.is_billable = request.form.get('is_billable') == 'on'
             
             new_values = {'date': str(entry.date), 'hours': float(entry.hours), 'is_billable': entry.is_billable}
             changes = {k: {'old': old_values[k], 'new': new_values[k]} for k in old_values if old_values[k] != new_values[k]}
@@ -2666,9 +2714,12 @@ def edit_time_entry(entry_id):
 @login_required
 def delete_time_entry(entry_id):
     entry = TimeEntry.query.get_or_404(entry_id)
-    
-    if entry.user_id != current_user.id:
-        flash('No tienes permiso.', 'danger')
+    # Only PMP or Admin may delete time entries
+    from ..auth.decorators import _get_user_from_session
+    user = _get_user_from_session()
+    role_name = user.role.name if (user and user.role) else None
+    if role_name not in ('PMP', 'Admin'):
+        flash('No tienes permiso para eliminar registros de tiempo.', 'danger')
         return redirect(url_for('main.time_entries'))
     
     try:

@@ -485,7 +485,7 @@
       </div>
       <div class="status-cell">
         <span class="monday-status {{ task.status|lower|replace('_', '-') }}">
-          {{ {'BACKLOG': _('backlog'), 'IN_PROGRESS': _('in_progress'), 'IN_REVIEW': _('in_review'), 'COMPLETED': _('completed')}.get(task.status, task.status) }}
+          {{ {'BACKLOG': _('backlog'), 'IN_PROGRESS': _('in_progress'), 'IN_REVIEW': _('in_review'), 'REVIEW': _('in_review'), 'REVISION': _('in_review'), 'REVISIÓN': _('in_review'), 'COMPLETED': _('completed')}.get(task.status, task.status) }}
         </span>
       </div>
       <div class="priority-cell">

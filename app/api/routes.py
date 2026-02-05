@@ -2,6 +2,7 @@ from flask import jsonify, request, abort, current_app
 from . import api_bp
 from .. import db
 from ..models import Project, Task, TimeEntry, User, TaskAttachment
+from ..models import AuditLog
 from sqlalchemy.exc import SQLAlchemyError
 from datetime import date, datetime
 from marshmallow import ValidationError
@@ -552,6 +553,61 @@ def create_time_entry():
     try:
         db.session.add(te)
         db.session.commit()
+        # Notify project manager or PMP users about new time entry
+        try:
+            from app.services.notifications import NotificationService
+            project = Task.query.get(te.task_id).project if te.task_id else None
+            notified = False
+            if project and project.manager_id and project.manager_id != te.user_id:
+                NotificationService.notify(
+                    user_id=project.manager_id,
+                    title='Nuevo registro de tiempo',
+                    message=f"{te.user_id} registró {te.hours}h en la tarea '{Task.query.get(te.task_id).title}'",
+                    notification_type=NotificationService.GENERAL,
+                    related_entity_type='task',
+                    related_entity_id=te.task_id,
+                    send_email=True
+                )
+                notified = True
+            if not notified:
+                # fallback: notify all active PMP users (excluding the actor)
+                from app.models import User, Role
+                pmps = User.query.join(Role).filter(Role.name == 'PMP', User.is_active == True).all()
+                for u in pmps:
+                    if u.id == te.user_id:
+                        continue
+                    try:
+                        NotificationService.notify(
+                            user_id=u.id,
+                            title='Nuevo registro de tiempo',
+                            message=f"{te.user_id} registró {te.hours}h en la tarea '{Task.query.get(te.task_id).title}'",
+                            notification_type=NotificationService.GENERAL,
+                            related_entity_type='task',
+                            related_entity_id=te.task_id,
+                            send_email=True
+                        )
+                    except Exception:
+                        current_app.logger.exception('Failed to notify PMP %s about time entry %s', u.id, te.id)
+        except Exception:
+            current_app.logger.exception('Failed to send time entry notifications')
+
+        # Audit creation of time entry
+        try:
+            audit = AuditLog(
+                user_id=te.user_id if te.user_id is not None else 0,
+                action='CREATE',
+                entity_type='time_entry',
+                entity_id=te.id,
+                changes={
+                    'task_id': te.task_id,
+                    'hours': float(te.hours) if te.hours is not None else None,
+                    'description': te.description
+                }
+            )
+            db.session.add(audit)
+            db.session.commit()
+        except Exception:
+            current_app.logger.exception('Failed to write AuditLog for time entry create')
     except SQLAlchemyError as e:
         db.session.rollback()
         abort(500, description=str(e))
@@ -561,6 +617,10 @@ def create_time_entry():
 @api_bp.route("/time_entries/<int:entry_id>", methods=["PUT", "PATCH"])
 def update_time_entry(entry_id):
     te = TimeEntry.query.get_or_404(entry_id)
+    from flask_login import current_user
+    # Only PMP or Admin may update time entries via API
+    if not (getattr(current_user, 'is_authenticated', False) and getattr(current_user, 'is_internal', False) and getattr(current_user, 'role', None) and current_user.role.name in ('PMP', 'Admin')):
+        return jsonify({'error': 'Solo PMP o Admin pueden modificar registros de tiempo'}), 403
     data = request.get_json() or {}
     schema = TimeEntrySchema()
     try:
@@ -568,10 +628,30 @@ def update_time_entry(entry_id):
     except ValidationError as e:
         return jsonify({"errors": e.messages}), 400
 
+    # Capture old values for audit
+    old_values = {
+        'task_id': te.task_id,
+        'hours': float(te.hours) if te.hours is not None else None,
+        'description': te.description,
+        'is_billable': bool(te.is_billable)
+    }
     for key, value in validated.items():
         setattr(te, key, value)
     try:
         db.session.commit()
+        # Audit update
+        try:
+            audit = AuditLog(
+                user_id=getattr(current_user, 'id', 0),
+                action='UPDATE',
+                entity_type='time_entry',
+                entity_id=te.id,
+                changes={'old': old_values, 'new': validated}
+            )
+            db.session.add(audit)
+            db.session.commit()
+        except Exception:
+            current_app.logger.exception('Failed to write AuditLog for time entry update')
     except SQLAlchemyError as e:
         db.session.rollback()
         abort(500, description=str(e))
@@ -581,7 +661,29 @@ def update_time_entry(entry_id):
 @api_bp.route("/time_entries/<int:entry_id>", methods=["DELETE"])
 def delete_time_entry(entry_id):
     te = TimeEntry.query.get_or_404(entry_id)
+    from flask_login import current_user
+    # Only PMP or Admin may delete time entries via API
+    if not (getattr(current_user, 'is_authenticated', False) and getattr(current_user, 'is_internal', False) and getattr(current_user, 'role', None) and current_user.role.name in ('PMP', 'Admin')):
+        return jsonify({'error': 'Solo PMP o Admin pueden eliminar registros de tiempo'}), 403
     try:
+        # Audit before delete
+        try:
+            audit = AuditLog(
+                user_id=getattr(current_user, 'id', 0),
+                action='DELETE',
+                entity_type='time_entry',
+                entity_id=te.id,
+                changes={
+                    'task_id': te.task_id,
+                    'hours': float(te.hours) if te.hours is not None else None,
+                    'description': te.description
+                }
+            )
+            db.session.add(audit)
+            db.session.flush()
+        except Exception:
+            current_app.logger.exception('Failed to write AuditLog for time entry delete')
+
         db.session.delete(te)
         db.session.commit()
     except SQLAlchemyError as e:

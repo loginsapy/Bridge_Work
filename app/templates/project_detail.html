@@ -210,7 +210,7 @@
             </td>
             <td><small class="text-muted">{{ task.due_date|fecha_es('corto_año') if task.due_date else '-' }}</small></td>
             <td class="text-end pe-4">
-              {% if current_user.is_internal %}
+              {% if current_user.is_internal and current_user.role and current_user.role.name in ('PMP', 'Admin') %}
                 <a href="{{ url_for('main.edit_task', task_id=task.id) }}" class="btn btn-sm btn-outline-secondary" title="Editar"><i class="fa-solid fa-pen"></i></a>
               {% endif %}
             </td>

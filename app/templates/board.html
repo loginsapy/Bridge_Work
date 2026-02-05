@@ -141,6 +141,7 @@
 .status-BACKLOG { background: var(--monday-grey) !important; color: white !important; }
 .status-IN_PROGRESS { background: var(--monday-blue) !important; color: white !important; }
 .status-IN_REVIEW { background: var(--monday-purple) !important; color: white !important; }
+.status-REVIEW, .status-REVISION, .status-REVISIÓN { background: var(--monday-purple) !important; color: white !important; }
 .status-QA { background: #ff7b00 !important; color: white !important; }
 .status-COMPLETED, .status-DONE { background: var(--monday-green) !important; color: white !important; }
 
@@ -720,6 +721,7 @@ tr.table-warning:hover {
       <a class="toolbar-btn" href="{{ url_for('main.project_gantt', project_id=project.id) }}" title="Vista Gantt">
         <i class="fa-solid fa-chart-gantt"></i>
       </a>
+    {% if current_user.is_internal and current_user.role and current_user.role.name in ('PMP','Admin') %}
     <div class="person-filter">
       <select id="personFilter" onchange="filterByPerson(this.value)">
         <option value="">Todos los usuarios</option>
@@ -728,6 +730,7 @@ tr.table-warning:hover {
         {% endfor %}
       </select>
     </div>
+    {% endif %}
   </div>
 </div>
 
@@ -878,7 +881,7 @@ tr.table-warning:hover {
                    {% if current_user.is_internal %}onclick="showStatusDropdown(event, {{ task.id }}, {{ 'true' if is_blocked else 'false' }})"{% endif %}
                    {% if is_blocked %}title="⚠️ Bloqueada: debe completar las predecesoras primero"{% endif %}>
                 <span class="status-pill status-{{ task.status }}">
-                  {{ {'BACKLOG':'Backlog','IN_PROGRESS':'En Progreso','IN_REVIEW':'En Revisión','COMPLETED':'Completado'}.get(task.status, task.status) }}
+                  {{ {'BACKLOG':'Backlog','IN_PROGRESS':'En Progreso','IN_REVIEW':'En Revisión','REVIEW':'En Revisión','REVISION':'En Revisión','REVISIÓN':'En Revisión','COMPLETED':'Completado'}.get(task.status, task.status) }}
                 </span>
                 {% if is_blocked %}
                   {% set first_incomplete = task.incomplete_predecessors()[0] if task.incomplete_predecessors() else None %}
@@ -1004,7 +1007,7 @@ tr.table-warning:hover {
             <td>
               <div class="cell task-actions-visible">
                 <a href="{{ url_for('main.task_detail', task_id=task.id) }}" class="action-btn-visible" title="Ver detalles"><i class="fa-solid fa-eye"></i></a>
-                {% if current_user.is_internal or (task.assigned_client_id == current_user.id) %}
+                {% if current_user.is_internal and current_user.role and current_user.role.name in ('PMP', 'Admin') %}
                 <a href="{{ url_for('main.edit_task', task_id=task.id) }}" class="action-btn-visible" title="Editar"><i class="fa-solid fa-pen"></i></a>
                 {% endif %}
                 {% if current_user.is_internal and current_user.role and current_user.role.name in ('PMP', 'Admin') %}
