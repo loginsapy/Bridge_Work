@@ -3531,6 +3531,9 @@ def admin_settings_page():
         'enable_azure_auth': 'true',
         'enable_local_auth': 'true'
     }
+    # Default for global alert
+    defaults.setdefault('global_alert_enabled', 'false')
+    defaults.setdefault('global_alert_message', '')
     for k, v in defaults.items():
         settings.setdefault(k, v)
 
@@ -3540,6 +3543,8 @@ def admin_settings_page():
         'notify_task_rejected', 'notify_task_comment', 'notify_due_date_reminder',
         'show_notification_center', 'enable_push_notifications'
     ]
+    # Treat global alert enabled as boolean for templates
+    notify_keys.append('global_alert_enabled')
     for k in notify_keys:
         raw = settings.get(k, defaults.get(k, 'true'))
         if isinstance(raw, str):
@@ -3603,6 +3608,13 @@ def admin_settings():
     # Get checkboxes for current section (support 'security' as alias for 'authentication')
     target_section = 'authentication' if section == 'security' else section
     checkboxes_to_process = section_checkboxes.get(target_section, [])
+
+    # Flatten all known checkbox fields so we can detect boolean settings when saving
+    checkbox_fields = set()
+    for lst in section_checkboxes.values():
+        checkbox_fields.update(lst)
+    # Include global alert flag as a checkbox field
+    checkbox_fields.add('global_alert_enabled')
 
     for cb in checkboxes_to_process:
         if cb not in fields_to_save:

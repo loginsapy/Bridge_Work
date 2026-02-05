@@ -286,6 +286,12 @@ def create_app(config_object="config.DevConfig"):
             # General settings
             'sys_default_currency': SystemSettings.get('default_currency', 'USD'),
             'sys_language': SystemSettings.get('language', 'es'),
+            # Global alert banner (visible in header if enabled)
+            # Normalize stored value which may be string or boolean
+            'sys_global_alert_enabled': (lambda v: (v.lower() not in ('false', '0', 'no')) if isinstance(v, str) else bool(v))(
+                SystemSettings.get('global_alert_enabled', 'false')
+            ),
+            'sys_global_alert_message': SystemSettings.get('global_alert_message', ''),
             # Utility: safe url_for that returns '#' if endpoint can't be built (prevents BuildError in templates)
             'safe_url_for': lambda endpoint, **kwargs: _safe_url_for(endpoint, **kwargs)
         }
