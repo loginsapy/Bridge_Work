@@ -2923,6 +2923,161 @@ def task_detail(task_id):
     return render_template('task_detail.html', task=task, time_entries=time_entries, total_hours=total_hours, now=datetime.now(), can_edit=can_edit)
 
 
+@main_bp.route('/task/<int:task_id>/comments', methods=['GET', 'POST'])
+@login_required
+def task_comments(task_id):
+    from app.models import TaskComment, Task, Project
+    task = Task.query.get(task_id)
+    if not task:
+        return jsonify({'error': 'Tarea no encontrada'}), 404
+
+    # Determine if current user can view the task (reuse same logic as task_detail)
+    can_view = False
+    user_role = current_user.role.name if (current_user and current_user.role) else None
+    project = task.project
+    if user_role in ['PMP', 'Admin']:
+        can_view = True
+    elif user_role == 'Participante':
+        if task.assigned_to_id == current_user.id or (getattr(task, 'assignees', None) and any(u.id == current_user.id for u in task.assignees)):
+            can_view = True
+    elif user_role == 'Cliente' or not current_user.is_internal:
+        if current_user in project.clients:
+            if task.is_external_visible or task.assigned_client_id == current_user.id:
+                can_view = True
+
+    if not can_view:
+        return jsonify({'error': 'No autorizado'}), 403
+
+    if request.method == 'GET':
+        # Paginate top-level comments (parent_id is NULL). Return latest comments first
+        try:
+            page = int(request.args.get('page', 1))
+        except Exception:
+            page = 1
+        try:
+            per_page = int(request.args.get('per_page', 10))
+        except Exception:
+            per_page = 10
+        if per_page <= 0:
+            per_page = 10
+        if per_page > 50:
+            per_page = 50
+
+        base_q = TaskComment.query.filter_by(task_id=task_id, parent_id=None)
+        total = base_q.count()
+        top_comments = base_q.order_by(TaskComment.created_at.desc()).offset((page - 1) * per_page).limit(per_page).all()
+
+        out = []
+
+        def build_children_recursive(parent_comment):
+            children_rows = TaskComment.query.filter_by(parent_id=parent_comment.id).order_by(TaskComment.created_at.asc()).all()
+            children_list = []
+            for ch in children_rows:
+                ch_dict = {
+                    'id': ch.id,
+                    'body': ch.body,
+                    'created_at': ch.created_at.isoformat() if ch.created_at else None,
+                    'parent_id': ch.parent_id,
+                    'user': {'id': ch.user.id, 'name': ch.user.name},
+                    'children': build_children_recursive(ch)
+                }
+                children_list.append(ch_dict)
+            return children_list
+
+        for c in top_comments:
+            out.append({
+                'id': c.id,
+                'body': c.body,
+                'created_at': c.created_at.isoformat() if c.created_at else None,
+                'parent_id': c.parent_id,
+                'user': {'id': c.user.id, 'name': c.user.name},
+                'children': build_children_recursive(c)
+            })
+
+        has_more = (page * per_page) < total
+        return jsonify({'comments': out, 'page': page, 'per_page': per_page, 'total': total, 'has_more': has_more})
+
+    # POST - create comment
+    data = request.get_json(force=True, silent=True) or request.form
+    body = (data.get('body') or '').strip() if data else ''
+    if not body:
+        return jsonify({'error': 'El comentario está vacío'}), 400
+
+    try:
+        parent_id = data.get('parent_id') if isinstance(data, dict) else None
+        if parent_id:
+            try:
+                parent_id = int(parent_id)
+            except Exception:
+                parent_id = None
+
+        # If parent_id provided, verify it exists and belongs to same task
+        parent = None
+        if parent_id:
+            parent = TaskComment.query.get(parent_id)
+            if not parent or parent.task_id != task_id:
+                return jsonify({'error': 'Parent comment inválido'}), 400
+
+        comment = TaskComment(task_id=task_id, user_id=current_user.id, body=body, parent_id=parent_id)
+        db.session.add(comment)
+        db.session.commit()
+
+        # Send notifications: if this is a reply, notify the parent author (unless it's the same user).
+        # Otherwise, notify assignees of the task (assigned_to_id and any internal assignees).
+        try:
+            from app.services.notifications import NotificationService
+            recipients = set()
+            # If reply to a comment, notify that comment's author
+            if parent and parent.user_id and parent.user_id != current_user.id:
+                recipients.add(parent.user_id)
+            else:
+                # Notify primary assignee
+                if getattr(task, 'assigned_to_id', None):
+                    recipients.add(task.assigned_to_id)
+                # Notify additional assignees relationship if present
+                if getattr(task, 'assignees', None):
+                    for u in task.assignees:
+                        if getattr(u, 'id', None) and u.id != current_user.id:
+                            recipients.add(u.id)
+
+            # Remove the commenter from recipients if present
+            if current_user and getattr(current_user, 'id', None) in recipients:
+                recipients.discard(current_user.id)
+
+            # Build notification content
+            title = 'Nuevo comentario en tarea'
+            snippet = (comment.body[:120] + '...') if len(comment.body) > 120 else comment.body
+            message = f"{current_user.name or current_user.email} comentó en la tarea '{task.title}': {snippet}"
+
+            for uid in recipients:
+                try:
+                    NotificationService.notify(
+                        user_id=uid,
+                        title=title,
+                        message=message,
+                        notification_type=NotificationService.TASK_COMMENT,
+                        related_entity_type='task',
+                        related_entity_id=task.id,
+                        send_email=True,
+                        email_context={'task': task, 'comment': comment, 'message': message, 'title': title}
+                    )
+                except Exception:
+                    current_app.logger.exception(f'Failed to notify user {uid} about comment {comment.id}')
+        except Exception:
+            current_app.logger.exception('Failed to dispatch comment notifications')
+
+        return jsonify({
+            'id': comment.id,
+            'body': comment.body,
+            'created_at': comment.created_at.isoformat() if comment.created_at else None,
+            'parent_id': comment.parent_id,
+            'user': {'id': current_user.id, 'name': current_user.name}
+        }), 201
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+
 @main_bp.route('/attachment/<int:attachment_id>/download')
 @login_required
 def download_attachment(attachment_id):

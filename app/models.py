@@ -398,6 +398,7 @@ class Task(db.Model):
             tuple: (can_advance: bool, error_message: str or None, blockers: dict or None)
         """
         STATUS_ORDER = {'BACKLOG': 0, 'IN_PROGRESS': 1, 'IN_REVIEW': 2, 'COMPLETED': 3, 'DONE': 3}
+        
         current_order = STATUS_ORDER.get(self.status, 0)
         new_order = STATUS_ORDER.get(new_status, 0)
         
@@ -431,6 +432,22 @@ class Task(db.Model):
                 )
         
         return (True, None, None)
+
+
+class TaskComment(db.Model):
+    """Comments attached to tasks."""
+    __tablename__ = 'task_comments'
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    task_id = db.Column(db.Integer, db.ForeignKey('tasks.id', ondelete='CASCADE'), nullable=False, index=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)
+    parent_id = db.Column(db.Integer, db.ForeignKey('task_comments.id', ondelete='CASCADE'), nullable=True, index=True)
+    body = db.Column(db.Text, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.now)
+
+    user = db.relationship('User', backref=db.backref('task_comments', lazy='dynamic'))
+    task = db.relationship('Task', backref=db.backref('comments', lazy='dynamic', cascade='all, delete-orphan'))
+    parent = db.relationship('TaskComment', remote_side=[id], backref=db.backref('children', lazy='dynamic', cascade='all, delete-orphan'))
+    
 
     def validate_predecessor_ids(self, predecessor_ids):
         """Validate a list of predecessor IDs before assignment.

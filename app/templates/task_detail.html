@@ -384,6 +384,8 @@
       </div>
     </div>
 
+    
+
     <div class="detail-card mb-4">
       <div class="detail-card-header">
         <span><i class="fa-solid fa-link me-2"></i>Dependencias</span>
@@ -714,6 +716,29 @@
         {% endif %}
       </div>
     </div>
+    
+    <!-- Comments Card (moved to right column under Detalles) -->
+    <div class="detail-card mb-4" id="commentsCard">
+      <div class="detail-card-header">
+        <span><i class="fa-solid fa-comments me-2"></i>Comentarios</span>
+      </div>
+      <div class="detail-card-body">
+        <div id="commentsList" class="mb-3">
+          <!-- comments loaded by JS -->
+        </div>
+
+        {% if current_user.is_authenticated %}
+        <div>
+          <textarea id="commentBody" class="form-control mb-2" rows="3" placeholder="Escribe un comentario..."></textarea>
+          <div class="d-flex justify-content-end">
+            <button id="postCommentBtn" class="btn btn-primary">Comentar</button>
+          </div>
+        </div>
+        {% else %}
+        <div class="text-muted">Inicia sesión para comentar.</div>
+        {% endif %}
+      </div>
+    </div>
   </div>
 </div>
 {% endblock %}
@@ -721,6 +746,176 @@
 {% block scripts %}
 {{ super() }}
 <script>
+// Task comments JS
+document.addEventListener('DOMContentLoaded', function(){
+  const commentsList = document.getElementById('commentsList');
+  const postBtn = document.getElementById('postCommentBtn');
+  const commentBody = document.getElementById('commentBody');
+
+  function escapeHtml(str){
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  function renderComment(c){
+    const el = document.createElement('div');
+    el.className = 'mb-3 p-3 rounded comment-item';
+    el.style.background = '#fafafa';
+    el.dataset.id = c.id;
+    el.innerHTML = `
+      <div class="d-flex justify-content-between align-items-start">
+        <div>
+          <strong>${c.user.name}</strong>
+          <div class="small text-muted">${new Date(c.created_at).toLocaleString()}</div>
+        </div>
+        <div>
+          <button class="btn btn-sm btn-link reply-btn" title="Responder" aria-label="Responder">
+            <i class="fa-solid fa-reply"></i>
+          </button>
+        </div>
+      </div>
+      <div class="mt-2" style="white-space: pre-wrap;">${escapeHtml(c.body)}</div>
+      <div class="reply-form mt-2" style="display:none;">
+        <textarea class="form-control reply-body" rows="2" placeholder="Escribe tu respuesta..."></textarea>
+        <div class="d-flex justify-content-end mt-2">
+          <button class="btn btn-sm btn-secondary cancel-reply">Cancelar</button>
+          <button class="btn btn-sm btn-primary ms-2 post-reply">Responder</button>
+        </div>
+      </div>
+      <div class="replies mt-3"></div>
+    `;
+    return el;
+  }
+
+  let commentsPage = 1;
+  const commentsPerPage = 10;
+
+  function renderTree(list, container) {
+    list.forEach(c => {
+      const el = renderComment(c);
+      container.appendChild(el);
+      // render children (replies) recursively if present in payload
+      if (c.children && c.children.length) {
+        const repliesContainer = el.querySelector('.replies');
+        // recursive render
+        renderTree(c.children, repliesContainer);
+      }
+    });
+  }
+
+  function loadComments(page = 1, append = false){
+    fetch(`${location.origin}/task/{{ task.id }}/comments?page=${page}&per_page=${commentsPerPage}`)
+      .then(r => r.json())
+      .then(data => {
+        const items = data.comments || [];
+        if (!append) commentsList.innerHTML = '';
+
+        // If loading next page (older comments), append to bottom
+        renderTree(items, commentsList);
+
+        // manage load more button
+        let loadMore = document.getElementById('loadMoreComments');
+        if (data.has_more) {
+          if (!loadMore) {
+            loadMore = document.createElement('div');
+            loadMore.id = 'loadMoreComments';
+            loadMore.className = 'd-grid';
+            loadMore.innerHTML = '<button class="btn btn-outline-secondary">Cargar más comentarios</button>';
+            commentsList.parentNode.appendChild(loadMore);
+            loadMore.querySelector('button').addEventListener('click', function(){
+              commentsPage += 1;
+              loadComments(commentsPage, true);
+            });
+          }
+        } else {
+          if (loadMore) loadMore.remove();
+        }
+        attachReplyHandlers();
+      }).catch(e => console.error('Failed to load comments', e));
+  }
+
+  if (postBtn){
+    postBtn.addEventListener('click', function(){
+      const body = commentBody.value && commentBody.value.trim();
+      if (!body) return;
+      postBtn.disabled = true;
+      fetch(`${location.origin}/task/{{ task.id }}/comments`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ body })
+      }).then(r => r.json())
+      .then(data => {
+        if (data && data.id){
+          // prepend
+          const el = renderComment(data);
+          commentsList.insertBefore(el, commentsList.firstChild);
+          commentBody.value = '';
+          attachReplyHandlers();
+        } else if (data && data.error){
+          alert(data.error);
+        }
+      }).catch(e => { console.error('Failed to post comment', e); alert('Error al publicar comentario'); })
+      .finally(()=>postBtn.disabled = false);
+    });
+  }
+
+  function attachReplyHandlers(){
+    // attach to all reply buttons
+    document.querySelectorAll('.reply-btn').forEach(btn => {
+      if (btn._bound) return; btn._bound = true;
+      btn.addEventListener('click', function(){
+        const root = btn.closest('.comment-item');
+        const form = root.querySelector('.reply-form');
+        form.style.display = form.style.display === 'none' ? 'block' : 'none';
+      });
+    });
+
+    document.querySelectorAll('.cancel-reply').forEach(btn => {
+      if (btn._bound) return; btn._bound = true;
+      btn.addEventListener('click', function(){
+        const root = btn.closest('.comment-item');
+        const form = root.querySelector('.reply-form');
+        form.style.display = 'none';
+      });
+    });
+
+    document.querySelectorAll('.post-reply').forEach(btn => {
+      if (btn._bound) return; btn._bound = true;
+      btn.addEventListener('click', function(){
+        const root = btn.closest('.comment-item');
+        const bodyEl = root.querySelector('.reply-body');
+        const body = bodyEl.value && bodyEl.value.trim();
+        if (!body) return;
+        btn.disabled = true;
+        const parentId = root.dataset.id;
+        fetch(`${location.origin}/task/{{ task.id }}/comments`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ body, parent_id: parentId })
+        }).then(r => r.json()).then(data => {
+          if (data && data.id){
+            // append to replies
+            const replies = root.querySelector('.replies');
+            const el = renderComment(data);
+            replies.appendChild(el);
+            bodyEl.value = '';
+            root.querySelector('.reply-form').style.display = 'none';
+            attachReplyHandlers();
+          } else if (data && data.error){
+            alert(data.error);
+          }
+        }).catch(e => { console.error('Failed to post reply', e); alert('Error al publicar respuesta'); })
+        .finally(()=>btn.disabled = false);
+      });
+    });
+  }
+
+  loadComments();
+});
 // Apply progress-fill widths set via data-width
 document.addEventListener('DOMContentLoaded', function(){
   document.querySelectorAll('.progress-fill[data-width]').forEach(function(el){
