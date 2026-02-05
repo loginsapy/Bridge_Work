@@ -2,6 +2,7 @@ from datetime import datetime, timedelta
 import os
 import uuid
 import mimetypes
+import shutil
 from flask import render_template, jsonify, request, redirect, url_for, flash, abort, current_app, send_from_directory, send_file
 from io import BytesIO
 from flask_login import current_user, login_required
@@ -446,14 +447,42 @@ def delete_project(project_id):
         )
         db.session.add(audit)
         
-        # Prevent deletion if project has tasks to avoid NOT NULL FK violations
-        task_count = db.session.query(func.count(Task.id)).filter(Task.project_id == project.id).scalar()
-        if task_count and int(task_count) > 0:
-            flash(f"No se puede eliminar el proyecto porque tiene {task_count} tareas asociadas. Elimina o reasigna las tareas primero.", 'danger')
-        else:
-            db.session.delete(project)
-            db.session.commit()
-            flash(f"Proyecto '{project_name}' eliminado.", 'success')
+        # Cascade delete: remove tasks, their time entries and attachments, then delete the project
+        tasks = Task.query.filter(Task.project_id == project.id).all()
+        for t in tasks:
+            try:
+                # Delete time entries
+                TimeEntry.query.filter(TimeEntry.task_id == t.id).delete(synchronize_session=False)
+
+                # Delete attachments records and files
+                atts = TaskAttachment.query.filter(TaskAttachment.task_id == t.id).all()
+                for a in atts:
+                    try:
+                        task_folder = os.path.join(current_app.config.get('UPLOAD_FOLDER', ''), f'task_{t.id}')
+                        if task_folder and os.path.exists(os.path.join(task_folder, a.stored_filename)):
+                            os.remove(os.path.join(task_folder, a.stored_filename))
+                    except Exception:
+                        current_app.logger.exception('Failed to remove attachment file for %s', a.id)
+                TaskAttachment.query.filter(TaskAttachment.task_id == t.id).delete(synchronize_session=False)
+
+                # Audit task deletion
+                audit_t = AuditLog(
+                    entity_type='task',
+                    entity_id=t.id,
+                    action='DELETE',
+                    user_id=current_user.id,
+                    changes={'task_title': t.title}
+                )
+                db.session.add(audit_t)
+
+                # Finally delete the task
+                db.session.delete(t)
+            except Exception:
+                current_app.logger.exception('Error while cascading delete for task %s', t.id)
+
+        db.session.delete(project)
+        db.session.commit()
+        flash(f"Proyecto '{project_name}' y sus tareas asociadas fueron eliminados.", 'success')
     except Exception as e:
         db.session.rollback()
         flash(f'Error al eliminar: {str(e)}', 'danger')
@@ -566,6 +595,11 @@ def projects():
     for p in projects:
         total_hours = db.session.query(func.sum(TimeEntry.hours)).join(Task).filter(Task.project_id == p.id).scalar() or 0
         p.hours_spent = total_hours
+        # Count tasks for display in projects list
+        try:
+            p.task_count = int(db.session.query(func.count(Task.id)).filter(Task.project_id == p.id).scalar() or 0)
+        except Exception:
+            p.task_count = 0
         if p.budget_hours and p.budget_hours > 0:
             p.progress = min((total_hours / p.budget_hours) * 100, 100)
         else:

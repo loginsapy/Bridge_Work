@@ -4,6 +4,7 @@ from .. import db
 from ..models import Project, Task, TimeEntry, User, TaskAttachment
 from ..models import AuditLog
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy import func
 from datetime import date, datetime
 from marshmallow import ValidationError
 from .schemas import ProjectSchema, TaskSchema, TimeEntrySchema
@@ -171,11 +172,35 @@ def update_project(project_id):
 @internal_required
 def delete_project(project_id):
     p = Project.query.get_or_404(project_id)
-    # Prevent deletion if project has tasks to avoid FK constraint errors
-    task_count = db.session.query(func.count(Task.id)).filter(Task.project_id == p.id).scalar()
-    if task_count and int(task_count) > 0:
-        return jsonify({"error": f"Project has {task_count} tasks. Remove or reassign tasks before deleting."}), 400
+    # Cascade delete tasks and related records to avoid FK constraint errors
+    tasks = Task.query.filter(Task.project_id == p.id).all()
     try:
+        for t in tasks:
+            # delete time entries
+            TimeEntry.query.filter(TimeEntry.task_id == t.id).delete(synchronize_session=False)
+            # delete attachments records and try to remove files
+            atts = TaskAttachment.query.filter(TaskAttachment.task_id == t.id).all()
+            for a in atts:
+                try:
+                    task_folder = os.path.join(current_app.config.get('UPLOAD_FOLDER', ''), f'task_{t.id}')
+                    if task_folder and os.path.exists(os.path.join(task_folder, a.stored_filename)):
+                        os.remove(os.path.join(task_folder, a.stored_filename))
+                except Exception:
+                    current_app.logger.exception('Failed to remove attachment file for %s', a.id)
+            TaskAttachment.query.filter(TaskAttachment.task_id == t.id).delete(synchronize_session=False)
+
+            # audit task deletion
+            audit = AuditLog(
+                user_id=getattr(current_user, 'id', None) or 0,
+                action='DELETE',
+                entity_type='task',
+                entity_id=t.id,
+                changes={'task_title': t.title}
+            )
+            db.session.add(audit)
+
+            db.session.delete(t)
+
         db.session.delete(p)
         db.session.commit()
     except SQLAlchemyError as e:

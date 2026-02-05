@@ -248,12 +248,8 @@
 .actions-cell {
   display: flex;
   gap: 4px;
-  opacity: 0;
-  transition: opacity 0.15s;
-}
-
-tr:hover .actions-cell {
   opacity: 1;
+  transition: opacity 0.15s;
 }
 
 .action-btn {
@@ -268,11 +264,17 @@ tr:hover .actions-cell {
   align-items: center;
   justify-content: center;
   transition: all 0.1s;
+  text-decoration: none;
 }
 
 .action-btn:hover {
   background: var(--monday-grey-lighter);
   color: var(--monday-dark);
+}
+
+/* Ensure icon links don't show underline */
+.action-btn, .action-btn i {
+  text-decoration: none !important;
 }
 
 /* Empty State */
@@ -452,11 +454,12 @@ tr:hover .actions-cell {
           <th>{{ _('project') }}</th>
           <th>{{ _('status') }}</th>
           <th>{{ _('progress') }}</th>
+          <th>Tareas</th>
           <th>Responsable</th>
           <th>{{ _('client') }}</th>
           <th>{{ _('hours') }}</th>
           <th>{{ _('due_date') }}</th>
-          <th></th>
+          <th>{{ _('actions') if sys_language == 'en' else 'Acciones' }}</th>
         </tr>
       </thead>
       <tbody>
@@ -488,6 +491,9 @@ tr:hover .actions-cell {
                 <span class="progress-text">{{ "%.0f"|format(project.progress) }}%</span>
               </div>
             </div>
+          </td>
+          <td class="text-center">
+            <div class="fw-semibold">{{ project.task_count or 0 }}</div>
           </td>
           <td>
             {% if project.manager %}
