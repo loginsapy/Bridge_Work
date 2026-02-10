@@ -434,21 +434,6 @@ class Task(db.Model):
         return (True, None, None)
 
 
-class TaskComment(db.Model):
-    """Comments attached to tasks."""
-    __tablename__ = 'task_comments'
-    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
-    task_id = db.Column(db.Integer, db.ForeignKey('tasks.id', ondelete='CASCADE'), nullable=False, index=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)
-    parent_id = db.Column(db.Integer, db.ForeignKey('task_comments.id', ondelete='CASCADE'), nullable=True, index=True)
-    body = db.Column(db.Text, nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.now)
-
-    user = db.relationship('User', backref=db.backref('task_comments', lazy='dynamic'))
-    task = db.relationship('Task', backref=db.backref('comments', lazy='dynamic', cascade='all, delete-orphan'))
-    parent = db.relationship('TaskComment', remote_side=[id], backref=db.backref('children', lazy='dynamic', cascade='all, delete-orphan'))
-    
-
     def validate_predecessor_ids(self, predecessor_ids):
         """Validate a list of predecessor IDs before assignment.
 
@@ -488,6 +473,22 @@ class TaskComment(db.Model):
                 cur = getattr(cur, 'parent', None)
 
         return True
+
+class TaskComment(db.Model):
+    """Comments attached to tasks."""
+    __tablename__ = 'task_comments'
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    task_id = db.Column(db.Integer, db.ForeignKey('tasks.id', ondelete='CASCADE'), nullable=False, index=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)
+    parent_id = db.Column(db.Integer, db.ForeignKey('task_comments.id', ondelete='CASCADE'), nullable=True, index=True)
+    body = db.Column(db.Text, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.now)
+
+    user = db.relationship('User', backref=db.backref('task_comments', lazy='dynamic'))
+    task = db.relationship('Task', backref=db.backref('comments', lazy='dynamic', cascade='all, delete-orphan'))
+    parent = db.relationship('TaskComment', remote_side=[id], backref=db.backref('children', lazy='dynamic', cascade='all, delete-orphan'))
+    
+
 
 
 class TimeEntry(db.Model):
