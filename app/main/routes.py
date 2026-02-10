@@ -3289,7 +3289,21 @@ def edit_task(task_id):
             task.priority = request.form.get('priority') or task.priority
             # Only update is_internal_only if provided in form (checkboxes absent when not submitted)
             if 'is_internal_only' in request.form:
-                task.is_internal_only = request.form.get('is_internal_only') == 'on'
+                new_internal_flag = request.form.get('is_internal_only') == 'on'
+                task.is_internal_only = new_internal_flag
+                # Propagate the internal-only flag to all hierarchical descendants (children recursively)
+                # so that when a parent is marked private, its subtasks are not visible to clients.
+                stack = list(getattr(task, 'children', []) or [])
+                visited = set()
+                while stack:
+                    node = stack.pop()
+                    if node.id in visited:
+                        continue
+                    visited.add(node.id)
+                    node.is_internal_only = new_internal_flag
+                    for c in getattr(node, 'children', []) or []:
+                        if c.id not in visited:
+                            stack.append(c)
             start_date_str = request.form.get('start_date')
             due_date_str = request.form.get('due_date')
 
