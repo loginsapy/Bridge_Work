@@ -309,9 +309,12 @@ def edit_project(project_id):
     client_role = Role.query.filter_by(name='Cliente').first()
     available_clients = User.query.filter_by(role_id=client_role.id).order_by(User.first_name).all() if client_role else []
 
-    # Obtener usuarios con rol Participante para selector de miembros
-    participant_role = Role.query.filter_by(name='Participante').first()
-    available_members = User.query.filter_by(role_id=participant_role.id).order_by(User.first_name).all() if participant_role else []
+    # Obtener usuarios internos activos para selector de miembros (mantener miembros actuales aunque cambiara su rol)
+    internal_members = User.query.filter_by(is_internal=True, is_active=True).order_by(User.first_name).all()
+    member_map = {u.id: u for u in internal_members}
+    for m in project.members:
+        member_map.setdefault(m.id, m)
+    available_members = sorted(member_map.values(), key=lambda u: (u.first_name or '', u.last_name or ''))
     
     if request.method == 'POST':
         try:
@@ -402,14 +405,14 @@ def edit_project(project_id):
             db.session.rollback()
             flash(f'Error al actualizar: {str(e)}', 'danger')
     
-    # Ensure available_members includes existing project members even if their role changed
-    participant_role = Role.query.filter_by(name='Participante').first()
-    role_members = User.query.filter_by(role_id=participant_role.id).order_by(User.first_name).all() if participant_role else []
-    # Combine and deduplicate
-    member_map = {u.id: u for u in role_members}
+    # Show all internal active users as available members, but include existing project members
+    # so we don't lose members whose role changed or who became inactive.
+    internal_members = User.query.filter_by(is_internal=True, is_active=True).order_by(User.first_name).all()
+    member_map = {u.id: u for u in internal_members}
     for m in project.members:
         member_map.setdefault(m.id, m)
-    available_members = list(member_map.values())
+    # Keep a stable, human-friendly ordering by first_name + last_name
+    available_members = sorted(member_map.values(), key=lambda u: (u.first_name or '', u.last_name or ''))
 
     # IDs of currently assigned members (for checkbox checked state)
     project_member_ids = [m.id for m in project.members]
