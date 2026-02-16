@@ -12,6 +12,8 @@ from msal import ConfidentialClientApplication
 import json
 import base64
 import secrets
+from datetime import datetime
+import requests
 from msal import PublicClientApplication
 
 
@@ -219,6 +221,26 @@ def callback():
         try:
             db.session.commit()
             current_app.logger.info(f'User saved/updated: id={user.id}, email={user.email}')
+
+            # Try to fetch the user's Entra ID profile photo (delegated token available right after login)
+            try:
+                if access_token:
+                    graph_resp = requests.get(
+                        'https://graph.microsoft.com/v1.0/me/photo/$value',
+                        headers={'Authorization': f'Bearer {access_token}'},
+                        timeout=5
+                    )
+                    if graph_resp.status_code == 200 and graph_resp.content:
+                        user.photo = graph_resp.content
+                        user.photo_mime = graph_resp.headers.get('Content-Type', 'image/jpeg') or 'image/jpeg'
+                        user.photo_updated_at = datetime.utcnow()
+                        db.session.add(user)
+                        db.session.commit()
+                        current_app.logger.info(f'User photo saved for user id={user.id}')
+                    else:
+                        current_app.logger.debug(f'No photo returned for Azure user oid={azure_oid} (status={graph_resp.status_code})')
+            except Exception as e:
+                current_app.logger.warning(f'Failed to fetch/save Azure profile photo: {e}')
         except SQLAlchemyError as e:
             db.session.rollback()
             current_app.logger.exception(f'Database error saving user: {e}')

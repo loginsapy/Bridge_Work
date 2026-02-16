@@ -499,7 +499,11 @@
             {% if project.manager %}
             <div class="d-flex align-items-center gap-2">
               <div class="client-avatar" style="background: var(--brand-primary); color: white;" title="{{ project.manager.first_name or project.manager.email }}">
-                {{ (project.manager.first_name or project.manager.email)[0]|upper }}
+                {% if project.manager.photo %}
+                  <img src="{{ url_for('main.user_photo', user_id=project.manager.id) }}" class="client-avatar-lg" alt="{{ project.manager.name }}">
+                {% else %}
+                  {{ (project.manager.first_name or project.manager.email)[0]|upper }}
+                {% endif %}
               </div>
               <span class="small">{{ project.manager.first_name or project.manager.email.split('@')[0] }}</span>
             </div>
@@ -606,9 +610,13 @@
     <div class="project-card-footer">
       {% if project.manager %}
       <div class="d-flex align-items-center gap-1 me-auto" title="Responsable: {{ project.manager.first_name or project.manager.email }}">
-        <div class="client-avatar" style="background: var(--brand-primary); color: white; width: 24px; height: 24px; font-size: 11px;">
-          {{ (project.manager.first_name or project.manager.email)[0]|upper }}
-        </div>
+        {% if project.manager.photo %}
+          <img src="{{ url_for('main.user_photo', user_id=project.manager.id) }}" class="client-avatar" style="width:24px;height:24px;object-fit:cover;" alt="{{ project.manager.name }}">
+        {% else %}
+          <div class="client-avatar" style="background: var(--brand-primary); color: white; width: 24px; height: 24px; font-size: 11px;">
+            {{ (project.manager.first_name or project.manager.email)[0]|upper }}
+          </div>
+        {% endif %}
         <small class="text-muted">{{ project.manager.first_name or project.manager.email.split('@')[0] }}</small>
       </div>
       {% endif %}
@@ -625,9 +633,13 @@
       {% if project.members %}
       <div class="member-avatars ms-2">
         {% for member in project.members[:2] %}
+        {% if member.photo %}
+        <img src="{{ url_for('main.user_photo', user_id=member.id) }}" class="member-avatar" title="{{ member.first_name or member.email }}" alt="{{ member.name }}">
+        {% else %}
         <div class="member-avatar" title="{{ member.first_name or member.email }}">
           {{ (member.first_name or member.email)[0]|upper }}
         </div>
+        {% endif %}
         {% endfor %}
       </div>
       {% endif %}

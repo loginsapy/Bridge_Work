@@ -670,7 +670,11 @@
                   data-azure-oid="{{ user.azure_oid or '' }}">
                 <td>
                   <div class="user-avatar" style="background: {{ ['#0073ea', '#00c875', '#fdab3d', '#e2445c', '#a25ddc', '#579bfc'][loop.index0 % 6] }};">
-                    {{ (user.first_name or user.email)[:2]|upper }}
+                    {% if user.photo %}
+                      <img src="{{ url_for('main.user_photo', user_id=user.id) }}" class="user-avatar-img" alt="{{ user.name }}">
+                    {% else %}
+                      {{ (user.first_name or user.email)[:2]|upper }}
+                    {% endif %}
                   </div>
                 </td>
                 <td>

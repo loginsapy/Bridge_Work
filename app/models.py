@@ -24,6 +24,11 @@ class User(UserMixin, db.Model):
 
     created_at = db.Column(db.DateTime, default=datetime.now)
 
+    # Foto recibida desde Entra ID (nullable)
+    photo = db.Column(db.LargeBinary, nullable=True)
+    photo_mime = db.Column(db.String(64), nullable=True)
+    photo_updated_at = db.Column(db.DateTime, nullable=True)
+
     @property
     def name(self):
         """Devuelve el nombre completo del usuario o el email si no tiene nombre"""

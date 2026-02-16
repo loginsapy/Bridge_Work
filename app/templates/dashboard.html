@@ -317,9 +317,13 @@
             {% for member in active_team_members %}
             <div class="col-6 col-md-4 col-lg-2">
               <div class="text-center p-3 rounded-md hover-shadow bg-light">
-                <div class="rounded-circle mb-2 mx-auto d-flex align-items-center justify-content-center border border-primary border-3" style="width: 60px; height: 60px; background: #a25ddc; color: white; font-size: 20px; font-weight: 600;">
-                  {{ (member.first_name or member.email)[0]|upper }}
-                </div>
+                {% if member.photo %}
+                  <img src="{{ url_for('main.user_photo', user_id=member.id) }}" class="rounded-circle mb-2 mx-auto" style="width:60px;height:60px;object-fit:cover;" alt="{{ member.name }}" />
+                {% else %}
+                  <div class="rounded-circle mb-2 mx-auto d-flex align-items-center justify-content-center border border-primary border-3" style="width: 60px; height: 60px; background: #a25ddc; color: white; font-size: 20px; font-weight: 600;">
+                    {{ (member.first_name or member.email)[0]|upper }}
+                  </div>
+                {% endif %}
                 <div class="fw-semibold text-primary">{{ member.first_name or member.email.split('@')[0] }}</div>
                 <small class="text-secondary">{{ member.role.name if member.role else _('no_role') }}</small>
                 <div class="mt-2">

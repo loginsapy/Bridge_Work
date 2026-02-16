@@ -251,15 +251,24 @@
             {% if task.assignees and task.assignees|length > 0 %}
               <div class="d-flex align-items-center">
                 {% for a in task.assignees[:2] %}
+                  {% if a.photo %}
+                  <img src="{{ url_for('main.user_photo', user_id=a.id) }}" class="mini-avatar" title="{{ a.first_name or a.email }}" alt="{{ a.name }}">
+                  {% else %}
                   <div class="mini-avatar" title="{{ a.first_name or a.email }}">{{ (a.first_name or a.email)[0]|upper }}</div>
+                  {% endif %}
                 {% endfor %}
                 {% if task.assignees|length > 2 %}
                   <span class="text-muted ms-1 small">+{{ task.assignees|length - 2 }}</span>
                 {% endif %}
               </div>
             {% elif task.assigned_to %}
-              <div class="mini-avatar">{{ (task.assigned_to.first_name or task.assigned_to.email)[0]|upper }}</div>
-              <span>{{ task.assigned_to.first_name or task.assigned_to.email.split('@')[0] }}</span>
+              {% if task.assigned_to.photo %}
+                <img src="{{ url_for('main.user_photo', user_id=task.assigned_to.id) }}" class="mini-avatar" alt="{{ task.assigned_to.name }}">
+                <span>{{ task.assigned_to.first_name or task.assigned_to.email.split('@')[0] }}</span>
+              {% else %}
+                <div class="mini-avatar">{{ (task.assigned_to.first_name or task.assigned_to.email)[0]|upper }}</div>
+                <span>{{ task.assigned_to.first_name or task.assigned_to.email.split('@')[0] }}</span>
+              {% endif %}
             {% else %}
               <span class="text-muted">Sin asignar</span>
             {% endif %}
@@ -301,8 +310,13 @@
         <div class="card-meta">
           <div class="card-assignee">
             {% if task.assigned_to %}
-            <div class="mini-avatar">{{ (task.assigned_to.first_name or task.assigned_to.email)[0]|upper }}</div>
-            <span>{{ task.assigned_to.first_name or task.assigned_to.email.split('@')[0] }}</span>
+              {% if task.assigned_to.photo %}
+                <img src="{{ url_for('main.user_photo', user_id=task.assigned_to.id) }}" class="mini-avatar" alt="{{ task.assigned_to.name }}">
+                <span>{{ task.assigned_to.first_name or task.assigned_to.email.split('@')[0] }}</span>
+              {% else %}
+                <div class="mini-avatar">{{ (task.assigned_to.first_name or task.assigned_to.email)[0]|upper }}</div>
+                <span>{{ task.assigned_to.first_name or task.assigned_to.email.split('@')[0] }}</span>
+              {% endif %}
             {% else %}
             <span class="text-muted">Sin asignar</span>
             {% endif %}
@@ -345,8 +359,13 @@
         <div class="card-meta">
           <div class="card-assignee">
             {% if task.assigned_to %}
-            <div class="mini-avatar">{{ (task.assigned_to.first_name or task.assigned_to.email)[0]|upper }}</div>
-            <span>{{ task.assigned_to.first_name or task.assigned_to.email.split('@')[0] }}</span>
+              {% if task.assigned_to.photo %}
+                <img src="{{ url_for('main.user_photo', user_id=task.assigned_to.id) }}" class="mini-avatar" alt="{{ task.assigned_to.name }}">
+                <span>{{ task.assigned_to.first_name or task.assigned_to.email.split('@')[0] }}</span>
+              {% else %}
+                <div class="mini-avatar">{{ (task.assigned_to.first_name or task.assigned_to.email)[0]|upper }}</div>
+                <span>{{ task.assigned_to.first_name or task.assigned_to.email.split('@')[0] }}</span>
+              {% endif %}
             {% else %}
             <span class="text-muted">Sin asignar</span>
             {% endif %}

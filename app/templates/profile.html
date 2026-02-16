@@ -26,12 +26,16 @@
       <div class="card-body text-center py-5">
         <!-- Avatar -->
         <div class="mb-4">
+          {% if current_user.photo %}
+          <img src="{{ url_for('main.user_photo', user_id=current_user.id) }}" class="rounded-circle" style="width:120px;height:120px;object-fit:cover;" alt="{{ current_user.name }}">
+          {% else %}
           <div class="mx-auto rounded-circle bg-primary bg-gradient d-flex align-items-center justify-content-center" 
                style="width: 120px; height: 120px; font-size: 3rem;">
             <span class="text-white fw-bold">
               {{ (current_user.first_name or current_user.email)[0] | upper }}{{ (current_user.last_name or '')[0] | upper if current_user.last_name else '' }}
             </span>
           </div>
+          {% endif %}
         </div>
         
         <!-- Nombre -->

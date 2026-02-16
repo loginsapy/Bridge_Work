@@ -141,16 +141,24 @@
                 {% if task.assignees and task.assignees|length > 0 %}
                   <div class="d-flex align-items-center">
                     {% for a in task.assignees[:2] %}
-                      <div class="rounded-circle bg-light text-primary d-flex align-items-center justify-content-center me-2" style="width: 24px; height: 24px; font-size: 10px;">{{ (a.first_name or a.email)[0]|upper }}</div>
+                      {% if a.photo %}
+                        <img src="{{ url_for('main.user_photo', user_id=a.id) }}" class="rounded-circle bg-light text-primary d-flex align-items-center justify-content-center me-2" style="width:24px;height:24px;object-fit:cover;" alt="{{ a.name }}">
+                      {% else %}
+                        <div class="rounded-circle bg-light text-primary d-flex align-items-center justify-content-center me-2" style="width: 24px; height: 24px; font-size: 10px;">{{ (a.first_name or a.email)[0]|upper }}</div>
+                      {% endif %}
                     {% endfor %}
                     <small>{{ task.assignees[0].first_name or task.assignees[0].email }}</small>
                     {% if task.assignees|length > 1 %}<small class="text-muted ms-2">(+{{ task.assignees|length - 1 }} más)</small>{% endif %}
                   </div>
                 {% elif task.assigned_to %}
                   <div class="d-flex align-items-center">
+                    {% if task.assigned_to.photo %}
+                    <img src="{{ url_for('main.user_photo', user_id=task.assigned_to.id) }}" class="rounded-circle bg-light text-primary d-flex align-items-center justify-content-center me-2" style="width:24px;height:24px;object-fit:cover;" alt="{{ task.assigned_to.name }}">
+                    {% else %}
                     <div class="rounded-circle bg-light text-primary d-flex align-items-center justify-content-center me-2" style="width: 24px; height: 24px; font-size: 10px;">
                       {{ task.assigned_to.first_name[0] if task.assigned_to.first_name else 'U' }}
                     </div>
+                    {% endif %}
                     <small>{{ task.assigned_to.first_name }}</small>
                   </div>
                 {% endif %}

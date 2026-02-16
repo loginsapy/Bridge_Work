@@ -918,7 +918,11 @@ tr.table-warning:hover {
                 <div class="person-avatars">
                   {% for u in assignees[:3] %}
                     {% set fullname = (u.first_name ~ (' ' ~ u.last_name if u.last_name else '')) if u.first_name else u.email %}
-                    <div class="person-avatar small-avatar" title="{{ fullname }}" aria-label="{{ fullname }}">{{ (u.first_name or u.email)[0]|upper }}</div>
+                    {% if u.photo %}
+                      <img src="{{ url_for('main.user_photo', user_id=u.id) }}" class="person-avatar small-avatar" title="{{ fullname }}" aria-label="{{ fullname }}" alt="{{ fullname }}" />
+                    {% else %}
+                      <div class="person-avatar small-avatar" title="{{ fullname }}" aria-label="{{ fullname }}">{{ (u.first_name or u.email)[0]|upper }}</div>
+                    {% endif %}
                   {% endfor %}
                   {% if assignees|length > 3 %}
                     <div class="person-avatar small-avatar more-badge" title="{{ assignees|length - 3 }} more">+{{ assignees|length - 3 }}</div>
@@ -1125,7 +1129,11 @@ tr.table-warning:hover {
   </div>
   {% for u in users %}
   <div class="person-option" onclick="setAssignee({{ u.id }})">
-    <div class="person-avatar">{{ (u.first_name or u.email)[0]|upper }}</div>
+    {% if u.photo %}
+      <img src="{{ url_for('main.user_photo', user_id=u.id) }}" class="person-avatar" alt="{{ u.name }}" />
+    {% else %}
+      <div class="person-avatar">{{ (u.first_name or u.email)[0]|upper }}</div>
+    {% endif %}
     <span>{{ u.first_name or u.email }}</span>
   </div>
   {% endfor %}

@@ -523,9 +523,13 @@
             data-projects="{{ client.total_projects }}">
           <td>
             <div class="client-cell">
-              <div class="client-avatar-lg" style="background: {{ ['#0073ea', '#00c875', '#fdab3d', '#e2445c', '#a25ddc', '#579bfc', '#ff7575', '#cab641'][loop.index0 % 8] }};">
-                {{ (client.first_name or client.email)[0]|upper }}
-              </div>
+              {% if client.photo %}
+                <img src="{{ url_for('main.user_photo', user_id=client.id) }}" class="client-avatar-lg" style="object-fit:cover;" alt="{{ client.name }}">
+              {% else %}
+                <div class="client-avatar-lg" style="background: {{ ['#0073ea', '#00c875', '#fdab3d', '#e2445c', '#a25ddc', '#579bfc', '#ff7575', '#cab641'][loop.index0 % 8] }};">
+                  {{ (client.first_name or client.email)[0]|upper }}
+                </div>
+              {% endif %}
               <div class="client-info">
                 <div class="name">{{ client.first_name or '' }} {{ client.last_name or '' }}</div>
                 <div class="email">{{ client.email }}</div>

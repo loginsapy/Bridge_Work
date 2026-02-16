@@ -15,12 +15,16 @@
     <div class="card border-0 shadow-sm">
       <div class="card-body text-center py-5">
         <div class="mb-4">
-          <div class="mx-auto rounded-circle bg-primary bg-gradient d-flex align-items-center justify-content-center" 
+          {% if user.photo %}
+        <img src="{{ url_for('main.user_photo', user_id=user.id) }}" class="rounded-circle" style="width:120px;height:120px;object-fit:cover;" alt="{{ user.name }}">
+        {% else %}
+        <div class="mx-auto rounded-circle bg-primary bg-gradient d-flex align-items-center justify-content-center" 
                style="width: 120px; height: 120px; font-size: 3rem;">
             <span class="text-white fw-bold">
               {{ (user.first_name or user.email)[0] | upper }}{{ (user.last_name or '')[0] | upper if user.last_name else '' }}
             </span>
-          </div>
+        </div>
+        {% endif %}
         </div>
         <h4 class="fw-bold mb-1">{{ user.name }}</h4>
         <p class="text-muted mb-3">{{ user.email }}</p>

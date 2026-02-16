@@ -457,7 +457,11 @@
               <td><strong>{{ entry.date|sys_date }}</strong></td>
               <td>
                 <div class="assignee-display">
+                  {% if entry.user.photo %}
+                  <img src="{{ url_for('main.user_photo', user_id=entry.user.id) }}" class="assignee-avatar" style="width:24px;height:24px;font-size:10px;object-fit:cover;" alt="{{ entry.user.name }}" />
+                  {% else %}
                   <div class="assignee-avatar" style="width:24px;height:24px;font-size:10px;">{{ (entry.user.first_name or entry.user.email)[0]|upper }}</div>
+                  {% endif %}
                   {{ entry.user.first_name or entry.user.email.split('@')[0] }}
                 </div>
               </td>
@@ -646,7 +650,11 @@
             <div class="assignee-display">
               {% for a in task.assignees[:2] %}
               <div class="d-flex align-items-center me-3">
+                {% if a.photo %}
+                <img src="{{ url_for('main.user_photo', user_id=a.id) }}" class="assignee-avatar" style="object-fit:cover;" alt="{{ a.name }}" />
+                {% else %}
                 <div class="assignee-avatar">{{ (a.first_name or a.email)[0]|upper }}</div>
+                {% endif %}
                 <div class="ms-2">{{ a.first_name or a.email }}</div>
               </div>
               {% endfor %}
@@ -665,7 +673,11 @@
           <div class="detail-value">
             {% if task.assigned_client %}
             <div class="assignee-display">
+              {% if task.assigned_client.photo %}
+              <img src="{{ url_for('main.user_photo', user_id=task.assigned_client.id) }}" class="assignee-avatar" style="object-fit:cover;" alt="{{ task.assigned_client.name }}" />
+              {% else %}
               <div class="assignee-avatar" style="background:#e6f9ec;color:#138a3a;">{{ (task.assigned_client.first_name or task.assigned_client.email)[0]|upper }}</div>
+              {% endif %}
               {{ task.assigned_client.first_name or task.assigned_client.email }}
             </div>
             {% else %}

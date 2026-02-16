@@ -15,38 +15,50 @@ def test_oidc_jit_provisioning(monkeypatch):
     app = create_app('config.DevConfig')
     app.config['TESTING'] = True
 
+    import base64, json
+
     class MockMSAL:
         def __init__(self):
-            self.calls = 0
+            pass
         def get_authorization_request_url(self, scopes, redirect_uri=None):
-            self.calls += 1
-            # Simulate first call raising ValueError (tenant rejects reserved scopes), second call succeeds
-            if self.calls == 1:
-                raise ValueError("You cannot use any scope value that is reserved")
             return 'https://login.example/authorize'
 
         def acquire_token_by_authorization_code(self, code, scopes=None, redirect_uri=None):
-            # Return id token claims to simulate a successful token acquisition
-            return {'id_token_claims': {'oid': 'oid-123', 'preferred_username': 'newuser@example.com', 'given_name': 'New', 'family_name': 'User'}}
+            # Build a fake id_token with payload claims
+            payload = {'oid': 'oid-123', 'preferred_username': 'newuser@example.com', 'given_name': 'New', 'family_name': 'User', 'email': 'newuser@example.com'}
+            b64 = base64.urlsafe_b64encode(json.dumps(payload).encode()).decode().rstrip('=')
+            fake_id_token = f'header.{b64}.sig'
+            return {'access_token': 'fake-access-token', 'id_token': fake_id_token}
 
-    # Patch the function used by the auth routes module
-    monkeypatch.setattr('app.auth.routes.get_msal_app', lambda: MockMSAL())
+    # Patch ConfidentialClientApplication used in the callback and Graph photo request
+    monkeypatch.setattr('app.auth.routes.ConfidentialClientApplication', lambda *args, **kwargs: MockMSAL())
+
+    # Mock Graph photo response to return an image bytes
+    class DummyResp:
+        status_code = 200
+        headers = {'Content-Type': 'image/jpeg'}
+        content = b'\xff\xd8\xff\xdbfakejpegbytes'
+    monkeypatch.setattr('app.auth.routes.requests.get', lambda url, headers=None, timeout=None: DummyResp())
 
     client = app.test_client()
 
     with app.app_context():
         db.create_all()
-        print('USERS BEFORE:', User.query.all())
-        # Start SSO flow (should redirect to auth URL even if the initial scope set caused a fallback)
-        resp = client.post('/auth/login', data={'action': 'sso'})
-        assert resp.status_code in (302, 303)
 
-        # Simulate callback with code
-        resp = client.get('/auth/callback?code=abc123')
-        print('CALLBACK RESP STATUS:', resp.status_code)
-        print('USERS AFTER:', User.query.all())
-        # After callback, user should exist in DB
+        # Simulate callback with code (bypassing the initial /auth/login redirect)
+        resp = client.get('/auth/callback?code=abc123', follow_redirects=True)
+        assert resp.status_code == 200
+
+        # After callback, user should exist in DB and photo should be saved
         user = User.query.filter_by(azure_oid='oid-123').first()
         assert user is not None
         assert user.is_internal
         assert user.email == 'newuser@example.com'
+        assert user.photo is not None
+        assert user.photo_mime == 'image/jpeg'
+
+        # The photo endpoint should serve the binary
+        photo_resp = client.get(f'/user/{user.id}/photo')
+        assert photo_resp.status_code == 200
+        assert photo_resp.data.startswith(b'\xff\xd8')
+        assert photo_resp.headers.get('Content-Type') == 'image/jpeg'

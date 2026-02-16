@@ -100,7 +100,11 @@
       <div class="nav-item dropdown">
         <button class="btn btn-icon user-menu-btn d-flex align-items-center gap-2" data-bs-toggle="dropdown">
           <div class="user-avatar">
+            {% if current_user.photo %}
+            <img src="{{ url_for('main.user_photo', user_id=current_user.id) }}" class="user-avatar-img" alt="{{ current_user.name }}" title="{{ current_user.name }}" />
+            {% else %}
             {{ current_user.first_name[0] if current_user.first_name else current_user.email[0]|upper }}
+            {% endif %}
           </div>
           <span class="d-none d-lg-inline user-name">{{ current_user.first_name or current_user.email.split('@')[0] }}</span>
           <i class="fa-solid fa-chevron-down fa-xs d-none d-lg-inline"></i>

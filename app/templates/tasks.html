@@ -504,7 +504,11 @@
         {% if task.assignees and task.assignees|length > 0 %}
           <div class="person-avatars">
             {% for a in task.assignees[:2] %}
-              <div class="monday-avatar-sm" title="{{ a.first_name or a.email }}" aria-label="{{ a.first_name or a.email }}" style="background: {{ ['#0073ea', '#00c875', '#fdab3d', '#e2445c', '#a25ddc', '#579bfc'][loop.index0 % 6] }};">{{ (a.first_name or a.email)[:2]|upper }}</div>
+              {% if a.photo %}
+                <img src="{{ url_for('main.user_photo', user_id=a.id) }}" class="monday-avatar-sm" title="{{ a.first_name or a.email }}" aria-label="{{ a.first_name or a.email }}" alt="{{ a.name }}" />
+              {% else %}
+                <div class="monday-avatar-sm" title="{{ a.first_name or a.email }}" aria-label="{{ a.first_name or a.email }}" style="background: {{ ['#0073ea', '#00c875', '#fdab3d', '#e2445c', '#a25ddc', '#579bfc'][loop.index0 % 6] }};">{{ (a.first_name or a.email)[:2]|upper }}</div>
+              {% endif %}
             {% endfor %}
             {% if task.assignees|length > 2 %}
               <small class="text-muted ms-1">+{{ task.assignees|length - 2 }}</small>
@@ -513,19 +517,31 @@
         {% elif task.assigned_to %}
           {% if current_user.role and current_user.role.name in ['PMP','Admin'] %}
           <a href="{{ url_for('main.user_profile', user_id=task.assigned_to.id) }}" title="{{ task.assigned_to.name }}">
-            <div class="monday-avatar-sm" aria-label="{{ task.assigned_to.name }}" style="background: {{ ['#0073ea', '#00c875', '#fdab3d', '#e2445c', '#a25ddc', '#579bfc'][loop.index0 % 6] }};">
-              {{ (task.assigned_to.first_name or task.assigned_to.email)[:2]|upper }}
-            </div>
+            {% if task.assigned_to.photo %}
+              <img src="{{ url_for('main.user_photo', user_id=task.assigned_to.id) }}" class="monday-avatar-sm" aria-label="{{ task.assigned_to.name }}" alt="{{ task.assigned_to.name }}" />
+            {% else %}
+              <div class="monday-avatar-sm" aria-label="{{ task.assigned_to.name }}" style="background: {{ ['#0073ea', '#00c875', '#fdab3d', '#e2445c', '#a25ddc', '#579bfc'][loop.index0 % 6] }};">
+                {{ (task.assigned_to.first_name or task.assigned_to.email)[:2]|upper }}
+              </div>
+            {% endif %}
           </a>
           {% else %}
+            {% if task.assigned_to.photo %}
+            <img src="{{ url_for('main.user_photo', user_id=task.assigned_to.id) }}" class="monday-avatar-sm" title="{{ task.assigned_to.name }}" aria-label="{{ task.assigned_to.name }}" alt="{{ task.assigned_to.name }}" />
+            {% else %}
             <div class="monday-avatar-sm" title="{{ task.assigned_to.name }}" aria-label="{{ task.assigned_to.name }}" style="background: {{ ['#0073ea', '#00c875', '#fdab3d', '#e2445c', '#a25ddc', '#579bfc'][loop.index0 % 6] }};">
               {{ (task.assigned_to.first_name or task.assigned_to.email)[:2]|upper }}
             </div>
+            {% endif %}
           {% endif %}
         {% elif task.assigned_client %}
-          <div class="monday-avatar-sm" title="{{ task.assigned_client.name }}" aria-label="{{ task.assigned_client.name }}" style="background: #a25ddc;">
-            {{ (task.assigned_client.first_name or task.assigned_client.email)[:2]|upper }}
-          </div>
+          {% if task.assigned_client.photo %}
+            <img src="{{ url_for('main.user_photo', user_id=task.assigned_client.id) }}" class="monday-avatar-sm" title="{{ task.assigned_client.name }}" aria-label="{{ task.assigned_client.name }}" alt="{{ task.assigned_client.name }}" />
+          {% else %}
+            <div class="monday-avatar-sm" title="{{ task.assigned_client.name }}" aria-label="{{ task.assigned_client.name }}" style="background: #a25ddc;">
+              {{ (task.assigned_client.first_name or task.assigned_client.email)[:2]|upper }}
+            </div>
+          {% endif %}
         {% else %}
           <div class="monday-avatar-sm" title="Sin asignar" aria-label="Sin asignar" style="background: #c4c4c4;">
             <i class="fa-solid fa-user" style="font-size: 12px;"></i>

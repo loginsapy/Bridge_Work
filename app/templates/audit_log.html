@@ -346,7 +346,11 @@
           {% if log.user %}
           <div class="user-cell">
             <div class="user-avatar-sm">
-              {{ (log.user.first_name or log.user.email)[0]|upper }}
+              {% if log.user.photo %}
+                <img src="{{ url_for('main.user_photo', user_id=log.user.id) }}" class="user-avatar-sm" style="width:24px;height:24px;object-fit:cover;display:block;" alt="{{ log.user.name }}" />
+              {% else %}
+                {{ (log.user.first_name or log.user.email)[0]|upper }}
+              {% endif %}
             </div>
             <div>
               <div class="fw-medium small">{{ log.user.first_name or log.user.email.split('@')[0] }}</div>

@@ -5,6 +5,7 @@ import mimetypes
 import shutil
 from flask import render_template, jsonify, request, redirect, url_for, flash, abort, current_app, send_from_directory, send_file
 from io import BytesIO
+import requests
 from flask_login import current_user, login_required
 from sqlalchemy import func
 from werkzeug.utils import secure_filename
@@ -3177,6 +3178,44 @@ def move_task(task_id):
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
+
+
+@main_bp.route('/user/<int:user_id>/photo')
+@login_required
+def user_photo(user_id):
+    user = User.query.get_or_404(user_id)
+
+    # If we already have a stored photo serve it
+    if user.photo:
+        resp = send_file(BytesIO(user.photo), mimetype=(user.photo_mime or 'image/jpeg'))
+        resp.headers['Cache-Control'] = 'public, max-age=3600'
+        return resp
+
+    # Fallback: try to fetch from Microsoft Graph using application credentials (if configured)
+    if user.azure_oid:
+        try:
+            from ..auth.utils import get_msal_app
+            msal_app = get_msal_app()
+            if msal_app:
+                token = msal_app.acquire_token_for_client(scopes=['https://graph.microsoft.com/.default'])
+                access = token.get('access_token')
+                if access:
+                    g = requests.get(f'https://graph.microsoft.com/v1.0/users/{user.azure_oid}/photo/$value', headers={'Authorization': f'Bearer {access}'}, timeout=5)
+                    if g.status_code == 200 and g.content:
+                        user.photo = g.content
+                        user.photo_mime = g.headers.get('Content-Type', 'image/jpeg') or 'image/jpeg'
+                        user.photo_updated_at = datetime.utcnow()
+                        db.session.add(user)
+                        db.session.commit()
+                        resp = send_file(BytesIO(user.photo), mimetype=user.photo_mime)
+                        resp.headers['Cache-Control'] = 'public, max-age=3600'
+                        return resp
+        except Exception:
+            # best-effort fallback — do not block or raise
+            current_app.logger.debug('Graph fallback for user photo failed or not configured')
+
+    # Nothing available — return 404 so templates can fall back to initials
+    abort(404)
 
 
 @main_bp.route('/user/<int:user_id>')

@@ -256,6 +256,15 @@ body.app-body {
   background: linear-gradient(180deg, var(--brand-accent), var(--brand-light));
 }
 
+/* Avatar image helpers — ensure user photos fill existing avatar containers */
+img.person-avatar, img.user-avatar-img, img.mini-avatar, img.assignee-avatar, img.member-avatar, img.client-avatar-lg, img.avatar {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
+  display: block;
+}
+
 .stat-card .stat-icon {
   position: absolute;
   top: 1rem;

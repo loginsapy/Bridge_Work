@@ -398,9 +398,13 @@
           <td>
             <div class="user-cell">
               {% set avatar_colors = ['#0073ea', '#00c875', '#fdab3d', '#e2445c', '#a25ddc'] %}
+              {% if entry.user.photo %}
+              <img src="{{ url_for('main.user_photo', user_id=entry.user.id) }}" class="avatar" style="width:32px;height:32px;object-fit:cover;border-radius:50%;display:block;" alt="{{ entry.user.name }}">
+              {% else %}
               <div class="avatar" data-color="{{ avatar_colors[loop.index0 % avatar_colors|length] }}">
                 {{ entry.user.email[0]|upper }}
               </div>
+              {% endif %}
               <span class="name">{{ entry.user.first_name or entry.user.email.split('@')[0] }}</span>
             </div>
           </td>

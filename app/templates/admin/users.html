@@ -270,7 +270,11 @@
             <td>
               <div class="user-info">
                 <div class="user-avatar {% if not u.is_active %}inactive{% endif %}">
-                  {{ (u.first_name or u.email)[0]|upper }}
+                  {% if u.photo %}
+                    <img src="{{ url_for('main.user_photo', user_id=u.id) }}" class="user-avatar-img" alt="{{ u.name }}" />
+                  {% else %}
+                    {{ (u.first_name or u.email)[0]|upper }}
+                  {% endif %}
                 </div>
                 <div class="user-details">
                   <span class="user-name">{{ u.first_name or '' }} {{ u.last_name or '' }}{% if not u.first_name and not u.last_name %}{{ u.email.split('@')[0] }}{% endif %}</span>

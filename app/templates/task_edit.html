@@ -226,7 +226,11 @@
                 <div class="p-2" style="max-height:160px; overflow:auto; border:1px solid var(--monday-border); border-radius:6px; background:#fff;">
                   {% for u in task.assignee_list %}
                     <div class="d-flex align-items-center">
-                      <div class="person-avatar small me-2">{{ (u.first_name or u.email)[0]|upper }}</div>
+                      {% if u.photo %}
+                        <img src="{{ url_for('main.user_photo', user_id=u.id) }}" class="person-avatar small me-2" alt="{{ u.name }}" />
+                      {% else %}
+                        <div class="person-avatar small me-2">{{ (u.first_name or u.email)[0]|upper }}</div>
+                      {% endif %}
                       <div>{{ u.first_name or u.email }}</div>
                     </div>
                   {% endfor %}
