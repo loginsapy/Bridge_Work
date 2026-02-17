@@ -256,14 +256,50 @@ body.app-body {
   background: linear-gradient(180deg, var(--brand-accent), var(--brand-light));
 }
 
-/* Avatar image helpers — ensure user photos fill existing avatar containers */
-img.person-avatar, img.user-avatar-img, img.mini-avatar, img.assignee-avatar, img.member-avatar, img.client-avatar-lg, img.avatar {
-  width: 100%;
-  height: 100%;
+/* Avatar image helpers — ensure user photos fit expected avatar slots and cannot overflow */
+/* Default small avatar (used across board, lists, dropdowns) */
+img.person-avatar, .person-avatar img {
+  width: 28px;
+  height: 28px;
+  object-fit: cover;
+  border-radius: 50%;
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+}
+
+/* Smaller variant */
+.person-avatar.small-avatar img, img.person-avatar.small-avatar, img.mini-avatar {
+  width: 20px;
+  height: 20px;
+}
+
+/* Navbar / user menu */
+img.user-avatar-img {
+  width: 36px;
+  height: 36px;
   object-fit: cover;
   border-radius: 50%;
   display: block;
 }
+
+/* Project/manager / member small avatars */
+img.client-avatar-lg, img.member-avatar, img.assignee-avatar, img.user-avatar-sm, img.avatar {
+  width: 24px;
+  height: 24px;
+  object-fit: cover;
+  border-radius: 50%;
+  display: block;
+}
+
+/* Large profile photo is kept via inline style or explicit class (profile page uses inline 120px) */
+/* Safety cap for any accidental placement: never allow user-photo to exceed 240px */
+img[src*="/user/"] {
+  max-width: 240px;
+  max-height: 240px;
+  object-fit: cover;
+}
+
 
 .stat-card .stat-icon {
   position: absolute;
