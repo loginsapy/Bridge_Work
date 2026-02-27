@@ -4130,7 +4130,7 @@ def admin_settings():
     section_checkboxes = {
         'notifications': [
             'smtp_use_tls', 'notify_task_assigned', 'notify_task_completed',
-            'notify_task_approved', 'notify_task_rejected', 'notify_task_comment', 
+            'notify_task_approved', 'notify_task_rejected', 'notify_task_comment',
             'notify_due_date_reminder', 'show_notification_center',
             'enable_push_notifications'
         ],
@@ -4141,6 +4141,9 @@ def admin_settings():
         'general': [
             'allow_projects_without_manager', 'require_task_estimation',
             'block_parent_until_children_complete'
+        ],
+        'global_alert': [
+            'global_alert_enabled'
         ]
     }
     
