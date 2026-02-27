@@ -1209,6 +1209,268 @@ def create_task():
     return redirect(url_for('main.project_detail', project_id=project.id))
 
 
+# --- Task Import/Export ---
+
+@main_bp.route('/project/<int:project_id>/tasks/template-xlsx')
+@login_required
+def download_tasks_template(project_id):
+    """Download a template Excel file for bulk task import"""
+    project = Project.query.get_or_404(project_id)
+
+    # Permission check: only internal users (not Participante)
+    if not current_user.is_internal:
+        abort(403)
+    if current_user.role and current_user.role.name == 'Participante':
+        abort(403)
+
+    try:
+        import openpyxl
+        from openpyxl.styles import Font, PatternFill, Alignment
+    except Exception:
+        abort(500, 'openpyxl not installed')
+
+    # Create workbook
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Tareas"
+
+    # Define headers
+    headers = ['Título', 'Estado', 'Prioridad', 'Inicio', 'Vencimiento']
+    ws.append(headers)
+
+    # Style headers
+    header_fill = PatternFill(start_color="0070C0", end_color="0070C0", fill_type="solid")
+    header_font = Font(bold=True, color="FFFFFF")
+    header_alignment = Alignment(horizontal="center", vertical="center")
+
+    for cell in ws[1]:
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = header_alignment
+
+    # Add example row
+    example = ['Tarea de ejemplo', 'BACKLOG', 'MEDIUM', '01/03/2026', '15/03/2026']
+    ws.append(example)
+
+    # Auto width columns
+    from openpyxl.utils import get_column_letter
+    for i, col in enumerate(['Título', 'Estado', 'Prioridad', 'Inicio', 'Vencimiento'], 1):
+        col_letter = get_column_letter(i)
+        if i == 1:  # Título gets wider
+            ws.column_dimensions[col_letter].width = 40
+        else:
+            ws.column_dimensions[col_letter].width = 15
+
+    # Add reference sheet
+    ref_sheet = wb.create_sheet("Referencia")
+    ref_sheet.append(['Estado - Valores válidos:'])
+    for status in ['BACKLOG', 'IN_PROGRESS', 'IN_REVIEW', 'COMPLETED']:
+        ref_sheet.append([status])
+
+    ref_sheet.append([])
+    ref_sheet.append(['Prioridad - Valores válidos:'])
+    for priority in ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL']:
+        ref_sheet.append([priority])
+
+    ref_sheet.append([])
+    ref_sheet.append(['Fechas en formato DD/MM/YYYY'])
+
+    ref_sheet.column_dimensions['A'].width = 30
+
+    # Send file
+    bio = BytesIO()
+    wb.save(bio)
+    bio.seek(0)
+
+    filename = f"tareas_template_{project.id}.xlsx"
+    return send_file(
+        bio,
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        as_attachment=True,
+        download_name=filename
+    )
+
+
+@main_bp.route('/project/<int:project_id>/tasks/import-xlsx', methods=['POST'])
+@login_required
+def import_tasks_xlsx(project_id):
+    """Import tasks from an Excel file"""
+    project = Project.query.get_or_404(project_id)
+
+    # Permission check: only internal users (not Participante)
+    if not current_user.is_internal:
+        abort(403)
+    if current_user.role and current_user.role.name == 'Participante':
+        abort(403)
+
+    # Check if file was provided
+    if 'excel_file' not in request.files:
+        flash('Por favor selecciona un archivo Excel', 'danger')
+        return redirect(url_for('main.project_detail', project_id=project.id))
+
+    file = request.files['excel_file']
+
+    if file.filename == '':
+        flash('Por favor selecciona un archivo Excel', 'danger')
+        return redirect(url_for('main.project_detail', project_id=project.id))
+
+    # Validate file extension
+    if not file.filename.lower().endswith('.xlsx'):
+        flash('El archivo debe ser un archivo Excel (.xlsx)', 'danger')
+        return redirect(url_for('main.project_detail', project_id=project.id))
+
+    try:
+        import openpyxl
+        from datetime import datetime
+
+        # Read workbook
+        wb = openpyxl.load_workbook(file)
+        ws = wb.active
+
+        created_count = 0
+        error_count = 0
+        errors = []
+
+        # Skip header row (row 1), process from row 2 onwards
+        for row_idx, row in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
+            # Skip completely empty rows
+            if all(cell is None for cell in row):
+                continue
+
+            try:
+                # Extract values
+                title = row[0] if row and len(row) > 0 else None
+                status = row[1] if row and len(row) > 1 else None
+                priority = row[2] if row and len(row) > 2 else None
+                start_date_val = row[3] if row and len(row) > 3 else None
+                due_date_val = row[4] if row and len(row) > 4 else None
+
+                # Validate title is not empty
+                if not title or not str(title).strip():
+                    error_count += 1
+                    errors.append(f"Fila {row_idx}: Falta el título")
+                    continue
+
+                title = str(title).strip()
+
+                # Normalize status
+                if status:
+                    status = status.strip().upper()
+                    status = Task.normalize_status(status) if hasattr(Task, 'normalize_status') else status
+                else:
+                    status = 'BACKLOG'
+
+                # Validate status
+                valid_statuses = ['BACKLOG', 'IN_PROGRESS', 'IN_REVIEW', 'COMPLETED']
+                if status not in valid_statuses:
+                    status = 'BACKLOG'
+
+                # Handle priority
+                if priority:
+                    priority = str(priority).strip().upper()
+                else:
+                    priority = 'MEDIUM'
+
+                valid_priorities = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL']
+                if priority not in valid_priorities:
+                    priority = 'MEDIUM'
+
+                # Parse dates
+                start_date = None
+                due_date = None
+
+                if start_date_val:
+                    start_date = _parse_date(start_date_val)
+
+                if due_date_val:
+                    due_date = _parse_date(due_date_val)
+
+                # Validate date order
+                if start_date and due_date and start_date > due_date:
+                    error_count += 1
+                    errors.append(f"Fila {row_idx} ({title}): Inicio no puede ser después de vencimiento")
+                    continue
+
+                # Create task
+                task = Task(
+                    project_id=project.id,
+                    title=title,
+                    status=status,
+                    priority=priority,
+                    start_date=start_date,
+                    due_date=due_date
+                )
+                db.session.add(task)
+                db.session.flush()  # Get the task ID
+
+                # Create audit log
+                audit = AuditLog(
+                    entity_type='Task',
+                    entity_id=task.id,
+                    action='CREATE',
+                    user_id=current_user.id,
+                    changes={
+                        'title': task.title,
+                        'project_id': task.project_id,
+                        'status': task.status,
+                        'source': 'bulk_import'
+                    }
+                )
+                db.session.add(audit)
+                created_count += 1
+
+            except Exception as e:
+                error_count += 1
+                errors.append(f"Fila {row_idx}: {str(e)}")
+                current_app.logger.exception(f"Error importing task at row {row_idx}")
+
+        # Commit all tasks
+        db.session.commit()
+
+        # Build flash message
+        message = f"Se importaron {created_count} tarea(s)"
+        if error_count > 0:
+            message += f" con {error_count} error(es)"
+
+        if error_count > 0 and errors:
+            # Show first 3 errors
+            error_details = "; ".join(errors[:3])
+            if len(errors) > 3:
+                error_details += f"; y {len(errors) - 3} error(es) más"
+            flash(f"{message}. Errores: {error_details}", 'warning')
+        else:
+            flash(message, 'success')
+
+    except Exception as e:
+        current_app.logger.exception("Error importing tasks from Excel")
+        flash(f'Error al importar archivo: {str(e)}', 'danger')
+
+    return redirect(url_for('main.project_detail', project_id=project.id))
+
+
+def _parse_date(date_val):
+    """Parse date from various formats"""
+    if isinstance(date_val, str):
+        # Try DD/MM/YYYY
+        try:
+            return datetime.strptime(date_val.strip(), '%d/%m/%Y')
+        except:
+            pass
+
+        # Try YYYY-MM-DD
+        try:
+            return datetime.strptime(date_val.strip(), '%Y-%m-%d')
+        except:
+            pass
+
+        return None
+    elif hasattr(date_val, 'isoformat'):
+        # Already a date/datetime object from openpyxl
+        return date_val
+
+    return None
+
+
 # --- Admin: User and Role Management (PMP or Admin) ---
 
 def _ensure_pmp():

@@ -800,6 +800,9 @@ tr.table-warning:hover {
       <h5 class="mb-0">{{ project.name }}</h5>
       <span class="badge bg-light text-dark">{{ tasks|length }} tareas</span>
       {% if current_user.is_internal and not (current_user.role and current_user.role.name == 'Participante') %}
+      <button class="btn btn-light btn-sm" data-bs-toggle="modal" data-bs-target="#importTasksModal">
+        <i class="fa-solid fa-file-arrow-up me-1"></i>Importar Excel
+      </button>
       <button class="btn btn-light btn-sm" onclick="openNewTaskModal()">
         <i class="fa-solid fa-plus me-1"></i>Nueva Tarea
       </button>
@@ -1137,6 +1140,63 @@ tr.table-warning:hover {
     <span>{{ u.first_name or u.email }}</span>
   </div>
   {% endfor %}
+</div>
+{% endif %}
+
+<!-- Modal Importar Tareas desde Excel -->
+{% if current_user.is_internal and not (current_user.role and current_user.role.name == 'Participante') %}
+<div class="modal fade" id="importTasksModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title fw-bold"><i class="fa-solid fa-file-excel me-2 text-success"></i>Importar Tareas desde Excel</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <form method="POST" action="{{ url_for('main.import_tasks_xlsx', project_id=project.id) }}" enctype="multipart/form-data" id="importTasksForm">
+        <div class="modal-body">
+          <div class="alert alert-info mb-3">
+            <i class="fa-solid fa-circle-info me-2"></i>
+            <strong>Campos esperados:</strong> Título, Estado, Prioridad, Inicio, Vencimiento
+          </div>
+
+          <div class="mb-3">
+            <p class="text-muted small mb-2">
+              <i class="fa-solid fa-download me-1"></i>
+              <a href="{{ url_for('main.download_tasks_template', project_id=project.id) }}" download>
+                Descargar plantilla Excel
+              </a>
+            </p>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Seleccionar archivo</label>
+            <input type="file" class="form-control" name="excel_file" accept=".xlsx" required>
+            <small class="text-muted d-block mt-1">Solo archivos .xlsx</small>
+          </div>
+
+          <div class="alert alert-light border">
+            <small class="text-muted">
+              <strong>Notas:</strong>
+              <ul class="mb-0 ps-3">
+                <li>El título es obligatorio</li>
+                <li>Estado: BACKLOG, IN_PROGRESS, IN_REVIEW, COMPLETED (default: BACKLOG)</li>
+                <li>Prioridad: LOW, MEDIUM, HIGH, CRITICAL (default: MEDIUM)</li>
+                <li>Fechas en formato DD/MM/YYYY</li>
+                <li>Las filas vacías serán ignoradas</li>
+              </ul>
+            </small>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn btn-success" id="btnImportTasks">
+            <span class="spinner-border spinner-border-sm d-none me-1" role="status" aria-hidden="true" id="importTasksSpinner"></span>
+            <span id="importTasksText"><i class="fa-solid fa-upload me-1"></i>Importar Tareas</span>
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
 </div>
 {% endif %}
 
@@ -1715,6 +1775,16 @@ function openNewTaskModal() {
   const modal = new bootstrap.Modal(document.getElementById('newTaskModal'));
   modal.show();
 }
+
+// Show loading state when importing tasks
+document.getElementById('importTasksForm')?.addEventListener('submit', function(e) {
+  const btn = document.getElementById('btnImportTasks');
+  const spinner = document.getElementById('importTasksSpinner');
+  const text = document.getElementById('importTasksText');
+  btn.disabled = true;
+  spinner.classList.remove('d-none');
+  text.textContent = 'Importando...';
+});
 
 // Close dropdowns on click outside
 document.addEventListener('click', (e) => {
