@@ -110,6 +110,11 @@
   cursor: grabbing;
 }
 
+.kanban-card.locked-for-participant {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
 .kanban-card.priority-LOW { border-left-color: #579bfc; }
 .kanban-card.priority-MEDIUM { border-left-color: var(--monday-yellow); }
 .kanban-card.priority-HIGH { border-left-color: #ff642e; }
@@ -242,7 +247,7 @@
     </div>
     <div class="column-tasks" data-status="BACKLOG">
       {% for task in tasks_by_status.BACKLOG %}
-      <div class="kanban-card priority-{{ task.priority }}" data-task-id="{{ task.id }}" data-assignees="{{ task.assignees|map(attribute='id')|join(',') }}" draggable="true">
+      <div class="kanban-card priority-{{ task.priority }}" data-task-id="{{ task.id }}" data-assignee-ids="{{ task.assignee_list|map(attribute='id')|join(',') }}" draggable="true">
         <div class="card-title">
           <a href="{{ url_for('main.task_detail', task_id=task.id) }}">{{ task.title }}</a>
         </div>
@@ -303,7 +308,7 @@
     </div>
     <div class="column-tasks" data-status="IN_PROGRESS">
       {% for task in tasks_by_status.IN_PROGRESS %}
-      <div class="kanban-card priority-{{ task.priority }}" data-task-id="{{ task.id }}" draggable="true">
+      <div class="kanban-card priority-{{ task.priority }}" data-task-id="{{ task.id }}" data-assignee-ids="{{ task.assignee_list|map(attribute='id')|join(',') }}" draggable="true">
         <div class="card-title">
           <a href="{{ url_for('main.task_detail', task_id=task.id) }}">{{ task.title }}</a>
         </div>
@@ -352,7 +357,7 @@
     </div>
     <div class="column-tasks" data-status="IN_REVIEW">
       {% for task in tasks_by_status.IN_REVIEW %}
-      <div class="kanban-card priority-{{ task.priority }}" data-task-id="{{ task.id }}" draggable="true">
+      <div class="kanban-card priority-{{ task.priority }}" data-task-id="{{ task.id }}" data-assignee-ids="{{ task.assignee_list|map(attribute='id')|join(',') }}" draggable="true">
         <div class="card-title">
           <a href="{{ url_for('main.task_detail', task_id=task.id) }}">{{ task.title }}</a>
         </div>
@@ -401,7 +406,7 @@
     </div>
     <div class="column-tasks" data-status="COMPLETED">
       {% for task in tasks_by_status.COMPLETED %}
-      <div class="kanban-card priority-{{ task.priority }}" data-task-id="{{ task.id }}" draggable="true">
+      <div class="kanban-card priority-{{ task.priority }}" data-task-id="{{ task.id }}" data-assignee-ids="{{ task.assignee_list|map(attribute='id')|join(',') }}" draggable="true">
         <div class="card-title">
           <a href="{{ url_for('main.task_detail', task_id=task.id) }}">{{ task.title }}</a>
         </div>
@@ -438,10 +443,33 @@
 {{ super() }}
 <script>
 const projectId = {{ project.id }};
+const currentUserId = {{ current_user.id if current_user.is_authenticated else 'null' }};
+const currentUserRole = {{ ('"' + current_user.role.name + '"') if (current_user.is_authenticated and current_user.role) else 'null' }};
+const isParticipantRole = currentUserRole === 'Participante';
+
+function canCurrentUserMoveKanbanCard(card) {
+  if (currentUserRole === 'PMP' || currentUserRole === 'Admin') return true;
+  if (!isParticipantRole) return false;
+  const ids = (card.dataset.assigneeIds || '')
+    .split(',')
+    .map(x => parseInt(x, 10))
+    .filter(Number.isFinite);
+  return ids.includes(parseInt(currentUserId, 10));
+}
 
 // Drag and Drop
 document.querySelectorAll('.kanban-card').forEach(card => {
+  if (isParticipantRole && !canCurrentUserMoveKanbanCard(card)) {
+    card.removeAttribute('draggable');
+    card.classList.add('locked-for-participant');
+    card.title = 'Solo puedes mover tareas asignadas a ti';
+  }
+
   card.addEventListener('dragstart', (e) => {
+    if (isParticipantRole && !canCurrentUserMoveKanbanCard(card)) {
+      e.preventDefault();
+      return;
+    }
     card.classList.add('dragging');
     e.dataTransfer.setData('text/plain', card.dataset.taskId);
   });
@@ -469,6 +497,11 @@ document.querySelectorAll('.column-tasks').forEach(column => {
     const taskId = e.dataTransfer.getData('text/plain');
     const newStatus = column.dataset.status;
     const card = document.querySelector(`.kanban-card[data-task-id="${taskId}"]`);
+
+    if (card && isParticipantRole && !canCurrentUserMoveKanbanCard(card)) {
+      alert('Solo puedes mover tareas asignadas a ti.');
+      return;
+    }
     
     if (card) {
       column.appendChild(card);

@@ -66,6 +66,9 @@
 
 .att-btn.download { background: var(--monday-light-grey); color: var(--monday-dark); }
 .att-btn.download:hover { background: var(--monday-blue); color: white; }
+.att-btn.preview { background: var(--monday-blue); color: white; }
+.att-btn.preview i { color: white; }
+.att-btn.preview:hover { background: #0069d9; color: white; }
 .att-btn.delete { background: #ffebee; color: var(--monday-red); }
 .att-btn.delete:hover { background: var(--monday-red); color: white; }
 
@@ -468,7 +471,14 @@
             <a href="{{ url_for('main.download_attachment', attachment_id=att.id) }}" class="att-btn download" title="Descargar">
               <i class="fa-solid fa-download"></i>
             </a>
-            {% if current_user.is_internal or att.uploaded_by_id == current_user.id %}
+            {% if ext in ['pdf','jpg','jpeg','png','gif','bmp','webp'] %}
+            <a href="#" class="att-btn preview" title="Vista previa"
+               onclick="showAttachmentPreview('{{ url_for('main.download_attachment', attachment_id=att.id, inline=1) }}', '{{ ext }}'); return false;">
+              <i class="fa-solid fa-eye"></i>
+            </a>
+            {% endif %}
+            {% set is_admin_or_pmp = current_user.is_internal and current_user.role and current_user.role.name in ('PMP','Admin') %}
+            {% if is_admin_or_pmp or att.uploaded_by_id == current_user.id %}
               <button type="button" class="att-btn delete" title="Eliminar"
                       onclick="deleteAttachment('{{ url_for('api.delete_attachment', attachment_id=att.id) }}')">
                 <i class="fa-solid fa-trash"></i>
@@ -481,9 +491,18 @@
     </div>
     {% endif %}
   </div>
-
-  <div class="col-lg-4">
-    <div class="card border-danger shadow-sm">
+    <!-- Preview modal -->
+    <div class="modal fade" id="attachmentPreviewModal" tabindex="-1" aria-labelledby="attachmentPreviewLabel" aria-hidden="true">
+      <div class="modal-dialog modal-xl modal-dialog-centered">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="attachmentPreviewLabel">Vista previa</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body"></div>
+        </div>
+      </div>
+    </div>
       <div class="card-header bg-danger text-white">
         <h6 class="mb-0">Zona de Riesgo</h6>
       </div>
@@ -628,12 +647,27 @@ function deleteTask() {
 function deleteAttachment(url) {
   if (!confirm('¿Eliminar este archivo?')) return;
   
-  fetch(url, { method: 'POST' })
+  fetch(url, { method: 'DELETE' })
   .then(response => {
     if (response.ok) window.location.reload();
     else alert('Error al eliminar archivo');
   })
   .catch(err => alert('Error de conexión'));
+}
+
+function showAttachmentPreview(url, ext) {
+  var modalEl = document.getElementById('attachmentPreviewModal');
+  var body = modalEl.querySelector('.modal-body');
+  body.innerHTML = '';
+  if (['pdf'].includes(ext)) {
+    body.innerHTML = '<iframe src="' + url + '" style="width:100%;height:80vh;" frameborder="0"></iframe>';
+  } else if (['jpg','jpeg','png','gif','bmp','webp'].includes(ext)) {
+    body.innerHTML = '<img src="' + url + '" class="img-fluid" alt="Previsualización" />';
+  } else {
+    body.innerHTML = '<p>No se puede previsualizar este tipo de archivo.</p>';
+  }
+  var modal = new bootstrap.Modal(modalEl);
+  modal.show();
 }
 </script>
 {% endblock %}

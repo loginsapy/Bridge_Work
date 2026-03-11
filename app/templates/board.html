@@ -837,7 +837,7 @@ tr.table-warning:hover {
       <tbody id="tasksBody">
         {% macro render_node(node, level=0, parent_id=None) %}
           {% set task = node.task %}
-          <tr class="{% if level>0 %}child-row{% endif %}{% if task.is_blocked() %} table-warning{% endif %}" data-task-id="{{ task.id }}" data-status="{{ task.status }}" {% if parent_id %}data-parent-id="{{ parent_id }}"{% endif %} {% if current_user.is_internal %}draggable="true"{% endif %}>
+          <tr class="{% if level>0 %}child-row{% endif %}{% if task.is_blocked() %} table-warning{% endif %}" data-task-id="{{ task.id }}" data-status="{{ task.status }}" data-assignee-ids="{{ task.assignee_list|map(attribute='id')|join(',') }}" {% if parent_id %}data-parent-id="{{ parent_id }}"{% endif %} {% if current_user.is_internal %}draggable="true"{% endif %}>
             <td class="row-checkbox">{% if current_user.is_internal %}<input type="checkbox" class="task-check">{% endif %}</td>
             <td class="row-grip">{% if current_user.is_internal %}<i class="fa-solid fa-grip-vertical" draggable="true" title="Arrastrar"></i>{% endif %}</td>
             <td>
@@ -1768,8 +1768,9 @@ document.getElementById('newTaskForm')?.addEventListener('submit', function(e) {
 {% block scripts %}
 {{ super() }}
 <script>
-const projectId = {{ project.id }};
-const project_id = {{ project_id }};
+const projectId = {{ project.id | tojson }};
+const currentUserId = {{ (current_user.id if current_user.is_authenticated else none) | tojson }};
+const currentUserRole = {{ (current_user.role.name if (current_user.is_authenticated and current_user.role) else none) | tojson }};
 // Abrir modal de nueva tarea
 function openNewTaskModal() {
   const modal = new bootstrap.Modal(document.getElementById('newTaskModal'));
@@ -1791,12 +1792,19 @@ document.addEventListener('click', (e) => {
   if (!e.target.closest('.status-dropdown') && !e.target.closest('.person-dropdown') && !e.target.closest('.status-cell') && !e.target.closest('.person-cell')) {
     document.getElementById('statusDropdown').style.display = 'none';
     document.getElementById('priorityDropdown').style.display = 'none';
-    document.getElementById('personDropdown').style.display = 'none';
+    const personDropdown = document.getElementById('personDropdown');
+    if (personDropdown) personDropdown.style.display = 'none';
   }
 });
 
 function showStatusDropdown(e, taskId, isBlocked = false) {
   e.stopPropagation();
+
+  if (!canCurrentUserChangeTaskStatus(taskId)) {
+    alert('Solo puedes cambiar estado de tareas asignadas a ti.');
+    return;
+  }
+
   currentTaskId = taskId;
   const dd = document.getElementById('statusDropdown');
   
@@ -1810,7 +1818,22 @@ function showStatusDropdown(e, taskId, isBlocked = false) {
   dd.style.left = e.pageX + 'px';
   dd.style.top = e.pageY + 'px';
   document.getElementById('priorityDropdown').style.display = 'none';
-  document.getElementById('personDropdown').style.display = 'none';
+  const personDropdown = document.getElementById('personDropdown');
+  if (personDropdown) personDropdown.style.display = 'none';
+}
+
+function canCurrentUserChangeTaskStatus(taskId) {
+  if (!currentUserRole) return false;
+  if (currentUserRole === 'PMP' || currentUserRole === 'Admin') return true;
+  if (currentUserRole !== 'Participante') return false;
+
+  const row = document.querySelector(`#tasksBody tr[data-task-id='${taskId}']`);
+  if (!row) return false;
+  const ids = (row.dataset.assigneeIds || '')
+    .split(',')
+    .map(x => parseInt(x, 10))
+    .filter(Number.isFinite);
+  return ids.includes(parseInt(currentUserId, 10));
 }
 
 // Show alert for blocked tasks
@@ -1840,7 +1863,8 @@ function showPriorityDropdown(e, taskId) {
   dd.style.left = e.pageX + 'px';
   dd.style.top = e.pageY + 'px';
   document.getElementById('statusDropdown').style.display = 'none';
-  document.getElementById('personDropdown').style.display = 'none';
+  const personDropdown = document.getElementById('personDropdown');
+  if (personDropdown) personDropdown.style.display = 'none';
 }
 
 function showPersonDropdown(e, taskId) {

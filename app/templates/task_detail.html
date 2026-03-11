@@ -246,6 +246,20 @@
   color: var(--monday-dark);
 }
 
+.attachment-btn.preview {
+  background: var(--monday-blue);
+  color: white;
+}
+
+.attachment-btn.preview i {
+  color: white;
+}
+
+.attachment-btn.preview:hover {
+  background: #0069d9;
+  color: white;
+}
+
 .attachment-btn.download:hover {
   background: var(--monday-blue);
   color: white;
@@ -601,7 +615,14 @@
             <a href="{{ url_for('main.download_attachment', attachment_id=att.id) }}" class="attachment-btn download" title="Descargar">
               <i class="fa-solid fa-download"></i>
             </a>
-            {% if current_user.is_internal or att.uploaded_by_id == current_user.id %}
+            {% if ext in ['pdf','jpg','jpeg','png','gif','bmp','webp'] %}
+            <a href="#" class="attachment-btn preview" title="Vista previa"
+               onclick="showAttachmentPreview('{{ url_for('main.download_attachment', attachment_id=att.id, inline=1) }}', '{{ ext }}'); return false;">
+              <i class="fa-solid fa-eye"></i>
+            </a>
+            {% endif %}
+            {% set is_admin_or_pmp = current_user.is_internal and current_user.role and current_user.role.name in ('PMP','Admin') %}
+            {% if is_admin_or_pmp or att.uploaded_by_id == current_user.id %}
               <button type="button" class="attachment-btn delete" title="Eliminar" 
                       onclick="deleteAttachment('{{ url_for('api.delete_attachment', attachment_id=att.id) }}')">
                 <i class="fa-solid fa-trash"></i>
@@ -618,8 +639,21 @@
       </div>
       {% endif %}
 
+      <!-- Preview modal -->
+      <div class="modal fade" id="attachmentPreviewModal" tabindex="-1" aria-labelledby="attachmentPreviewLabel" aria-hidden="true">
+        <div class="modal-dialog modal-xl modal-dialog-centered">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title" id="attachmentPreviewLabel">Vista previa</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body"></div>
+          </div>
+        </div>
+      </div>
+
       <!-- Upload Form -->
-      {% if current_user.is_internal or (task.project.client_id and task.project.client_id == current_user.id) or (task.assigned_client_id and task.assigned_client_id == current_user.id) %}
+      {% if can_comment_upload %}
       <form id="uploadForm" onsubmit="event.preventDefault(); uploadFiles();">
         <div class="upload-zone" id="uploadZone" onclick="document.getElementById('fileInput').click();">
           <i class="fa-solid fa-cloud-upload-alt d-block"></i>
@@ -632,7 +666,7 @@
         </div>
       </form>
       {% else %}
-      <div class="text-muted small mt-2">No puedes adjuntar archivos a esta tarea.</div>
+      <div class="text-muted small mt-2">Solo usuarios asignados pueden adjuntar archivos.</div>
       {% endif %}
     </div>
   </div>
@@ -739,13 +773,15 @@
           <!-- comments loaded by JS -->
         </div>
 
-        {% if current_user.is_authenticated %}
+        {% if current_user.is_authenticated and can_comment_upload %}
         <div>
           <textarea id="commentBody" class="form-control mb-2" rows="3" placeholder="Escribe un comentario..."></textarea>
           <div class="d-flex justify-content-end">
             <button id="postCommentBtn" class="btn btn-primary">Comentar</button>
           </div>
         </div>
+        {% elif current_user.is_authenticated %}
+        <div class="text-muted">Solo usuarios asignados pueden dejar comentarios.</div>
         {% else %}
         <div class="text-muted">Inicia sesión para comentar.</div>
         {% endif %}
@@ -760,6 +796,7 @@
 <script>
 // Task comments JS
 document.addEventListener('DOMContentLoaded', function(){
+  const canCommentUpload = {{ 'true' if can_comment_upload else 'false' }};
   const commentsList = document.getElementById('commentsList');
   const postBtn = document.getElementById('postCommentBtn');
   const commentBody = document.getElementById('commentBody');
@@ -778,6 +815,11 @@ document.addEventListener('DOMContentLoaded', function(){
     el.className = 'mb-3 p-3 rounded comment-item';
     el.style.background = '#fafafa';
     el.dataset.id = c.id;
+    const replyActionHtml = canCommentUpload ? `
+          <button class="btn btn-sm btn-link reply-btn" title="Responder" aria-label="Responder">
+            <i class="fa-solid fa-reply"></i>
+          </button>
+    ` : '';
     el.innerHTML = `
       <div class="d-flex justify-content-between align-items-start">
         <div>
@@ -785,9 +827,7 @@ document.addEventListener('DOMContentLoaded', function(){
           <div class="small text-muted">${new Date(c.created_at).toLocaleString()}</div>
         </div>
         <div>
-          <button class="btn btn-sm btn-link reply-btn" title="Responder" aria-label="Responder">
-            <i class="fa-solid fa-reply"></i>
-          </button>
+          ${replyActionHtml}
         </div>
       </div>
       <div class="mt-2" style="white-space: pre-wrap;">${escapeHtml(c.body)}</div>
@@ -876,6 +916,7 @@ document.addEventListener('DOMContentLoaded', function(){
   }
 
   function attachReplyHandlers(){
+    if (!canCommentUpload) return;
     // attach to all reply buttons
     document.querySelectorAll('.reply-btn').forEach(btn => {
       if (btn._bound) return; btn._bound = true;
@@ -968,6 +1009,8 @@ function handleFileSelect(input) {
 const uploadZone = document.getElementById('uploadZone');
 const fileInput = document.getElementById('fileInput');
 
+if (uploadZone && fileInput) {
+
 ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
   uploadZone.addEventListener(eventName, (e) => {
     e.preventDefault();
@@ -994,6 +1037,7 @@ uploadZone.addEventListener('drop', (e) => {
     handleFileSelect(fileInput);
   }
 });
+}
 
 function deleteTask() {
   if (!confirm('¿Eliminar esta tarea?')) return;
@@ -1048,12 +1092,27 @@ function uploadFiles() {
 function deleteAttachment(url) {
   if (!confirm('¿Eliminar este archivo?')) return;
   
-  fetch(url, { method: 'POST' })
+  fetch(url, { method: 'DELETE' })
   .then(response => {
     if (response.ok) window.location.reload();
     else alert('Error al eliminar archivo');
   })
   .catch(err => alert('Error de conexión'));
+}
+
+function showAttachmentPreview(url, ext) {
+  var modalEl = document.getElementById('attachmentPreviewModal');
+  var body = modalEl.querySelector('.modal-body');
+  body.innerHTML = '';
+  if (['pdf'].includes(ext)) {
+    body.innerHTML = '<iframe src="' + url + '" style="width:100%;height:80vh;" frameborder="0"></iframe>';
+  } else if (['jpg','jpeg','png','gif','bmp','webp'].includes(ext)) {
+    body.innerHTML = '<img src="' + url + '" class="img-fluid" alt="Previsualización" />';
+  } else {
+    body.innerHTML = '<p>No se puede previsualizar este tipo de archivo.</p>';
+  }
+  var modal = new bootstrap.Modal(modalEl);
+  modal.show();
 }
 </script>
 {% endblock %}

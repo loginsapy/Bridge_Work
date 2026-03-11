@@ -2,8 +2,12 @@
   <div class="container-fluid px-3 px-lg-4">
     <!-- Logo & Brand -->
     <a class="navbar-brand d-flex align-items-center gap-2" href="/">
+      {% if sys_logo_path %}
+      <img src="{{ sys_logo_path }}" alt="" height="32" class="d-inline-block">
+      {% else %}
       <img src="/static/images/sbwlogo.png" alt="" height="32" class="d-inline-block">
-      <span class="fw-bold d-none d-sm-inline">Login S.A.</span>
+      {% endif %}
+      <span class="fw-bold d-none d-sm-inline">{{ sys_app_name }}</span>
     </a>
 
     <!-- Global Alert (shows next to logo, before search) -->
@@ -188,16 +192,16 @@
             </div>
             <div class="col-12">
               <label class="form-label fw-semibold">
-                <i class="fa-solid fa-user-tie me-1"></i>Clientes Asociados (opcional)
+                <i class="fa-solid fa-user-tie me-1"></i>Clientes Asociados (opcional) - Multiples
               </label>
-              <select name="client_ids" class="form-select">
-                <option value="">-- Seleccionar Cliente --</option>
+              <select name="client_ids" class="form-select" multiple>
                 {% for client in available_clients %}
                 <option value="{{ client.id }}">
                   {{ client.first_name }} {{ client.last_name }} ({{ client.email }})
                 </option>
                 {% endfor %}
               </select>
+              <small class="text-muted">Manten presionado Ctrl/Cmd para seleccionar multiples clientes</small>
             </div>
             <div class="col-12">
               <label class="form-label fw-semibold">

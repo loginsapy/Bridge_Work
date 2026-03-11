@@ -687,10 +687,8 @@ def project_detail(project_id):
             or_(Task.is_internal_only == False, Task.is_internal_only == None)
         ).order_by(Task.status, Task.priority.desc()).all()
     else:
-        # Participantes solo ven sus tareas asignadas (incluye multi-asignados)
-        tasks = Task.query.filter(Task.project_id == project_id).filter(
-            (Task.assigned_to_id == current_user.id) | (Task.assignees.any(User.id == current_user.id))
-        ).order_by(Task.status, Task.priority.desc()).all()
+        # Participantes que acceden al proyecto pueden ver todas las tareas del proyecto
+        tasks = Task.query.filter_by(project_id=project_id).order_by(Task.status, Task.priority.desc()).all()
 
     # Sugeridos para asignación: usuarios internos
     if project.members:
@@ -865,7 +863,8 @@ def project_kanban(project_id):
         has_tasks = Task.query.filter(Task.project_id == project_id).filter(
             (Task.assigned_to_id == current_user.id) | (Task.assignees.any(User.id == current_user.id))
         ).first()
-        if not has_tasks:
+        is_member = current_user in project.members
+        if not has_tasks and not is_member:
             flash('No tienes permiso para ver este proyecto.', 'danger')
             return redirect(url_for('main.projects'))
     elif user_role == 'Cliente' or not current_user.is_internal:
@@ -880,9 +879,7 @@ def project_kanban(project_id):
     if user_role in ['PMP', 'Admin']:
         tasks = Task.query.filter_by(project_id=project_id).all()
     elif user_role == 'Participante':
-        tasks = Task.query.filter(Task.project_id == project_id).filter(
-            (Task.assigned_to_id == current_user.id) | (Task.assignees.any(User.id == current_user.id))
-        ).all()
+        tasks = Task.query.filter_by(project_id=project_id).all()
     elif user_role == 'Cliente' or not current_user.is_internal:
         tasks = Task.query.filter(Task.project_id == project_id).filter(
             (Task.is_external_visible == True) | (Task.assigned_client_id == current_user.id)
@@ -923,7 +920,9 @@ def project_gantt(project_id):
     if user_role in ['PMP', 'Admin']:
         pass
     elif user_role == 'Participante':
-        has_tasks = Task.query.filter_by(project_id=project_id, assigned_to_id=current_user.id).first()
+        has_tasks = Task.query.filter(Task.project_id == project_id).filter(
+            (Task.assigned_to_id == current_user.id) | (Task.assignees.any(User.id == current_user.id))
+        ).first()
         is_member = current_user in project.members
         if not has_tasks and not is_member:
             flash('No tienes permiso para ver este proyecto.', 'danger')
@@ -940,7 +939,7 @@ def project_gantt(project_id):
     if user_role in ['PMP', 'Admin']:
         tasks = Task.query.filter_by(project_id=project_id).order_by(Task.position, Task.id).all()
     elif user_role == 'Participante':
-        tasks = Task.query.filter_by(project_id=project_id, assigned_to_id=current_user.id).order_by(Task.position, Task.id).all()
+        tasks = Task.query.filter_by(project_id=project_id).order_by(Task.position, Task.id).all()
     elif user_role == 'Cliente' or not current_user.is_internal:
         from sqlalchemy import or_
         tasks = Task.query.filter(
@@ -1844,6 +1843,15 @@ def admin_rates():
     currency_names = {'USD': 'Dólares', 'PYG': 'Guaraníes (PYG)', 'EUR': 'Euro'}
     return render_template('admin/rates.html', rates=rates, currencies=currencies, currency_names=currency_names)
 
+
+# route to serve branding assets (logos, favicons) stored in uploads/branding
+@main_bp.route('/uploads/branding/<path:filename>')
+# branding images are public; no authentication required
+# we won't enforce login here to let public see the logo
+def branding_asset(filename):
+    # note: do not allow traversal outside branding folder
+    branding_folder = os.path.join(current_app.config.get('UPLOAD_FOLDER', 'uploads'), 'branding')
+    return send_from_directory(branding_folder, filename)
 
 # ========== ADMIN: BRANDING ==========
 
@@ -3115,7 +3123,22 @@ def update_task_status(task_id):
     uid = session.get('_user_id')
     user = User.query.get(int(uid)) if uid else None
 
-    if not user or (project.manager_id and project.manager_id != user.id):
+    role_name = user.role.name if (user and user.role) else None
+    is_assigned = bool(
+        user and (
+            task.assigned_to_id == user.id or
+            (getattr(task, 'assignees', None) and any(u.id == user.id for u in task.assignees))
+        )
+    )
+
+    # PMP/Admin can change any task status. Participantes only their assigned tasks.
+    if not user or not user.is_internal:
+        return jsonify({'error': 'Permission denied'}), 403
+    if role_name in ('PMP', 'Admin'):
+        pass
+    elif role_name == 'Participante' and is_assigned:
+        pass
+    else:
         return jsonify({'error': 'Permission denied'}), 403
     
     try:
@@ -3168,8 +3191,16 @@ def task_detail(task_id):
         can_view = True
         can_edit = True
     elif user_role == 'Participante':
-        # Participante puede ver/editar si es su tarea asignada (incluye multi-asignados)
-        if task.assigned_to_id == current_user.id or (getattr(task, 'assignees', None) and any(u.id == current_user.id for u in task.assignees)):
+        # Participante puede ver tareas de su proyecto; editar solo si esta asignado
+        is_assigned = task.assigned_to_id == current_user.id or (
+            getattr(task, 'assignees', None) and any(u.id == current_user.id for u in task.assignees)
+        )
+        is_project_member = project and (current_user in project.members)
+        if is_project_member:
+            can_view = True
+            can_edit = bool(is_assigned)
+        elif is_assigned:
+            # Compatibilidad con proyectos donde aun no se completo la membresia
             can_view = True
             can_edit = True
     elif user_role == 'Cliente' or not current_user.is_internal:
@@ -3181,12 +3212,20 @@ def task_detail(task_id):
     
     if not can_view:
         flash('No tienes permiso para ver esta tarea.', 'danger')
-        return redirect(url_for('main.projects'))
+        return redirect(url_for('main.project_detail', project_id=task.project_id))
+
+    # Solo usuarios asignados pueden comentar o subir archivos.
+    assigned_user_ids = set([u.id for u in task.assignees]) if getattr(task, 'assignees', None) else set()
+    can_comment_upload = bool(
+        task.assigned_to_id == current_user.id or
+        current_user.id in assigned_user_ids or
+        task.assigned_client_id == current_user.id
+    )
     
     time_entries = TimeEntry.query.filter_by(task_id=task_id).all()
     total_hours = db.session.query(func.sum(TimeEntry.hours)).filter_by(task_id=task_id).scalar() or 0
     
-    return render_template('task_detail.html', task=task, time_entries=time_entries, total_hours=total_hours, now=datetime.now(), can_edit=can_edit)
+    return render_template('task_detail.html', task=task, time_entries=time_entries, total_hours=total_hours, now=datetime.now(), can_edit=can_edit, can_comment_upload=can_comment_upload)
 
 
 @main_bp.route('/task/<int:task_id>/comments', methods=['GET', 'POST'])
@@ -3204,7 +3243,11 @@ def task_comments(task_id):
     if user_role in ['PMP', 'Admin']:
         can_view = True
     elif user_role == 'Participante':
-        if task.assigned_to_id == current_user.id or (getattr(task, 'assignees', None) and any(u.id == current_user.id for u in task.assignees)):
+        is_assigned = task.assigned_to_id == current_user.id or (
+            getattr(task, 'assignees', None) and any(u.id == current_user.id for u in task.assignees)
+        )
+        is_project_member = project and (current_user in project.members)
+        if is_project_member or is_assigned:
             can_view = True
     elif user_role == 'Cliente' or not current_user.is_internal:
         if current_user in project.clients:
@@ -3213,6 +3256,13 @@ def task_comments(task_id):
 
     if not can_view:
         return jsonify({'error': 'No autorizado'}), 403
+
+    assigned_user_ids = set([u.id for u in task.assignees]) if getattr(task, 'assignees', None) else set()
+    can_comment_upload = bool(
+        task.assigned_to_id == current_user.id or
+        current_user.id in assigned_user_ids or
+        task.assigned_client_id == current_user.id
+    )
 
     if request.method == 'GET':
         # Paginate top-level comments (parent_id is NULL). Return latest comments first
@@ -3264,6 +3314,9 @@ def task_comments(task_id):
         return jsonify({'comments': out, 'page': page, 'per_page': per_page, 'total': total, 'has_more': has_more})
 
     # POST - create comment
+    if not can_comment_upload:
+        return jsonify({'error': 'Solo usuarios asignados pueden comentar en esta tarea'}), 403
+
     data = request.get_json(force=True, silent=True) or request.form
     body = (data.get('body') or '').strip() if data else ''
     if not body:
@@ -3362,7 +3415,7 @@ def download_attachment(attachment_id):
     
     if not can_view:
         flash('No tienes permiso para descargar este archivo.', 'danger')
-        return redirect(url_for('main.projects'))
+        return redirect(url_for('main.project_detail', project_id=task.project_id))
     
     # Build the file path
     task_folder = os.path.join(current_app.config['UPLOAD_FOLDER'], f'task_{task.id}')
@@ -3372,10 +3425,12 @@ def download_attachment(attachment_id):
         flash('Archivo no encontrado.', 'danger')
         return redirect(url_for('main.task_detail', task_id=task.id))
     
+    # choose inline or attachment depending on query string (preview functionality)
+    as_attachment = not request.args.get('inline')
     return send_file(
         filepath,
         mimetype=attachment.mime_type or 'application/octet-stream',
-        as_attachment=True,
+        as_attachment=as_attachment,
         download_name=attachment.filename
     )
 
@@ -3391,6 +3446,19 @@ def move_task(task_id):
     user = _get_user_from_session()
     if not user or not user.is_internal:
         return jsonify({'error': 'No tienes permiso para mover tareas.'}), 403
+
+    role_name = user.role.name if (user and user.role) else None
+    is_assigned = bool(
+        task.assigned_to_id == user.id or
+        (getattr(task, 'assignees', None) and any(u.id == user.id for u in task.assignees))
+    )
+
+    if role_name in ('PMP', 'Admin'):
+        pass
+    elif role_name == 'Participante' and is_assigned:
+        pass
+    else:
+        return jsonify({'error': 'No tienes permiso para mover esta tarea.'}), 403
 
     data = request.get_json() or request.form
     new_status = data.get('status')
@@ -3682,6 +3750,17 @@ def edit_task(task_id):
 
             # Handle file attachments
             files = request.files.getlist('attachments')
+            has_files_to_upload = any(f and getattr(f, 'filename', None) for f in files)
+            assigned_user_ids = set([u.id for u in task.assignees]) if getattr(task, 'assignees', None) else set()
+            can_upload_attachments = bool(
+                task.assigned_to_id == current_user.id or
+                current_user.id in assigned_user_ids or
+                task.assigned_client_id == current_user.id
+            )
+            if has_files_to_upload and not can_upload_attachments:
+                flash('Solo usuarios asignados pueden subir archivos a esta tarea.', 'danger')
+                return redirect(url_for('main.task_detail', task_id=task.id))
+
             invalid_files = []
             for file in files:
                 if file and file.filename:
@@ -4057,6 +4136,20 @@ def admin_settings_page():
     # Get all settings as dict (raw DB values)
     all_settings = SystemSettings.query.all()
     settings = {s.key: s.value for s in all_settings}
+    # ensure logo_url and favicon_url entries for templates; ignore if file missing
+    logo = SystemSettings.get('logo_path') or ''
+    if logo:
+        # resolve disk path similar to context processor
+        rel = logo.lstrip('/')
+        parts = rel.split('/')
+        if parts and parts[0] == 'uploads':
+            parts = parts[1:]
+        fs = os.path.join(current_app.config.get('UPLOAD_FOLDER', 'uploads'), *parts)
+        if not os.path.exists(fs):
+            logo = ''
+    settings.setdefault('logo_url', logo)
+    favicon = SystemSettings.get('favicon_path') or ''
+    settings.setdefault('favicon_url', favicon)
     
     # Ensure sensible defaults: notifications ON by default
     defaults = {
@@ -4120,6 +4213,30 @@ def admin_settings():
     from app.models import SystemSettings
     
     section = request.form.get('section', 'general')
+    
+    # always handle logo/favicon uploads if present, regardless of section
+    if 'logo' in request.files:
+        file = request.files['logo']
+        if file and file.filename:
+            from werkzeug.utils import secure_filename
+            filename = secure_filename(file.filename)
+            logo_path = os.path.join(current_app.config.get('UPLOAD_FOLDER', 'uploads'), 'branding')
+            os.makedirs(logo_path, exist_ok=True)
+            filepath = os.path.join(logo_path, f'logo_{filename}')
+            file.save(filepath)
+            current_app.logger.info('Saved branding logo to %s', filepath)
+            SystemSettings.set('logo_path', f'/uploads/branding/logo_{filename}', 'branding', 'Ruta del logo', user_id=current_user.id)
+    if 'favicon' in request.files:
+        file = request.files['favicon']
+        if file and file.filename:
+            from werkzeug.utils import secure_filename
+            filename = secure_filename(file.filename)
+            logo_path = os.path.join(current_app.config.get('UPLOAD_FOLDER', 'uploads'), 'branding')
+            os.makedirs(logo_path, exist_ok=True)
+            filepath = os.path.join(logo_path, f'favicon_{filename}')
+            file.save(filepath)
+            current_app.logger.info('Saved branding favicon to %s', filepath)
+            SystemSettings.set('favicon_path', f'/uploads/branding/favicon_{filename}', 'branding', 'Ruta del favicon', user_id=current_user.id)
     
     # Get all form fields (except section and csrf)
     fields_to_save = {k: v for k, v in request.form.items() 

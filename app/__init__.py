@@ -261,6 +261,17 @@ def create_app(config_object="config.DevConfig"):
             license_valid = False
             license_status = {'has_license': False, 'is_valid': False}
         
+        # helper for validating that a logo path actually corresponds to a file in uploads
+        def _validate_logo(lp):
+            if not lp:
+                return None
+            rel = lp.lstrip('/')
+            parts = rel.split('/')
+            if parts and parts[0] == 'uploads':
+                parts = parts[1:]
+            fs = os.path.join(app.config.get('UPLOAD_FOLDER', 'uploads'), *parts)
+            return lp if os.path.exists(fs) else None
+
         context = {
             'current_user': user,
             'available_clients': [], 
@@ -276,7 +287,8 @@ def create_app(config_object="config.DevConfig"):
             'sys_primary_color': SystemSettings.get('primary_color', '#0d6efd'),
             'sys_secondary_color': SystemSettings.get('secondary_color', '#6c757d'),
             'sys_sidebar_color': SystemSettings.get('sidebar_color', '#1a1d29'),
-            'sys_logo_path': SystemSettings.get('logo_path'),
+            # if logo_path points to missing file, ignore so frontend shows default
+            'sys_logo_path': _validate_logo(SystemSettings.get('logo_path')),
             'sys_favicon_path': SystemSettings.get('favicon_path'),
             # Content settings
             'sys_footer_text': SystemSettings.get('footer_text', ''),
@@ -295,6 +307,19 @@ def create_app(config_object="config.DevConfig"):
             # Utility: safe url_for that returns '#' if endpoint can't be built (prevents BuildError in templates)
             'safe_url_for': lambda endpoint, **kwargs: _safe_url_for(endpoint, **kwargs)
         }
+
+        def _validate_logo(lp):
+            if not lp:
+                return None
+            # stored value like '/uploads/branding/logo_file.ext'
+            # map it to actual disk path inside UPLOAD_FOLDER
+            rel = lp.lstrip('/')
+            parts = rel.split('/')
+            # drop leading 'uploads' segment if present
+            if parts and parts[0] == 'uploads':
+                parts = parts[1:]
+            fs = os.path.join(app.config.get('UPLOAD_FOLDER', 'uploads'), *parts)
+            return lp if os.path.exists(fs) else None
 
         def _safe_url_for(endpoint, **kwargs):
             try:

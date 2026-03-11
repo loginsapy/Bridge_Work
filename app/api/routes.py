@@ -371,6 +371,16 @@ def update_task(task_id):
     is_participant = (getattr(current_user, 'is_authenticated', False) and getattr(current_user, 'is_internal', False) and getattr(current_user, 'role', None) and current_user.role.name == 'Participante')
     is_client = (not getattr(current_user, 'is_internal', True)) and (t.project and t.project.client_id == getattr(current_user, 'id', None))
 
+    is_assigned_participant = bool(
+        is_participant and (
+            t.assigned_to_id == getattr(current_user, 'id', None) or
+            (getattr(t, 'assignees', None) and any(u.id == getattr(current_user, 'id', None) for u in t.assignees))
+        )
+    )
+
+    if is_participant and not is_assigned_participant:
+        return jsonify({'error': 'Solo puedes cambiar estado de tareas asignadas a ti.'}), 403
+
     if is_participant or is_client:
         allowed_keys = {'status'}
         extra = set([k for k in data.keys() if k not in allowed_keys])
@@ -730,9 +740,9 @@ def delete_attachment(attachment_id):
     attachment = TaskAttachment.query.get_or_404(attachment_id)
     task = attachment.task
     
-    # Check permissions - only internal users or the uploader can delete
+    # Check permissions - only PMP/Admin (internal) or the original uploader may delete
     can_delete = False
-    if current_user.is_internal:
+    if current_user.is_internal and current_user.role and current_user.role.name in ('PMP','Admin'):
         can_delete = True
     elif attachment.uploaded_by_id == current_user.id:
         can_delete = True
@@ -741,6 +751,23 @@ def delete_attachment(attachment_id):
         abort(403, description="No tienes permiso para eliminar este archivo")
     
     try:
+        # audit entry before removal
+        try:
+            audit = AuditLog(
+                user_id=getattr(current_user, 'id', 0),
+                action='DELETE',
+                entity_type='task_attachment',
+                entity_id=attachment.id,
+                changes={
+                    'task_id': task.id,
+                    'filename': attachment.filename,
+                }
+            )
+            db.session.add(audit)
+            db.session.flush()
+        except Exception:
+            current_app.logger.exception('Failed to write AuditLog for attachment delete')
+
         # Delete the physical file
         task_folder = os.path.join(current_app.config['UPLOAD_FOLDER'], f'task_{task.id}')
         filepath = os.path.join(task_folder, attachment.stored_filename)
@@ -798,12 +825,13 @@ def upload_attachment(task_id):
     
     task = Task.query.get_or_404(task_id)
     
-    # Check permissions - internal users or assigned client can upload
-    can_upload = False
-    if current_user.is_internal:
-        can_upload = True
-    elif task.assigned_client_id == current_user.id:
-        can_upload = True
+    # Check permissions - only users assigned to this task can upload
+    assigned_user_ids = set([u.id for u in task.assignees]) if getattr(task, 'assignees', None) else set()
+    can_upload = bool(
+        task.assigned_to_id == current_user.id or
+        current_user.id in assigned_user_ids or
+        task.assigned_client_id == current_user.id
+    )
     
     if not can_upload:
         return jsonify({"error": "No tienes permiso para subir archivos a esta tarea"}), 403

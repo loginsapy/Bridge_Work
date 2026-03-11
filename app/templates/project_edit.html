@@ -60,10 +60,9 @@
 
           <div class="mb-3">
             <label class="form-label fw-semibold">
-              <i class="fa-solid fa-user-tie me-1"></i>Clientes Asociados (opcional)
+              <i class="fa-solid fa-user-tie me-1"></i>Clientes Asociados (opcional) - Multiples
             </label>
-            <select name="client_ids" class="form-select">
-              <option value="">-- Seleccionar Cliente --</option>
+            <select name="client_ids" class="form-select" multiple>
               {% for client in available_clients %}
               <option value="{{ client.id }}" {% if client in project.clients %}selected{% endif %}>
                 {{ client.first_name or client.email }} {{ client.last_name or '' }}
@@ -71,6 +70,7 @@
               </option>
               {% endfor %}
             </select>
+            <small class="text-muted">Manten presionado Ctrl/Cmd para seleccionar multiples clientes</small>
           </div>
 
           <div class="mb-3">
