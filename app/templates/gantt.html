@@ -3,10 +3,9 @@
 {% block title %}{{ project.name }} — Gantt{% endblock %}
 
 {% block head %}
-<!-- Frappe Gantt CSS -->
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/frappe-gantt@0.6.1/dist/frappe-gantt.min.css">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/project-view-nav.css') }}">
 <style>
-/* Variables CSS del proyecto */
 .gantt-toolbar {
   display: flex;
   justify-content: space-between;
@@ -17,18 +16,12 @@
   box-shadow: 0 1px 4px rgba(0,0,0,0.08);
   margin-bottom: 16px;
 }
-
 .gantt-toolbar .toolbar-left {
   display: flex;
   align-items: center;
   gap: 16px;
 }
-
-.gantt-toolbar h5 {
-  margin: 0;
-  font-weight: 600;
-}
-
+.gantt-toolbar h5 { margin: 0; font-weight: 600; }
 .toolbar-btn {
   padding: 8px 12px;
   border: 1px solid var(--monday-border, #e0e0e0);
@@ -41,32 +34,12 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  font-size: 13px;
 }
-
-.toolbar-btn:hover {
-  background: var(--monday-light-grey, #f5f6f8);
-  border-color: var(--monday-blue, #0073ea);
-  color: var(--monday-blue, #0073ea);
-}
-
-.toolbar-btn.active {
-  background: var(--monday-blue, #0073ea);
-  color: white;
-  border-color: var(--monday-blue, #0073ea);
-}
-
-.toolbar-right {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.view-mode-btns {
-  display: flex;
-  gap: 4px;
-  margin-left: 16px;
-}
-
+.toolbar-btn:hover { background: var(--monday-light-grey, #f5f6f8); border-color: var(--monday-blue, #0073ea); color: var(--monday-blue, #0073ea); }
+.toolbar-btn.active { background: var(--monday-blue, #0073ea); color: white; border-color: var(--monday-blue, #0073ea); }
+.toolbar-right { display: flex; align-items: center; gap: 8px; }
+.view-mode-btns { display: flex; gap: 4px; }
 .view-mode-btn {
   padding: 6px 12px;
   border: 1px solid var(--monday-border, #e0e0e0);
@@ -76,18 +49,34 @@
   font-size: 13px;
   transition: all 0.15s;
 }
+.view-mode-btn:hover { background: var(--monday-light-grey, #f5f6f8); }
+.view-mode-btn.active { background: var(--monday-blue, #0073ea); color: white; border-color: var(--monday-blue, #0073ea); }
 
-.view-mode-btn:hover {
-  background: var(--monday-light-grey, #f5f6f8);
+/* Metrics row */
+.gantt-metrics {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
 }
-
-.view-mode-btn.active {
-  background: var(--monday-blue, #0073ea);
-  color: white;
-  border-color: var(--monday-blue, #0073ea);
+.metric-card {
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+  padding: 12px 18px;
+  min-width: 120px;
+  flex: 1;
 }
+.metric-card .metric-label { font-size: 11px; color: #6c757d; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
+.metric-card .metric-value { font-size: 22px; font-weight: 700; color: #1a1a2e; }
+.metric-card .metric-sub { font-size: 11px; color: #6c757d; margin-top: 2px; }
 
-/* Gantt Container */
+/* Main layout */
+.gantt-layout { display: flex; gap: 16px; align-items: flex-start; }
+.gantt-main { flex: 1; min-width: 0; }
+.gantt-sidebar { width: 260px; flex-shrink: 0; }
+
+/* Gantt container */
 .gantt-container {
   background: white;
   border-radius: 8px;
@@ -95,82 +84,34 @@
   padding: 16px;
   overflow-x: auto;
 }
+.gantt .bar { border-radius: 4px; }
+.gantt .bar-label { font-size: 12px; font-weight: 500; }
+.gantt .grid-row:nth-child(even) { fill: #f8f9fa; }
+.gantt .today-highlight { fill: rgba(0, 115, 234, 0.1); }
+.gantt .arrow { stroke: #6c757d; stroke-width: 1.5; }
+.gantt .bar-progress { fill: rgba(255,255,255,0.3); }
 
-/* Customización de Frappe Gantt */
-.gantt .bar {
-  border-radius: 4px;
-}
+/* Status colors
+  Frappe Gantt applies `custom_class` on `.bar-wrapper`, not on `.bar`.
+  Keep both selectors for compatibility across library versions. */
+.gantt .bar-wrapper.status-BACKLOG .bar,
+.gantt .bar.status-BACKLOG .bar-wrapper .bar { fill: #6c757d; }
 
-.gantt .bar-label {
-  font-size: 12px;
-  font-weight: 500;
-}
+.gantt .bar-wrapper.status-IN_PROGRESS .bar,
+.gantt .bar.status-IN_PROGRESS .bar-wrapper .bar { fill: #0d6efd; }
 
-/* Colores por estado */
-.gantt .bar.status-BACKLOG .bar-wrapper .bar {
-  fill: #6c757d;
-}
+.gantt .bar-wrapper.status-IN_REVIEW .bar,
+.gantt .bar.status-IN_REVIEW .bar-wrapper .bar { fill: #fd7e14; }
 
-.gantt .bar.status-IN_PROGRESS .bar-wrapper .bar {
-  fill: #0d6efd;
-}
+.gantt .bar-wrapper.status-COMPLETED .bar,
+.gantt .bar.status-COMPLETED .bar-wrapper .bar { fill: #198754; }
 
-.gantt .bar.status-IN_REVIEW .bar-wrapper .bar {
-  fill: #fd7e14;
-}
+.gantt .bar-wrapper.blocked .bar,
+.gantt .bar.blocked .bar-wrapper .bar { fill: #dc3545 !important; }
 
-.gantt .bar.status-COMPLETED .bar-wrapper .bar {
-  fill: #198754;
-}
-
-/* Colores por prioridad como borde */
-.gantt .bar.priority-CRITICAL .bar-wrapper .bar {
-  stroke: #dc3545;
-  stroke-width: 2;
-}
-
-.gantt .bar.priority-HIGH .bar-wrapper .bar {
-  stroke: #fd7e14;
-  stroke-width: 2;
-}
-
-/* Progress bar inside */
-.gantt .bar-progress {
-  fill: rgba(255,255,255,0.3);
-}
-
-/* Grid lines */
-.gantt .grid-row:nth-child(even) {
-  fill: #f8f9fa;
-}
-
-/* Today marker */
-.gantt .today-highlight {
-  fill: rgba(0, 115, 234, 0.1);
-}
-
-/* Arrows (dependencies) */
-.gantt .arrow {
-  stroke: #6c757d;
-  stroke-width: 1.5;
-}
-
-/* Empty state */
-.gantt-empty {
-  text-align: center;
-  padding: 60px 20px;
-  color: #6c757d;
-}
-
-.gantt-empty i {
-  font-size: 48px;
-  margin-bottom: 16px;
-  opacity: 0.5;
-}
-
-.gantt-empty h5 {
-  margin-bottom: 8px;
-}
+/* Priority borders */
+.gantt .bar.priority-CRITICAL .bar-wrapper .bar { stroke: #dc3545; stroke-width: 2; }
+.gantt .bar.priority-HIGH .bar-wrapper .bar { stroke: #fd7e14; stroke-width: 2; }
 
 /* Legend */
 .gantt-legend {
@@ -180,39 +121,52 @@
   background: #f8f9fa;
   border-radius: 0 0 8px 8px;
   font-size: 13px;
+  flex-wrap: wrap;
 }
-
-.legend-item {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.legend-color {
-  width: 16px;
-  height: 16px;
-  border-radius: 3px;
-}
-
+.legend-item { display: flex; align-items: center; gap: 6px; }
+.legend-color { width: 14px; height: 14px; border-radius: 3px; }
 .legend-color.backlog { background: #6c757d; }
 .legend-color.in-progress { background: #0d6efd; }
 .legend-color.in-review { background: #fd7e14; }
 .legend-color.completed { background: #198754; }
+.legend-color.blocked { background: #dc3545; }
 
-/* Responsive */
-@media (max-width: 768px) {
-  .gantt-toolbar {
-    flex-direction: column;
-    gap: 12px;
-  }
-  
-  .toolbar-right {
-    flex-wrap: wrap;
-    justify-content: center;
-  }
+/* Empty state */
+.gantt-empty { text-align: center; padding: 60px 20px; color: #6c757d; }
+.gantt-empty i { font-size: 48px; margin-bottom: 16px; opacity: 0.5; }
+.gantt-empty h5 { margin-bottom: 8px; }
+
+/* Sidebar: tasks without dates */
+.no-dates-panel {
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+  overflow: hidden;
 }
+.no-dates-panel .panel-header {
+  padding: 12px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  background: #f8f9fa;
+  border-bottom: 1px solid #e9ecef;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.no-dates-panel .panel-body { padding: 8px 0; max-height: 420px; overflow-y: auto; }
+.no-dates-item {
+  padding: 8px 14px;
+  font-size: 12px;
+  border-bottom: 1px solid #f0f0f0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.no-dates-item:last-child { border-bottom: none; }
+.no-dates-item .task-name { font-weight: 500; color: #333; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.no-dates-item .task-meta { display: flex; gap: 6px; align-items: center; }
 
-/* Tooltip personalizado */
+/* Tooltip */
 .gantt-tooltip {
   background: white;
   border-radius: 8px;
@@ -221,32 +175,18 @@
   font-size: 13px;
   max-width: 280px;
 }
+.gantt-tooltip .tooltip-title { font-weight: 600; margin-bottom: 8px; color: #333; }
+.gantt-tooltip .tooltip-row { display: flex; justify-content: space-between; margin-bottom: 4px; gap: 12px; }
+.gantt-tooltip .tooltip-label { color: #6c757d; white-space: nowrap; }
+.gantt-tooltip .tooltip-val { font-weight: 500; text-align: right; }
+.gantt-tooltip .progress-bar-mini { height: 6px; background: #e9ecef; border-radius: 3px; margin-top: 6px; }
+.gantt-tooltip .progress-bar-fill { height: 100%; border-radius: 3px; background: var(--monday-blue, #0073ea); }
 
-.gantt-tooltip .tooltip-title {
-  font-weight: 600;
-  margin-bottom: 8px;
-  color: #333;
-}
-
-.gantt-tooltip .tooltip-row {
-  display: flex;
-  justify-content: space-between;
-  margin-bottom: 4px;
-}
-
-.gantt-tooltip .tooltip-label {
-  color: #6c757d;
-}
-
-/* Ensure toolbar icons match Board style */
-.toolbar-btn { display: inline-flex; align-items: center; justify-content: center; }
-.toolbar-btn i { font-size: 18px; }
-
-/* Match Board hover/active behavior */
-.toolbar-btn:hover, .toolbar-btn.active {
-  background: var(--monday-light-grey);
-  border-color: var(--monday-blue);
-  color: var(--monday-blue);
+@media (max-width: 992px) {
+  .gantt-layout { flex-direction: column; }
+  .gantt-sidebar { width: 100%; }
+  .gantt-toolbar { flex-direction: column; gap: 12px; }
+  .toolbar-right { flex-wrap: wrap; justify-content: center; }
 }
 </style>
 {% endblock %}
@@ -261,68 +201,135 @@
   </nav>
 </div>
 
+<!-- Metrics row -->
+<div class="gantt-metrics">
+  <div class="metric-card">
+    <div class="metric-label">Total tareas</div>
+    <div class="metric-value">{{ tasks|length }}</div>
+    <div class="metric-sub">{{ gantt_tasks|length }} con fechas</div>
+  </div>
+  <div class="metric-card">
+    <div class="metric-label">Completadas</div>
+    <div class="metric-value" style="color:#198754">{{ tasks|selectattr('status','eq','COMPLETED')|list|length }}</div>
+    <div class="metric-sub">de {{ tasks|length }} totales</div>
+  </div>
+  <div class="metric-card">
+    <div class="metric-label">En Progreso</div>
+    <div class="metric-value" style="color:#0d6efd">{{ tasks|selectattr('status','eq','IN_PROGRESS')|list|length }}</div>
+    <div class="metric-sub">tareas activas</div>
+  </div>
+  {% if metrics and metrics.budget_hours %}
+  <div class="metric-card">
+    <div class="metric-label">Horas usadas</div>
+    <div class="metric-value">{{ metrics.total_hours_spent|int }}h</div>
+    <div class="metric-sub">de {{ metrics.budget_hours|int }}h presupuestadas</div>
+  </div>
+  {% endif %}
+  {% if project.end_date %}
+  <div class="metric-card">
+    <div class="metric-label">Fecha fin</div>
+    <div class="metric-value" style="font-size:16px">{{ project.end_date|fecha_es('corto_año') }}</div>
+    {% set days_left = (project.end_date - now.date()).days %}
+    <div class="metric-sub" style="color:{% if days_left < 0 %}#dc3545{% elif days_left < 7 %}#fd7e14{% else %}#6c757d{% endif %}">
+      {% if days_left < 0 %}{{ -days_left }} días vencido{% elif days_left == 0 %}Hoy{% else %}{{ days_left }} días restantes{% endif %}
+    </div>
+  </div>
+  {% endif %}
+</div>
+
+<!-- Toolbar -->
 <div class="gantt-toolbar">
   <div class="toolbar-left">
     <h5>{{ project.name }}</h5>
-    <span class="badge bg-secondary">{{ tasks|length }} tareas</span>
-    {% if gantt_tasks %}
-    <span class="badge bg-info">{{ gantt_tasks|length }} con fechas</span>
-    {% endif %}
   </div>
-  <div class="toolbar-right" style="display:flex;gap:8px;align-items:center;">
-    <button class="toolbar-btn" onclick="toggleView('board')" title="Vista Board" aria-label="Vista Board">
-      <i class="fa-solid fa-table-cells"></i>
-      <span class="visually-hidden">Board</span>
-    </button>
-    <button class="toolbar-btn" onclick="toggleView('kanban')" title="Vista Kanban" aria-label="Vista Kanban">
-      <i class="fa-solid fa-columns"></i>
-      <span class="visually-hidden">Kanban</span>
-    </button>
-    <button class="toolbar-btn active" title="Vista Gantt" aria-label="Vista Gantt">
-      <i class="fa-solid fa-chart-gantt"></i>
-      <span class="visually-hidden">Gantt</span>
-    </button>
-    
+  <div class="toolbar-right">
+    <div class="project-view-nav" aria-label="Navegacion de vistas del proyecto">
+      <button class="toolbar-btn" onclick="window.location.href='{{ url_for('main.project_detail', project_id=project.id) }}'" title="Vista Board">
+        <i class="fa-solid fa-table-cells"></i>
+        <span class="visually-hidden">Board</span>
+      </button>
+      <button class="toolbar-btn" onclick="window.location.href='{{ url_for('main.project_kanban', project_id=project.id) }}'" title="Vista Kanban">
+        <i class="fa-solid fa-columns"></i>
+        <span class="visually-hidden">Kanban</span>
+      </button>
+      <button class="toolbar-btn active" title="Vista Gantt" aria-current="page">
+        <i class="fa-solid fa-chart-gantt"></i>
+        <span class="visually-hidden">Gantt</span>
+      </button>
+      <a class="toolbar-btn" href="{{ url_for('main.project_report', project_id=project.id) }}" title="Exportar PDF" target="_blank">
+        <i class="fa-solid fa-file-pdf"></i>
+      </a>
+    </div>
+
     {% if gantt_tasks %}
+    <div style="width:1px;height:24px;background:#e0e0e0;margin:0 4px;"></div>
     <div class="view-mode-btns">
       <button class="view-mode-btn" data-mode="Day">Día</button>
       <button class="view-mode-btn active" data-mode="Week">Semana</button>
       <button class="view-mode-btn" data-mode="Month">Mes</button>
     </div>
+    <button class="toolbar-btn" id="btn-today" title="Ir a hoy">
+      <i class="fa-regular fa-calendar-check"></i> Hoy
+    </button>
     {% endif %}
   </div>
 </div>
 
-<div class="gantt-container">
-  {% if gantt_tasks %}
-  <svg id="gantt"></svg>
-  
-  <div class="gantt-legend">
-    <div class="legend-item">
-      <div class="legend-color backlog"></div>
-      <span>Backlog</span>
-    </div>
-    <div class="legend-item">
-      <div class="legend-color in-progress"></div>
-      <span>En Progreso</span>
-    </div>
-    <div class="legend-item">
-      <div class="legend-color in-review"></div>
-      <span>En Revisión</span>
-    </div>
-    <div class="legend-item">
-      <div class="legend-color completed"></div>
-      <span>Completado</span>
+<!-- Main layout -->
+<div class="gantt-layout">
+  <div class="gantt-main">
+    <div class="gantt-container">
+      {% if gantt_tasks %}
+      <svg id="gantt"></svg>
+      <div class="gantt-legend">
+        <div class="legend-item"><div class="legend-color backlog"></div><span>Backlog</span></div>
+        <div class="legend-item"><div class="legend-color in-progress"></div><span>En Progreso</span></div>
+        <div class="legend-item"><div class="legend-color in-review"></div><span>En Revisión</span></div>
+        <div class="legend-item"><div class="legend-color completed"></div><span>Completado</span></div>
+        <div class="legend-item"><div class="legend-color blocked"></div><span>Bloqueada</span></div>
+      </div>
+      {% else %}
+      <div class="gantt-empty">
+        <i class="fa-solid fa-calendar-xmark"></i>
+        <h5>No hay tareas con fechas definidas</h5>
+        <p class="text-muted mb-3">Asigna fechas de inicio y vencimiento a las tareas para ver el diagrama Gantt.</p>
+        <a href="{{ url_for('main.project_detail', project_id=project.id) }}" class="btn btn-primary">
+          <i class="fa-solid fa-arrow-left me-2"></i>Volver al Board
+        </a>
+      </div>
+      {% endif %}
     </div>
   </div>
-  {% else %}
-  <div class="gantt-empty">
-    <i class="fa-solid fa-calendar-xmark"></i>
-    <h5>No hay tareas con fechas definidas</h5>
-    <p class="text-muted mb-3">Para ver el diagrama Gantt, asigna fechas de inicio y vencimiento a las tareas.</p>
-    <a href="{{ url_for('main.project_detail', project_id=project.id) }}" class="btn btn-primary">
-      <i class="fa-solid fa-arrow-left me-2"></i>Volver al Board
-    </a>
+
+  {% if tasks_without_dates %}
+  <div class="gantt-sidebar">
+    <div class="no-dates-panel">
+      <div class="panel-header">
+        <i class="fa-regular fa-calendar-xmark text-muted"></i>
+        Sin fechas
+        <span class="badge bg-secondary ms-auto">{{ tasks_without_dates|length }}</span>
+      </div>
+      <div class="panel-body">
+        {% for t in tasks_without_dates %}
+        <div class="no-dates-item">
+          <div class="task-name" title="{{ t.title }}">{{ t.title }}</div>
+          <div class="task-meta">
+            <span class="badge rounded-pill" style="font-size:10px;{% if t.status == 'COMPLETED' %}background:#198754{% elif t.status == 'IN_PROGRESS' %}background:#0d6efd{% elif t.status == 'IN_REVIEW' %}background:#fd7e14{% else %}background:#6c757d{% endif %}">
+              {{ t.status|replace('_',' ')|title }}
+            </span>
+            {% if t.priority in ('CRITICAL', 'HIGH') %}
+            <span class="badge rounded-pill" style="font-size:10px;background:{% if t.priority == 'CRITICAL' %}#dc3545{% else %}#fd7e14{% endif %}">
+              {{ t.priority|title }}
+            </span>
+            {% endif %}
+            {% if t.assignee %}
+            <span class="text-muted" style="font-size:11px;">{{ t.assignee }}</span>
+            {% endif %}
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
   </div>
   {% endif %}
 </div>
@@ -330,43 +337,50 @@
 
 {% block scripts %}
 {{ super() }}
-<!-- Frappe Gantt JS -->
 <script src="https://cdn.jsdelivr.net/npm/frappe-gantt@0.6.1/dist/frappe-gantt.min.js"></script>
 
 {% if gantt_tasks %}
 <script>
 const projectId = {{ project.id }};
-
-// Shared view switcher (Board / Kanban / Gantt)
-window.toggleView = function(view) {
-  if (view === 'board') {
-    window.location.href = `/project/${projectId}`;
-  } else if (view === 'kanban') {
-    window.location.href = `/project/${projectId}/kanban`;
-  } else if (view === 'gantt') {
-    window.location.href = `/project/${projectId}/gantt`;
-  }
-};
-
-// Datos de tareas para el Gantt
 const ganttData = {{ gantt_tasks|tojson|safe }};
+const isInternal = {{ 'true' if current_user.is_internal else 'false' }};
 
-// Mapear datos al formato de Frappe Gantt
-const tasks = ganttData.map(t => ({
-  id: t.id,
-  name: t.name,
-  start: t.start,
-  end: t.end,
-  progress: t.progress,
-  dependencies: t.dependencies,
-  custom_class: `status-${t.status} priority-${t.priority}`
-}));
+// Helper: format a JS Date as YYYY-MM-DD using LOCAL timezone (avoids UTC offset shift)
+function toLocalDateStr(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
 
-// Crear el Gantt
+function formatTaskDate(dateValue) {
+  if (!dateValue) return '—';
+  const d = (dateValue instanceof Date) ? dateValue : new Date(dateValue);
+  if (Number.isNaN(d.getTime())) return String(dateValue);
+  return d.toLocaleDateString('es-ES');
+}
+
+const tasks = ganttData.map(t => {
+  let cls = `status-${t.status} priority-${t.priority}`;
+  if (t.is_blocked) cls += ' blocked';
+  return {
+    id: t.id,
+    name: t.name,
+    start: t.start,
+    end: t.end,
+    progress: t.progress,
+    dependencies: t.dependencies,
+    custom_class: cls
+  };
+});
+
+const statusLabels = { BACKLOG: 'Backlog', IN_PROGRESS: 'En Progreso', IN_REVIEW: 'En Revisión', COMPLETED: 'Completado' };
+const priorityLabels = { LOW: 'Baja', MEDIUM: 'Media', HIGH: 'Alta', CRITICAL: 'Crítica' };
+
 let gantt = null;
 
 if (tasks.length > 0) {
-  gantt = new Gantt("#gantt", tasks, {
+  gantt = new Gantt('#gantt', tasks, {
     header_height: 50,
     column_width: 30,
     step: 24,
@@ -378,100 +392,112 @@ if (tasks.length > 0) {
     view_mode: 'Week',
     date_format: 'YYYY-MM-DD',
     language: 'es',
-    
+
     custom_popup_html: function(task) {
-      const taskData = ganttData.find(t => t.id === task.id);
-      const statusLabels = {
-        'BACKLOG': 'Backlog',
-        'IN_PROGRESS': 'En Progreso',
-        'IN_REVIEW': 'En Revisión',
-        'COMPLETED': 'Completado'
-      };
-      const priorityLabels = {
-        'LOW': 'Baja',
-        'MEDIUM': 'Media',
-        'HIGH': 'Alta',
-        'CRITICAL': 'Crítica'
-      };
-      
+      const d = ganttData.find(t => t.id === task.id);
+      if (!d) return '';
+      const hoursRow = d.estimated_hours > 0
+        ? `<div class="tooltip-row"><span class="tooltip-label">Horas:</span><span class="tooltip-val">${d.actual_hours.toFixed(1)}h / ${d.estimated_hours.toFixed(1)}h est.</span></div>`
+        : '';
+      const blockedRow = d.is_blocked
+        ? `<div class="tooltip-row" style="color:#dc3545"><span class="tooltip-label">⛔ Bloqueada</span></div>`
+        : '';
       return `
         <div class="gantt-tooltip">
           <div class="tooltip-title">${task.name}</div>
           <div class="tooltip-row">
             <span class="tooltip-label">Estado:</span>
-            <span>${statusLabels[taskData.status] || taskData.status}</span>
+            <span class="tooltip-val">${statusLabels[d.status] || d.status}</span>
           </div>
           <div class="tooltip-row">
             <span class="tooltip-label">Prioridad:</span>
-            <span>${priorityLabels[taskData.priority] || taskData.priority}</span>
+            <span class="tooltip-val">${priorityLabels[d.priority] || d.priority}</span>
           </div>
-          ${taskData.assignee ? `
-          <div class="tooltip-row">
-            <span class="tooltip-label">Asignado:</span>
-            <span>${taskData.assignee}</span>
-          </div>
-          ` : ''}
+          ${d.assignee ? `<div class="tooltip-row"><span class="tooltip-label">Asignado:</span><span class="tooltip-val">${d.assignee}</span></div>` : ''}
           <div class="tooltip-row">
             <span class="tooltip-label">Inicio:</span>
-            <span>${task.start.toLocaleDateString('es-ES')}</span>
+            <span class="tooltip-val">${formatTaskDate(task.start)}</span>
           </div>
           <div class="tooltip-row">
             <span class="tooltip-label">Fin:</span>
-            <span>${task.end.toLocaleDateString('es-ES')}</span>
+            <span class="tooltip-val">${formatTaskDate(task.end)}</span>
           </div>
-          <div class="tooltip-row">
-            <span class="tooltip-label">Progreso:</span>
-            <span>${task.progress}%</span>
-          </div>
-        </div>
-      `;
+          ${hoursRow}
+          ${blockedRow}
+          <div class="progress-bar-mini mt-2"><div class="progress-bar-fill" style="width:${task.progress}%"></div></div>
+          <div style="font-size:11px;color:#6c757d;text-align:right;margin-top:2px">${task.progress}% completado</div>
+        </div>`;
     },
-    
+
     on_click: function(task) {
-      // Ir al detalle de la tarea
       window.location.href = `/task/${task.id}`;
     },
-    
+
     on_date_change: function(task, start, end) {
-      // Actualizar fechas de la tarea via API
-      {% if current_user.is_internal %}
+      if (!isInternal) return;
+      const d = ganttData.find(x => String(x.id) === String(task.id));
+      if (d && d.status === 'COMPLETED') {
+        alert('Las tareas completadas no permiten cambio de fechas.');
+        if (gantt && typeof gantt.refresh === 'function') {
+          gantt.refresh(tasks);
+        } else {
+          location.reload();
+        }
+        return;
+      }
+      // Use local date string to avoid UTC offset issues
       fetch(`/api/tasks/${task.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          start_date: start.toISOString().split('T')[0],
-          due_date: end.toISOString().split('T')[0]
+          start_date: toLocalDateStr(start),
+          due_date: toLocalDateStr(end)
         })
       })
       .then(r => {
-        if (!r.ok) throw new Error('Update failed');
-        console.log('Task dates updated:', task.id);
+        if (!r.ok) return r.json().then(e => { throw new Error(e.error || 'Error al actualizar'); });
       })
       .catch(err => {
         console.error(err);
-        alert('Error al actualizar fechas');
+        alert('Error al actualizar fechas: ' + err.message);
         location.reload();
       });
-      {% endif %}
     },
-    
+
     on_progress_change: function(task, progress) {
-      // Opcional: actualizar progreso
-      console.log('Progress changed:', task.id, progress);
+      // Solo log — la fuente de verdad del progreso es el status/horas
     }
   });
 }
 
-// Cambiar modo de vista
+// View mode buttons
 document.querySelectorAll('.view-mode-btn').forEach(btn => {
   btn.addEventListener('click', function() {
     document.querySelectorAll('.view-mode-btn').forEach(b => b.classList.remove('active'));
     this.classList.add('active');
-    if (gantt) {
-      gantt.change_view_mode(this.dataset.mode);
-    }
+    if (gantt) gantt.change_view_mode(this.dataset.mode);
   });
 });
+
+// "Hoy" button: scroll gantt to current date
+const btnToday = document.getElementById('btn-today');
+if (btnToday && gantt) {
+  btnToday.addEventListener('click', function() {
+    // Change to Week view centered on today
+    gantt.change_view_mode('Week');
+    document.querySelectorAll('.view-mode-btn').forEach(b => {
+      b.classList.toggle('active', b.dataset.mode === 'Week');
+    });
+    // Frappe Gantt renders today-highlight automatically — just scroll the container
+    const todayEl = document.querySelector('.gantt .today-highlight');
+    if (todayEl) {
+      const container = document.querySelector('.gantt-container');
+      const rect = todayEl.getBoundingClientRect();
+      const containerRect = container.getBoundingClientRect();
+      container.scrollLeft += rect.left - containerRect.left - containerRect.width / 2;
+    }
+  });
+}
 </script>
 {% endif %}
 {% endblock %}

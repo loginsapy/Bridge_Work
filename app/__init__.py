@@ -10,6 +10,27 @@ db = SQLAlchemy()
 migrate = Migrate()
 login_manager = LoginManager()
 
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
+limiter = Limiter(key_func=get_remote_address, default_limits=[])
+
+
+_WEAK_KEYS = {'dev-secret', 'changeme', 'secret', 'development', 'insecure', ''}
+
+
+def _validate_config(app):
+    """Warn at startup if critical settings are insecure or missing."""
+    key = app.config.get('SECRET_KEY', '')
+    if not key or key.lower() in _WEAK_KEYS or len(key) < 24:
+        app.logger.warning(
+            'SECURITY: SECRET_KEY is weak or default. Set a strong random value via the SECRET_KEY env var.'
+        )
+    if not app.config.get('TESTING') and app.debug:
+        app.logger.warning('SECURITY: DEBUG mode is ON. Do not use DEBUG=True in production.')
+    db_uri = app.config.get('SQLALCHEMY_DATABASE_URI', '')
+    if not db_uri:
+        app.logger.warning('CONFIG: SQLALCHEMY_DATABASE_URI is not set. Check DATABASE_URL env var.')
+
 
 def create_app(config_object="config.DevConfig"):
     # Load environment variables from .env if present (dev convenience)
@@ -34,6 +55,7 @@ def create_app(config_object="config.DevConfig"):
     db.init_app(app)
     migrate.init_app(app, db)
     login_manager.init_app(app)
+    limiter.init_app(app)
     login_manager.login_view = 'auth.login'
     login_manager.login_message = 'Por favor, inicia sesión para continuar.'
     login_manager.login_message_category = 'warning'
@@ -41,6 +63,8 @@ def create_app(config_object="config.DevConfig"):
     # Initialize metrics helper (Prometheus if available, else simple counters)
     from .metrics import Metrics
     app.metrics = Metrics(app)
+
+    _validate_config(app)
 
     # Provide a fallback in app.extensions for code that uses simple counters
     app.extensions.setdefault('metrics', {})
@@ -90,7 +114,11 @@ def create_app(config_object="config.DevConfig"):
         
         if any(request.path.startswith(p) for p in skip_paths):
             return None
-        
+
+        # Skip license check in test environment
+        if app.config.get('TESTING'):
+            return None
+
         # Skip for unauthenticated users (they'll be redirected to login)
         if not current_user.is_authenticated:
             return None
@@ -153,11 +181,9 @@ def create_app(config_object="config.DevConfig"):
         try:
             uid = int(user_id)
             # Use db.session.get() to get a session-bound instance
-            user = db.session.get(User, uid)
-            print('DEBUG load_user: user_id=', user_id, 'found=', bool(user))
-            return user
+            return db.session.get(User, uid)
         except Exception as e:
-            print('DEBUG load_user error:', e)
+            app.logger.debug('load_user error for user_id=%s: %s', user_id, e)
             return None
 
     # Filtro personalizado para fechas en español
@@ -225,6 +251,13 @@ def create_app(config_object="config.DevConfig"):
             return str(value)
 
     # Filtro de traducción
+    @app.template_filter('naive')
+    def naive_dt_filter(dt):
+        """Strip tzinfo so templates can safely compare datetimes."""
+        if dt is None:
+            return None
+        return dt.replace(tzinfo=None) if dt.tzinfo else dt
+
     @app.template_filter('t')
     def translate_filter(key):
         from .translations import t
@@ -307,19 +340,6 @@ def create_app(config_object="config.DevConfig"):
             # Utility: safe url_for that returns '#' if endpoint can't be built (prevents BuildError in templates)
             'safe_url_for': lambda endpoint, **kwargs: _safe_url_for(endpoint, **kwargs)
         }
-
-        def _validate_logo(lp):
-            if not lp:
-                return None
-            # stored value like '/uploads/branding/logo_file.ext'
-            # map it to actual disk path inside UPLOAD_FOLDER
-            rel = lp.lstrip('/')
-            parts = rel.split('/')
-            # drop leading 'uploads' segment if present
-            if parts and parts[0] == 'uploads':
-                parts = parts[1:]
-            fs = os.path.join(app.config.get('UPLOAD_FOLDER', 'uploads'), *parts)
-            return lp if os.path.exists(fs) else None
 
         def _safe_url_for(endpoint, **kwargs):
             try:

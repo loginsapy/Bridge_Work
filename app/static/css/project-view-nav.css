@@ -1,0 +1,41 @@
+/* Shared navigation buttons for project view switcher (Board/Kanban/Gantt/PDF). */
+.project-view-nav {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.project-view-nav .toolbar-btn {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid var(--monday-border, #e6e8eb);
+  background: #ffffff;
+  border-radius: 8px;
+  color: var(--monday-dark, #111827);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  transition: all 0.15s ease;
+}
+
+.project-view-nav .toolbar-btn:hover {
+  color: var(--app-primary);
+  border-color: var(--app-primary);
+  background: #fff8f4;
+}
+
+.project-view-nav .toolbar-btn.active,
+.project-view-nav .toolbar-btn[aria-current="page"] {
+  background: var(--app-primary);
+  color: #ffffff;
+  border-color: var(--app-primary);
+}
+
+.project-view-nav .toolbar-btn.active:hover,
+.project-view-nav .toolbar-btn[aria-current="page"]:hover {
+  background: var(--app-primary);
+  color: #ffffff;
+  border-color: var(--app-primary);
+}

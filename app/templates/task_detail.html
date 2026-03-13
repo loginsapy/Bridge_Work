@@ -1055,21 +1055,22 @@ function deleteTask() {
   .catch(err => alert('Error de conexión'));
 }
 
+{% if can_comment_upload %}
 function uploadFiles() {
   const input = document.getElementById('fileInput');
   if (!input.files.length) return;
-  
+
   const formData = new FormData();
   for (const file of input.files) {
     formData.append('file', file);
   }
-  
+
   const btn = document.getElementById('uploadBtn');
   if (btn) {
     btn.disabled = true;
     btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Subiendo...';
   }
-  
+
   fetch("{{ url_for('api.upload_attachment', task_id=task.id) }}", {
     method: 'POST',
     body: formData
@@ -1088,6 +1089,7 @@ function uploadFiles() {
     if (btn) { btn.disabled = false; btn.innerHTML = 'Guardar'; }
   });
 }
+{% endif %}
 
 function deleteAttachment(url) {
   if (!confirm('¿Eliminar este archivo?')) return;

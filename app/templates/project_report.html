@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Reporte — {{ project.name }}</title>
+  <style>
+    /* ===== Base ===== */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Segoe UI', Arial, sans-serif;
+      font-size: 13px;
+      color: #1a1a2e;
+      background: #fff;
+      padding: 24px;
+    }
+
+    /* ===== Print toolbar (hidden on print) ===== */
+    .print-toolbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 16px;
+      background: #f0f4ff;
+      border: 1px solid #c0cfe8;
+      border-radius: 8px;
+      margin-bottom: 24px;
+    }
+    .print-toolbar span { font-size: 13px; color: #555; }
+    .print-toolbar .btn-group { display: flex; gap: 8px; }
+    .btn-print {
+      padding: 7px 18px;
+      background: #0073ea;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .btn-print:hover { background: #0059b3; }
+    .btn-back {
+      padding: 7px 18px;
+      background: white;
+      color: #333;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 13px;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .btn-back:hover { background: #f5f5f5; }
+
+    /* ===== Header ===== */
+    .report-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      padding-bottom: 16px;
+      border-bottom: 2px solid #0073ea;
+      margin-bottom: 24px;
+    }
+    .report-header .project-title { font-size: 22px; font-weight: 700; color: #1a1a2e; }
+    .report-header .project-subtitle { font-size: 13px; color: #6c757d; margin-top: 4px; }
+    .report-header .report-meta { text-align: right; font-size: 12px; color: #6c757d; }
+    .report-header .report-meta strong { display: block; font-size: 13px; color: #333; }
+
+    /* ===== Status badge ===== */
+    .badge {
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .badge-PLANNING { background: #e3f0ff; color: #0073ea; }
+    .badge-ACTIVE { background: #e2f9e8; color: #00854d; }
+    .badge-COMPLETED { background: #f0f0f0; color: #555; }
+    .badge-ARCHIVED { background: #f5f5f5; color: #999; }
+    .badge-BACKLOG { background: #f0f0f0; color: #555; }
+    .badge-IN_PROGRESS { background: #e3f0ff; color: #0073ea; }
+    .badge-IN_REVIEW { background: #fff3e0; color: #e65100; }
+    .badge-LOW { background: #f0f0f0; color: #555; }
+    .badge-MEDIUM { background: #fff3e0; color: #e65100; }
+    .badge-HIGH { background: #fff0f0; color: #c62828; }
+    .badge-CRITICAL { background: #c62828; color: white; }
+
+    /* ===== KPI cards ===== */
+    .kpi-row {
+      display: flex;
+      gap: 16px;
+      margin-bottom: 24px;
+      flex-wrap: wrap;
+    }
+    .kpi-card {
+      flex: 1;
+      min-width: 110px;
+      background: #f8faff;
+      border: 1px solid #e0eaff;
+      border-radius: 8px;
+      padding: 14px 16px;
+    }
+    .kpi-card .kpi-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.6px; color: #6c757d; margin-bottom: 4px; }
+    .kpi-card .kpi-value { font-size: 24px; font-weight: 700; color: #1a1a2e; line-height: 1; }
+    .kpi-card .kpi-sub { font-size: 11px; color: #6c757d; margin-top: 3px; }
+
+    /* ===== Progress bar ===== */
+    .progress-bar-wrap { background: #e9ecef; border-radius: 4px; height: 8px; margin-top: 4px; }
+    .progress-bar-fill { height: 100%; border-radius: 4px; background: #0073ea; }
+
+    /* ===== Section ===== */
+    .section { margin-bottom: 28px; }
+    .section-title {
+      font-size: 14px;
+      font-weight: 700;
+      color: #1a1a2e;
+      padding-bottom: 6px;
+      border-bottom: 1px solid #dee2e6;
+      margin-bottom: 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    /* ===== Tasks table ===== */
+    table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    th {
+      background: #f5f7ff;
+      padding: 8px 10px;
+      text-align: left;
+      font-weight: 600;
+      color: #555;
+      border-bottom: 1px solid #dee2e6;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+    }
+    td {
+      padding: 8px 10px;
+      border-bottom: 1px solid #f0f0f0;
+      vertical-align: middle;
+    }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: #f9faff; }
+
+    .task-title-cell { max-width: 220px; }
+    .task-title { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .hours-bar { display: flex; align-items: center; gap: 6px; }
+    .hours-bar .bar { flex: 1; background: #e9ecef; border-radius: 3px; height: 6px; min-width: 40px; }
+    .hours-bar .bar-fill { height: 100%; border-radius: 3px; background: #0073ea; }
+
+    /* ===== Summary by status ===== */
+    .status-summary { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 20px; }
+    .status-box {
+      flex: 1;
+      min-width: 90px;
+      border: 1px solid #dee2e6;
+      border-radius: 6px;
+      padding: 10px 12px;
+      text-align: center;
+    }
+    .status-box .count { font-size: 24px; font-weight: 700; }
+    .status-box .label { font-size: 10px; color: #6c757d; text-transform: uppercase; margin-top: 2px; }
+    .status-box.backlog .count { color: #6c757d; }
+    .status-box.in-progress .count { color: #0073ea; }
+    .status-box.in-review .count { color: #fd7e14; }
+    .status-box.completed .count { color: #198754; }
+
+    /* ===== Footer ===== */
+    .report-footer {
+      margin-top: 32px;
+      padding-top: 12px;
+      border-top: 1px solid #dee2e6;
+      font-size: 11px;
+      color: #999;
+      display: flex;
+      justify-content: space-between;
+    }
+
+    /* ===== Print media ===== */
+    @media print {
+      .print-toolbar { display: none !important; }
+      body { padding: 0; font-size: 12px; }
+      .kpi-card { break-inside: avoid; }
+      table { break-inside: auto; }
+      tr { break-inside: avoid; }
+      .section { break-inside: avoid; }
+      @page {
+        margin: 18mm 14mm;
+        size: A4;
+      }
+    }
+  </style>
+</head>
+<body>
+
+<!-- Print toolbar (hidden in PDF) -->
+<div class="print-toolbar">
+  <span>Vista previa del reporte — usa el botón para exportar como PDF</span>
+  <div class="btn-group">
+    <a href="{{ url_for('main.project_detail', project_id=project.id) }}" class="btn-back">
+      ← Volver al proyecto
+    </a>
+    <button class="btn-print" onclick="window.print()">
+      ⬇ Descargar PDF
+    </button>
+  </div>
+</div>
+
+<!-- Report header -->
+<div class="report-header">
+  <div>
+    <div class="project-title">{{ project.name }}</div>
+    <div class="project-subtitle">
+      <span class="badge badge-{{ project.status }}">{{ project.status|replace('_',' ')|title }}</span>
+      {% if project.manager %}
+        &nbsp;· Responsable: <strong>{{ project.manager.name }}</strong>
+      {% endif %}
+      {% if project.project_type %}
+        &nbsp;· {{ project.project_type|replace('_',' ')|title }}
+      {% endif %}
+    </div>
+  </div>
+  <div class="report-meta">
+    <strong>Reporte de proyecto</strong>
+    Generado: {{ now.strftime('%d/%m/%Y %H:%M') }}
+    {% if project.start_date %}<br>Inicio: {{ project.start_date.strftime('%d/%m/%Y') }}{% endif %}
+    {% if project.end_date %}<br>Fin planificado: {{ project.end_date.strftime('%d/%m/%Y') }}{% endif %}
+  </div>
+</div>
+
+<!-- KPI row -->
+<div class="kpi-row">
+  <div class="kpi-card">
+    <div class="kpi-label">Total tareas</div>
+    <div class="kpi-value">{{ tasks|length }}</div>
+    <div class="kpi-sub">en el proyecto</div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-label">Completadas</div>
+    <div class="kpi-value" style="color:#198754">{{ tasks|selectattr('status','eq','COMPLETED')|list|length }}</div>
+    {% set total = tasks|length %}
+    {% set completed = tasks|selectattr('status','eq','COMPLETED')|list|length %}
+    {% set pct = ((completed / total * 100)|int) if total > 0 else 0 %}
+    <div class="kpi-sub">{{ pct }}% del total</div>
+    <div class="progress-bar-wrap"><div class="progress-bar-fill" style="width:{{ pct }}%;background:#198754"></div></div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-label">En progreso</div>
+    <div class="kpi-value" style="color:#0073ea">{{ tasks|selectattr('status','eq','IN_PROGRESS')|list|length }}</div>
+    <div class="kpi-sub">tareas activas</div>
+  </div>
+  {% if metrics and metrics.total_hours_spent is defined %}
+  <div class="kpi-card">
+    <div class="kpi-label">Horas registradas</div>
+    <div class="kpi-value">{{ metrics.total_hours_spent|int }}h</div>
+    {% if metrics.budget_hours and metrics.budget_hours > 0 %}
+    {% set budget_pct = ((metrics.total_hours_spent / metrics.budget_hours * 100)|int) %}
+    <div class="kpi-sub">de {{ metrics.budget_hours|int }}h presupuestadas ({{ budget_pct }}%)</div>
+    <div class="progress-bar-wrap"><div class="progress-bar-fill" style="width:{{ [budget_pct, 100]|min }}%;background:{% if budget_pct > 90 %}#dc3545{% elif budget_pct > 70 %}#fd7e14{% else %}#0073ea{% endif %}"></div></div>
+    {% else %}
+    <div class="kpi-sub">sin presupuesto definido</div>
+    {% endif %}
+  </div>
+  {% endif %}
+  {% if project.description %}
+  <div class="kpi-card" style="flex:2">
+    <div class="kpi-label">Descripción</div>
+    <div style="font-size:12px;color:#333;margin-top:4px;line-height:1.5">{{ project.description }}</div>
+  </div>
+  {% endif %}
+</div>
+
+<!-- Tasks by status summary -->
+<div class="section">
+  <div class="section-title">Resumen por estado</div>
+  <div class="status-summary">
+    <div class="status-box backlog">
+      <div class="count">{{ tasks_by_status.BACKLOG|length }}</div>
+      <div class="label">Backlog</div>
+    </div>
+    <div class="status-box in-progress">
+      <div class="count">{{ tasks_by_status.IN_PROGRESS|length }}</div>
+      <div class="label">En Progreso</div>
+    </div>
+    <div class="status-box in-review">
+      <div class="count">{{ tasks_by_status.IN_REVIEW|length }}</div>
+      <div class="label">En Revisión</div>
+    </div>
+    <div class="status-box completed">
+      <div class="count">{{ tasks_by_status.COMPLETED|length }}</div>
+      <div class="label">Completadas</div>
+    </div>
+  </div>
+</div>
+
+<!-- Tasks table: active tasks first -->
+{% set active_tasks = tasks|rejectattr('status','eq','COMPLETED')|list %}
+{% set done_tasks = tasks|selectattr('status','eq','COMPLETED')|list %}
+
+{% if active_tasks %}
+<div class="section">
+  <div class="section-title">
+    Tareas activas
+    <span style="font-weight:400;font-size:12px;color:#6c757d">{{ active_tasks|length }} tareas</span>
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th style="width:35%">Tarea</th>
+        <th>Estado</th>
+        <th>Prioridad</th>
+        <th>Asignado</th>
+        <th>Vencimiento</th>
+        <th>Horas real / est.</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for t in active_tasks %}
+      <tr>
+        <td class="task-title-cell"><div class="task-title" title="{{ t.title }}">{{ t.title }}</div></td>
+        <td><span class="badge badge-{{ t.status }}">{{ t.status|replace('_',' ')|title }}</span></td>
+        <td><span class="badge badge-{{ t.priority }}">{{ t.priority|title }}</span></td>
+        <td>
+          {% if t.assigned_to %}{{ t.assigned_to.first_name }}
+          {% elif t.assignees %}{{ t.assignees[0].first_name }}{% if t.assignees|length > 1 %} +{{ t.assignees|length - 1 }}{% endif %}
+          {% else %}<span style="color:#bbb">—</span>{% endif %}
+        </td>
+        <td>
+          {% if t.due_date %}
+            {% set overdue = (now.date() > t.due_date.date()) and t.status != 'COMPLETED' %}
+            <span style="{% if overdue %}color:#dc3545;font-weight:600{% endif %}">
+              {{ t.due_date.strftime('%d/%m/%Y') }}{% if overdue %} ⚠{% endif %}
+            </span>
+          {% else %}<span style="color:#bbb">—</span>{% endif %}
+        </td>
+        <td>
+          {% set actual = actual_hours_map.get(t.id, 0) %}
+          {% set estimated = t.estimated_hours|float if t.estimated_hours else 0 %}
+          {% if estimated > 0 %}
+          <div class="hours-bar">
+            <span>{{ actual|int }}h / {{ estimated|int }}h</span>
+            <div class="bar"><div class="bar-fill" style="width:{{ [((actual/estimated*100)|int), 100]|min }}%"></div></div>
+          </div>
+          {% else %}
+            {{ actual|int }}h
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+{% if done_tasks %}
+<div class="section">
+  <div class="section-title">
+    Tareas completadas
+    <span style="font-weight:400;font-size:12px;color:#6c757d">{{ done_tasks|length }} tareas</span>
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th style="width:40%">Tarea</th>
+        <th>Prioridad</th>
+        <th>Asignado</th>
+        <th>Completada</th>
+        <th>Horas registradas</th>
+        <th>Desvío</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for t in done_tasks %}
+      <tr>
+        <td class="task-title-cell"><div class="task-title" title="{{ t.title }}">{{ t.title }}</div></td>
+        <td><span class="badge badge-{{ t.priority }}">{{ t.priority|title }}</span></td>
+        <td>
+          {% if t.assigned_to %}{{ t.assigned_to.first_name }}
+          {% elif t.assignees %}{{ t.assignees[0].first_name }}
+          {% else %}<span style="color:#bbb">—</span>{% endif %}
+        </td>
+        <td>{{ t.completed_at.strftime('%d/%m/%Y') if t.completed_at else '—' }}</td>
+        <td>{{ actual_hours_map.get(t.id, 0)|int }}h</td>
+        <td>
+          {% set dev = t.time_deviation_days %}
+          {% if dev is not none %}
+            <span style="color:{% if dev > 0 %}#dc3545{% elif dev < 0 %}#198754{% else %}#333{% endif %}">
+              {% if dev > 0 %}+{{ dev }}d (tarde){% elif dev < 0 %}{{ dev }}d (anticipado){% else %}En fecha{% endif %}
+            </span>
+          {% else %}—{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+<!-- Footer -->
+<div class="report-footer">
+  <span>{{ project.name }} — Reporte generado el {{ now.strftime('%d/%m/%Y a las %H:%M') }}</span>
+  <span>BridgeWork Project Manager</span>
+</div>
+
+</body>
+</html>

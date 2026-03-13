@@ -3,11 +3,24 @@ from app import create_app, db as _db
 from sqlalchemy import event
 
 
+class AttrDict(dict):
+    """A dict subclass that also supports attribute-style access (d.key and d['key'])."""
+    def __getattr__(self, name):
+        try:
+            return self[name]
+        except KeyError:
+            raise AttributeError(name)
+
+    def __setattr__(self, name, value):
+        self[name] = value
+
+
 class TestConfig:
     TESTING = True
     SECRET_KEY = 'test-secret'
     SQLALCHEMY_DATABASE_URI = 'sqlite:///:memory:'
     SQLALCHEMY_TRACK_MODIFICATIONS = False
+    RATELIMIT_ENABLED = False
 
 
 @pytest.fixture(scope='session')
@@ -28,24 +41,26 @@ def app():
 
 @pytest.fixture(scope='function')
 def db(app):
-    with app.app_context():
-        _db.create_all()
-        yield _db
-        _db.session.remove()
+    ctx = app.app_context()
+    ctx.push()
+    _db.create_all()
+    yield _db
+    _db.session.remove()
 
-        # Guard: refuse to drop tables on a non-testing or remote DB
-        uri = app.config.get('SQLALCHEMY_DATABASE_URI', '') or ''
-        if not app.config.get('TESTING', False) or not (uri.startswith('sqlite') or 'localhost' in uri or '127.0.0.1' in uri):
-            raise RuntimeError(f"Refusing to drop DB for unsafe URI: {uri!r}")
+    # Guard: refuse to drop tables on a non-testing or remote DB
+    uri = app.config.get('SQLALCHEMY_DATABASE_URI', '') or ''
+    if not app.config.get('TESTING', False) or not (uri.startswith('sqlite') or 'localhost' in uri or '127.0.0.1' in uri):
+        ctx.pop()
+        raise RuntimeError(f"Refusing to drop DB for unsafe URI: {uri!r}")
 
-        _db.drop_all()
+    _db.drop_all()
+    ctx.pop()
 
 
 @pytest.fixture(scope='function')
 def client(app, db):
     with app.test_client() as test_client:
-        with app.app_context():
-            yield test_client
+        yield test_client
 
 
 # Factory helpers for tests
@@ -138,11 +153,31 @@ def create_task(client):
             t = Task(project_id=project_id, title=title, **kwargs)
             db.session.add(t)
             db.session.commit()
-            return {
+            return AttrDict({
                 'id': t.id,
                 'project_id': t.project_id,
                 'title': t.title,
                 'is_external_visible': t.is_external_visible,
-            }
+            })
 
     return _create_task
+
+
+@pytest.fixture
+def create_time_entry(db):
+    def _create_time_entry(task_id, user_id, date, hours, description='', is_billable=True):
+        from app.models import TimeEntry
+        from app import db as _db
+        te = TimeEntry(
+            task_id=task_id,
+            user_id=user_id,
+            date=date,
+            hours=hours,
+            description=description,
+            is_billable=is_billable,
+        )
+        _db.session.add(te)
+        _db.session.commit()
+        return {'id': te.id, 'task_id': te.task_id, 'user_id': te.user_id, 'hours': te.hours}
+
+    return _create_time_entry

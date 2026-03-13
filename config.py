@@ -19,6 +19,9 @@ class Config:
     AZURE_CLIENT_SECRET = os.environ.get('AZURE_CLIENT_SECRET')
     AZURE_AUTHORITY = os.environ.get('AZURE_AUTHORITY', 'https://login.microsoftonline.com/common')
     AZURE_SCOPES = ['User.Read']  # Scopes needed
+    # Optional: override redirect URI (use http://127.0.0.1:5000/auth/callback in local dev
+    # to avoid Chrome blocking HTTPS→HTTP redirects for 'localhost')
+    AZURE_REDIRECT_URI = os.environ.get('AZURE_REDIRECT_URI')  # None = auto from url_for()
 
 
 class DevConfig(Config):

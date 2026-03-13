@@ -1,11 +1,11 @@
 from flask import render_template, redirect, url_for, request, flash, session, current_app
 from werkzeug.security import check_password_hash
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlencode
 from . import auth_bp
-from app.models import User
+from app.models import User, AuditLog, SystemSettings
 from .utils import get_msal_app
 from flask_login import login_user, logout_user, current_user
-from app import db
+from app import db, limiter
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy import func
 from msal import ConfidentialClientApplication
@@ -15,6 +15,7 @@ import secrets
 from datetime import datetime
 import requests
 from msal import PublicClientApplication
+from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 
 
 def is_safe_url(target):
@@ -26,7 +27,53 @@ def is_safe_url(target):
     return test_url.scheme in ('', 'http', 'https') and ref_url.netloc == test_url.netloc
 
 
+def _password_reset_serializer():
+    return URLSafeTimedSerializer(current_app.config['SECRET_KEY'], salt='local-password-reset')
+
+
+def generate_password_reset_token(user: User) -> str:
+    return _password_reset_serializer().dumps({'user_id': user.id, 'email': user.email})
+
+
+def verify_password_reset_token(token: str, max_age: int = 3600) -> User | None:
+    try:
+        data = _password_reset_serializer().loads(token, max_age=max_age)
+    except (BadSignature, SignatureExpired):
+        return None
+    user = User.query.get(data.get('user_id')) if data else None
+    if not user or user.email != data.get('email'):
+        return None
+    if not user.password_hash or not user.is_active:
+        return None
+    return user
+
+
+def send_password_reset_email(user: User) -> bool:
+    from app.notifications.provider import get_provider
+
+    provider = get_provider(current_app)
+    token = generate_password_reset_token(user)
+    reset_url = url_for('auth.reset_password', token=token, _external=True)
+    app_name = SystemSettings.get('app_name', 'BridgeWork')
+    support_email = SystemSettings.get('support_email', '')
+    html = render_template(
+        'auth/password_reset_email.html',
+        user=user,
+        reset_url=reset_url,
+        app_name=app_name,
+        support_email=support_email,
+    )
+    text = (
+        f'Hola {user.first_name or user.email},\n\n'
+        f'Recibimos una solicitud para restablecer tu contraseña en {app_name}.\n'
+        f'Usa este enlace dentro de la próxima hora:\n{reset_url}\n\n'
+        'Si no solicitaste este cambio, puedes ignorar este mensaje.'
+    )
+    return provider.send_email(user.id, f'{app_name}: restablecer contraseña', text, html=html)
+
+
 @auth_bp.route('/login', methods=['GET', 'POST'])
+@limiter.limit("15/minute", methods=["POST"])
 def login():
     """Login page with local auth + Microsoft SSO"""
     if current_user.is_authenticated:
@@ -63,86 +110,146 @@ def login():
     return render_template('auth/login.html', microsoft_enabled=microsoft_enabled)
 
 
+@auth_bp.route('/forgot-password', methods=['GET', 'POST'])
+@limiter.limit("5/minute", methods=["POST"])
+def forgot_password():
+    if current_user.is_authenticated:
+        return redirect(url_for('main.dashboard'))
+
+    if request.method == 'POST':
+        email = (request.form.get('email') or '').strip().lower()
+        user = User.query.filter(func.lower(User.email) == email).first() if email else None
+
+        if user and user.password_hash and user.is_active:
+            try:
+                send_password_reset_email(user)
+            except Exception as exc:
+                current_app.logger.exception('Failed to send password reset email: %s', exc)
+
+        flash('Si el correo corresponde a un usuario local activo, enviaremos instrucciones para restablecer la contraseña.', 'info')
+        return redirect(url_for('auth.login'))
+
+    return render_template('auth/forgot_password.html')
+
+
+@auth_bp.route('/reset-password/<token>', methods=['GET', 'POST'])
+@limiter.limit("10/minute", methods=["POST"])
+def reset_password(token):
+    if current_user.is_authenticated:
+        logout_user()
+
+    user = verify_password_reset_token(token)
+    if not user:
+        flash('El enlace de restablecimiento es inválido o ha expirado.', 'danger')
+        return redirect(url_for('auth.forgot_password'))
+
+    if request.method == 'POST':
+        password = request.form.get('password') or ''
+        confirm_password = request.form.get('confirm_password') or ''
+
+        if len(password) < 8:
+            flash('La nueva contraseña debe tener al menos 8 caracteres.', 'danger')
+        elif password != confirm_password:
+            flash('La confirmación de contraseña no coincide.', 'danger')
+        else:
+            user.set_password(password)
+            try:
+                audit = AuditLog(
+                    entity_type='User',
+                    entity_id=user.id,
+                    action='UPDATE',
+                    user_id=user.id,
+                    changes={'password_reset': {'old': None, 'new': 'completed'}}
+                )
+                db.session.add(audit)
+                db.session.commit()
+                flash('Tu contraseña fue actualizada. Ya puedes iniciar sesión.', 'success')
+                return redirect(url_for('auth.login'))
+            except SQLAlchemyError:
+                db.session.rollback()
+                flash('No fue posible actualizar la contraseña. Intenta nuevamente.', 'danger')
+
+    return render_template('auth/reset_password.html', token=token, reset_user=user)
+
+
 @auth_bp.route('/login/microsoft')
 def login_microsoft():
     """Initiate Microsoft OAuth flow"""
     try:
-        # Logout any existing user to avoid session conflicts
         if current_user.is_authenticated:
             logout_user()
-        
+
         if not current_app.config.get('AZURE_CLIENT_ID'):
             flash('Microsoft authentication is not configured', 'danger')
             return redirect(url_for('auth.login'))
-        
-        # Generate state for CSRF protection
+
         state = secrets.token_urlsafe(32)
         session['oauth_state'] = state
-        
-        # Store the page user was trying to access (if provided)
+
         next_page = request.args.get('next')
         if next_page:
             session['oauth_next'] = next_page
-        
-        # Initialize MSAL client
+
+        redirect_uri = current_app.config.get('AZURE_REDIRECT_URI') or url_for('auth.callback', _external=True)
+
+        # Use MSAL to build the authorization URL — it handles nonce,
+        # response_mode and scope formatting correctly for the tenant.
         client = ConfidentialClientApplication(
             client_id=current_app.config['AZURE_CLIENT_ID'],
             client_credential=current_app.config['AZURE_CLIENT_SECRET'],
-            authority=current_app.config['AZURE_AUTHORITY']
+            authority=current_app.config['AZURE_AUTHORITY'],
         )
-        
-        # Generate authorization URL
         auth_url = client.get_authorization_request_url(
             scopes=current_app.config['AZURE_SCOPES'],
             state=state,
-            redirect_uri=url_for('auth.callback', _external=True)
+            redirect_uri=redirect_uri,
         )
-        
         return redirect(auth_url)
-        
+
     except Exception as e:
         current_app.logger.exception(f'Microsoft login initiation error: {e}')
-        flash(f'Authentication error: {str(e)}', 'danger')
+        flash(f'Error de autenticación: {str(e)}', 'danger')
         return redirect(url_for('auth.login'))
 
 
-@auth_bp.route('/callback')
+@auth_bp.route('/callback', methods=['GET', 'POST'])
 def callback():
     """Handle Microsoft Entra ID OAuth callback"""
     try:
-        # Get authorization code from query params
-        code = request.args.get('code')
-        state = request.args.get('state')
-        error = request.args.get('error')
-        error_description = request.args.get('error_description')
-        
+        code = request.values.get('code')
+        state = request.values.get('state')
+        error = request.values.get('error')
+        error_description = request.values.get('error_description')
+
         # Handle errors from Microsoft
         if error:
             flash(f'Error de autenticación: {error_description or error}', 'danger')
             return redirect(url_for('auth.login'))
-        
+
         if not code:
             flash('No se recibió código de autorización.', 'danger')
             return redirect(url_for('auth.login'))
-        
+
         # Verify state parameter (CSRF protection)
-        stored_state = session.get('oauth_state')
+        stored_state = session.pop('oauth_state', None)
         if not state or state != stored_state:
             flash('Invalid state parameter. CSRF attack prevented.', 'danger')
             return redirect(url_for('auth.login'))
+
+        redirect_uri = current_app.config.get('AZURE_REDIRECT_URI') or url_for('auth.callback', _external=True)
         
         # Initialize MSAL client
         client = ConfidentialClientApplication(
             client_id=current_app.config['AZURE_CLIENT_ID'],
             client_credential=current_app.config['AZURE_CLIENT_SECRET'],
-            authority=current_app.config['AZURE_AUTHORITY']
+            authority=current_app.config['AZURE_AUTHORITY'],
         )
         
         # Get token using authorization code
         result = client.acquire_token_by_authorization_code(
             code=code,
             scopes=current_app.config['AZURE_SCOPES'],
-            redirect_uri=url_for('auth.callback', _external=True)
+            redirect_uri=current_app.config.get('AZURE_REDIRECT_URI') or url_for('auth.callback', _external=True)
         )
         
         if 'error' in result:
@@ -233,7 +340,7 @@ def callback():
                     if graph_resp.status_code == 200 and graph_resp.content:
                         user.photo = graph_resp.content
                         user.photo_mime = graph_resp.headers.get('Content-Type', 'image/jpeg') or 'image/jpeg'
-                        user.photo_updated_at = datetime.utcnow()
+                        user.photo_updated_at = datetime.now()
                         db.session.add(user)
                         db.session.commit()
                         current_app.logger.info(f'User photo saved for user id={user.id}')
@@ -250,9 +357,6 @@ def callback():
         # Log the user in
         login_user(user, remember=True)
         current_app.logger.info(f'User logged in successfully: {user.email}')
-        
-        # Clear OAuth session data
-        session.pop('oauth_state', None)
         
         # Redirect to original page or dashboard
         next_page = session.get('oauth_next', url_for('main.dashboard'))

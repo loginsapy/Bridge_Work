@@ -35,14 +35,6 @@
               </select>
               <small class="text-muted">{{ _('currency_for_reports') }}</small>
             </div>
-            <div class="col-md-6 mb-3">
-              <label class="form-label fw-semibold">{{ _('timezone') }}</label>
-              <select name="timezone" class="form-select">
-                {% for tz in timezones %}
-                  <option value="{{ tz }}" {% if settings.timezone == tz %}selected{% endif %}>{{ tz }}</option>
-                {% endfor %}
-              </select>
-            </div>
           </div>
           <div class="row">
             <div class="col-md-6 mb-3">
@@ -127,7 +119,6 @@
           </p>
           <ul class="small text-muted ps-3 mb-0">
             <li><strong>{{ _('currency') }}:</strong> {{ _('currency_info') }}</li>
-            <li><strong>{{ _('timezone') }}:</strong> {{ _('timezone_info') }}</li>
             <li><strong>{{ _('date_format') }}:</strong> {{ _('date_format_info') }}</li>
             <li><strong>{{ _('approvals') }}:</strong> {{ _('approval_info') }}</li>
           </ul>

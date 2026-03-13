@@ -190,6 +190,23 @@
 .progress-bar-mini-fill.warning { background: var(--monday-yellow); }
 .progress-bar-mini-fill.danger { background: var(--monday-red); }
 
+.monday-progress {
+  height: 8px;
+  background: var(--monday-grey-lighter);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.monday-progress-bar {
+  height: 100%;
+  background: var(--monday-green);
+  border-radius: 999px;
+  transition: width 0.3s;
+}
+
+.monday-progress-bar.warning { background: var(--monday-yellow); }
+.monday-progress-bar.danger { background: var(--monday-red); }
+
 .progress-text {
   font-size: 12px;
   color: var(--monday-grey);
@@ -485,7 +502,7 @@
             <div class="monday-progress-cell">
               <div class="progress-with-label">
                 <div class="progress-bar-mini">
-                  <div class="progress-bar-mini-fill {% if project.progress > 80 %}{% elif project.progress > 50 %}warning{% else %}{% endif %}" 
+                  <div class="progress-bar-mini-fill {% if project.progress < 50 %}danger{% elif project.progress < 80 %}warning{% endif %}" 
                        style="width: {{ project.progress }}%;"></div>
                 </div>
                 <span class="progress-text">{{ "%.0f"|format(project.progress) }}%</span>
@@ -593,7 +610,7 @@
       <p class="project-description">{{ project.description or _('no_description') }}</p>
       
       <div class="monday-progress mb-3">
-        <div class="monday-progress-bar" style="width: {{ project.progress }}%;"></div>
+        <div class="monday-progress-bar {% if project.progress < 50 %}danger{% elif project.progress < 80 %}warning{% endif %}" style="width: {{ project.progress }}%;"></div>
       </div>
       
       <div class="project-stats-row">

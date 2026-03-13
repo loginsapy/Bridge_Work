@@ -7,6 +7,7 @@ import hashlib
 import logging
 import platform
 import socket
+import threading
 import uuid
 from datetime import datetime
 from typing import Any, Dict, Optional
@@ -26,13 +27,14 @@ class LicenseError(Exception):
 
 class LicenseService:
     """Servicio de gestión de licencias."""
-    
+
     API_BASE_URL = "https://licencias.login.com.py/api/v1/license"
     PRODUCT_CODE = "BRIDGEWORK"
     TIMEOUT = 30
-    
+
     _cache: Dict[str, Any] = {}
     _cache_time: Optional[datetime] = None
+    _cache_lock: threading.Lock = threading.Lock()
     CACHE_TTL = 300  # 5 minutos
     
     @classmethod
@@ -177,41 +179,43 @@ class LicenseService:
                     is_active=True
                 )
                 
-                # Limpiar cache
-                cls._cache = {}
-                cls._cache_time = None
-                
+                # Limpiar cache (thread-safe)
+                with cls._cache_lock:
+                    cls._cache = {}
+                    cls._cache_time = None
+
                 return {
                     "success": True,
                     "message": "Licencia activada correctamente",
                     "license": license_data
                 }
-        
+
         # Si validate falla, intentar activate
         payload = {
             "license_key": license_key,
             "hardware_id": hardware_id,
             "device_info": device_info
         }
-        
+
         result = cls._make_request("activate", payload)
-        
+
         if result["success"]:
             response_data = result["data"]
             license_data = response_data.get("data", {}).get("license", {})
-            
+
             if not license_data:
                 license_data = response_data.get("data", response_data)
-            
+
             cls._save_license(
                 license_key=license_key,
                 hardware_id=hardware_id,
                 license_data=license_data,
                 is_active=True
             )
-            
-            cls._cache = {}
-            cls._cache_time = None
+
+            with cls._cache_lock:
+                cls._cache = {}
+                cls._cache_time = None
             
             return {
                 "success": True,
@@ -244,11 +248,12 @@ class LicenseService:
         Returns:
             Dict con información de validación
         """
-        # Verificar cache
-        if cls._cache and cls._cache_time:
-            elapsed = (datetime.utcnow() - cls._cache_time).total_seconds()
-            if elapsed < cls.CACHE_TTL:
-                return cls._cache
+        # Verificar cache (thread-safe)
+        with cls._cache_lock:
+            if cls._cache and cls._cache_time:
+                elapsed = (datetime.now() - cls._cache_time).total_seconds()
+                if elapsed < cls.CACHE_TTL:
+                    return cls._cache
         
         # Obtener licencia de la base de datos si no se proporciona
         if not license_key:
@@ -286,9 +291,10 @@ class LicenseService:
                 "message": "Licencia válida" if is_valid else "Licencia inválida"
             }
             
-            # Actualizar cache
-            cls._cache = validation_result
-            cls._cache_time = datetime.utcnow()
+            # Actualizar cache (thread-safe)
+            with cls._cache_lock:
+                cls._cache = validation_result
+                cls._cache_time = datetime.now()
             
             # Actualizar registro en BD
             if is_valid:
@@ -345,10 +351,11 @@ class LicenseService:
                 except Exception:
                     db.session.rollback()
             
-            # Limpiar cache
-            cls._cache = {}
-            cls._cache_time = None
-            
+            # Limpiar cache (thread-safe)
+            with cls._cache_lock:
+                cls._cache = {}
+                cls._cache_time = None
+
             return {
                 "success": True,
                 "message": "Licencia desactivada correctamente"
@@ -381,8 +388,8 @@ class LicenseService:
                 license_record.hardware_id = hardware_id
                 license_record.status = new_status
                 license_record.expires_at = cls._parse_date(license_data.get("expires_at"))
-                license_record.activated_at = datetime.utcnow()
-                license_record.last_validated_at = datetime.utcnow()
+                license_record.activated_at = datetime.now()
+                license_record.last_validated_at = datetime.now()
                 license_record.license_type = license_data.get("type")
                 license_record.product_code = license_data.get("product_code", cls.PRODUCT_CODE)
             else:
@@ -392,8 +399,8 @@ class LicenseService:
                     status=new_status,
                     product_code=license_data.get("product_code", cls.PRODUCT_CODE),
                     expires_at=cls._parse_date(license_data.get("expires_at")),
-                    activated_at=datetime.utcnow(),
-                    last_validated_at=datetime.utcnow(),
+                    activated_at=datetime.now(),
+                    last_validated_at=datetime.now(),
                     license_type=license_data.get("type")
                 )
                 db.session.add(license_record)
@@ -411,7 +418,7 @@ class LicenseService:
         try:
             license_record = License.query.filter_by(license_key=license_key).first()
             if license_record:
-                license_record.last_validated_at = datetime.utcnow()
+                license_record.last_validated_at = datetime.now()
                 if license_info.get("expires_at"):
                     license_record.expires_at = cls._parse_date(license_info["expires_at"])
                 db.session.commit()

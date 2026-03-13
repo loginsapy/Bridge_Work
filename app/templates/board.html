@@ -3,6 +3,7 @@
 {% block title %}{{ project.name }} — Board{% endblock %}
 
 {% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/project-view-nav.css') }}">
 <style>
 /* Usamos las variables CSS definidas en base.html */
 .board-container {
@@ -280,22 +281,6 @@
 .filter-btn.active {
   background: var(--monday-blue);
   color: white;
-}
-
-.toolbar-btn {
-  padding: 8px 12px;
-  border: 1px solid var(--monday-border);
-  background: white;
-  border-radius: 6px;
-  cursor: pointer;
-  color: var(--monday-dark);
-  transition: all 0.15s;
-}
-
-.toolbar-btn:hover {
-  background: var(--monday-light-grey);
-  border-color: var(--monday-blue);
-  color: var(--monday-blue);
 }
 
 .person-filter select {
@@ -712,15 +697,23 @@ tr.table-warning:hover {
     </div>
   </div>
   <div class="toolbar-right">
-    <button class="toolbar-btn" onclick="toggleView('board')" title="Vista Board">
-      <i class="fa-solid fa-table-cells"></i>
-    </button>
-    <button class="toolbar-btn" onclick="toggleView('kanban')" title="Vista Kanban">
-      <i class="fa-solid fa-columns"></i>
-    </button>
+    <div class="project-view-nav" aria-label="Navegacion de vistas del proyecto">
+      <button class="toolbar-btn active" onclick="toggleView('board')" title="Vista Board" aria-current="page">
+        <i class="fa-solid fa-table-cells"></i>
+        <span class="visually-hidden">Board</span>
+      </button>
+      <button class="toolbar-btn" onclick="toggleView('kanban')" title="Vista Kanban">
+        <i class="fa-solid fa-columns"></i>
+        <span class="visually-hidden">Kanban</span>
+      </button>
       <a class="toolbar-btn" href="{{ url_for('main.project_gantt', project_id=project.id) }}" title="Vista Gantt">
         <i class="fa-solid fa-chart-gantt"></i>
+        <span class="visually-hidden">Gantt</span>
       </a>
+      <a class="toolbar-btn" href="{{ url_for('main.project_report', project_id=project.id) }}" title="Exportar PDF" target="_blank">
+        <i class="fa-solid fa-file-pdf"></i>
+      </a>
+    </div>
     {% if current_user.is_internal and current_user.role and current_user.role.name in ('PMP','Admin') %}
     <div class="person-filter">
       <select id="personFilter" onchange="filterByPerson(this.value)">
@@ -839,7 +832,7 @@ tr.table-warning:hover {
           {% set task = node.task %}
           <tr class="{% if level>0 %}child-row{% endif %}{% if task.is_blocked() %} table-warning{% endif %}" data-task-id="{{ task.id }}" data-status="{{ task.status }}" data-assignee-ids="{{ task.assignee_list|map(attribute='id')|join(',') }}" {% if parent_id %}data-parent-id="{{ parent_id }}"{% endif %} {% if current_user.is_internal %}draggable="true"{% endif %}>
             <td class="row-checkbox">{% if current_user.is_internal %}<input type="checkbox" class="task-check">{% endif %}</td>
-            <td class="row-grip">{% if current_user.is_internal %}<i class="fa-solid fa-grip-vertical" draggable="true" title="Arrastrar"></i>{% endif %}</td>
+            <td class="row-grip">{% if current_user.is_internal %}{% if current_user.role and current_user.role.name in ['PMP', 'Admin'] %}<i class="fa-solid fa-grip-vertical" draggable="true" title="Arrastrar"></i>{% else %}<i class="fa-solid fa-grip-vertical disabled-grip" title="Solo Admin/PMP pueden reordenar" style="opacity:0.4;cursor:not-allowed;"></i>{% endif %}{% endif %}</td>
             <td>
               <div class="cell cell-title" style="padding-left: {{ (level * 18) + 5 }}px; position:relative;">
                 {% if level > 0 %}

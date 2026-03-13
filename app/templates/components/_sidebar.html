@@ -84,12 +84,20 @@
   </div>
   <div class="sidebar-nav">
     {% if license_valid %}
+    {% if not current_user.is_internal %}
+    <!-- Client portal shortcut -->
+    <a href="{{ url_for('main.client_dashboard') }}" class="sidebar-link {% if request.endpoint == 'main.client_dashboard' %}active{% endif %}">
+      <i class="fa-solid fa-gauge"></i>
+      <span>Mi Portal</span>
+    </a>
+    {% endif %}
+
     <!-- Dashboard -->
     <a href="{{ url_for('main.dashboard') }}" class="sidebar-link {% if request.endpoint == 'main.dashboard' %}active{% endif %}">
       <i class="fa-solid fa-house"></i>
       <span>{{ _('dashboard') }}</span>
     </a>
-    
+
     <!-- Projects -->
     <a href="{{ url_for('main.projects') }}" class="sidebar-link {% if request.endpoint in ['main.projects', 'main.project_detail'] %}active{% endif %}">
       <i class="fa-solid fa-table-cells-large"></i>

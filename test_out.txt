@@ -1,0 +1,2 @@
+STATUS=302
+LOCATION=https://login.microsoftonline.com/e660f100-3b9e-4e45-be3c-dcc008cfe294/oauth2/v2.0/authorize?client_id=c05f5bec-247a-43b

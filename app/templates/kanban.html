@@ -3,6 +3,7 @@
 {% block title %}{{ project.name }} — Kanban{% endblock %}
 
 {% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/project-view-nav.css') }}">
 <style>
 /* Usamos las variables CSS definidas en base.html */
 .kanban-toolbar {
@@ -25,22 +26,6 @@
 .kanban-toolbar h5 {
   margin: 0;
   font-weight: 600;
-}
-
-.toolbar-btn {
-  padding: 8px 12px;
-  border: 1px solid var(--monday-border);
-  background: white;
-  border-radius: 6px;
-  cursor: pointer;
-  color: var(--monday-dark);
-  transition: all 0.15s;
-}
-
-.toolbar-btn:hover, .toolbar-btn.active {
-  background: var(--monday-blue);
-  border-color: var(--monday-blue);
-  color: white;
 }
 
 .kanban-container {
@@ -207,6 +192,70 @@
   background: rgba(0,115,234,0.1);
   border-radius: 8px;
 }
+
+/* WIP limits */
+.wip-lim { font-size: 10px; opacity: 0.75; margin-left: 2px; }
+.column-count.wip-near { background: rgba(255,193,7,0.8) !important; color: #333 !important; }
+.column-count.wip-over { background: rgba(220,53,69,0.85) !important; color: white !important; }
+
+/* Priority filter bar */
+.kanban-filter-bar {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 8px 14px; background: white; border-radius: 8px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.07); margin-bottom: 16px;
+}
+.prio-btn {
+  padding: 3px 12px; border: 1px solid var(--monday-border); background: white;
+  border-radius: 12px; cursor: pointer; font-size: 12px; font-weight: 500;
+  transition: all 0.15s; line-height: 1.6;
+}
+.prio-btn:hover { border-color: var(--monday-blue); color: var(--monday-blue); }
+.prio-btn.active[data-p="ALL"]      { background: var(--monday-blue); border-color: var(--monday-blue); color: white; }
+.prio-btn.active[data-p="LOW"]      { background: #579bfc; border-color: #579bfc; color: white; }
+.prio-btn.active[data-p="MEDIUM"]   { background: #fdab3d; border-color: #fdab3d; color: #333; }
+.prio-btn.active[data-p="HIGH"]     { background: #ff642e; border-color: #ff642e; color: white; }
+.prio-btn.active[data-p="CRITICAL"] { background: #e2445c; border-color: #e2445c; color: white; }
+.kanban-card.filtered-out { display: none !important; }
+
+.kanban-filter-bar .kanban-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  border: 1px solid rgba(232,106,51,0.18);
+  background: #ffffff;
+  border-radius: 12px;
+  color: var(--app-primary);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.6;
+  transition: all 0.15s ease;
+}
+
+.kanban-filter-bar .kanban-toggle-btn:hover {
+  background: #fff6f1;
+  border-color: var(--app-primary);
+  color: var(--app-primary);
+}
+
+.kanban-filter-bar .kanban-toggle-btn.active {
+  background: var(--app-primary);
+  border-color: var(--app-primary);
+  color: #ffffff;
+  box-shadow: 0 8px 24px rgba(232,106,51,0.18);
+}
+
+/* Swimlanes */
+.swimlane-hdr {
+  padding: 5px 8px; background: rgba(0,0,0,0.05); border-radius: 6px;
+  margin: 10px 0 4px; font-size: 11px; font-weight: 700; color: var(--monday-dark);
+  display: flex; align-items: center; gap: 6px; text-transform: uppercase; letter-spacing: .5px;
+}
+.swimlane-hdr .sw-av {
+  width: 18px; height: 18px; border-radius: 50%; background: var(--monday-purple);
+  color: white; display: inline-flex; align-items: center; justify-content: center;
+  font-size: 9px; font-weight: 700; flex-shrink: 0;
+}
 </style>
 {% endblock %}
 
@@ -226,16 +275,45 @@
     <span class="badge bg-secondary">{{ tasks_by_status.BACKLOG|length + tasks_by_status.IN_PROGRESS|length + tasks_by_status.IN_REVIEW|length + tasks_by_status.COMPLETED|length }} tareas</span>
   </div>
   <div class="toolbar-right">
-    <button class="toolbar-btn" onclick="toggleView('board')" title="Vista Board" aria-label="Vista Board">
-      <i class="fa-solid fa-table-cells"></i> Board
-    </button>
-    <button class="toolbar-btn active" title="Vista Kanban" aria-label="Vista Kanban">
-      <i class="fa-solid fa-columns"></i> Kanban
-    </button>
-    <button class="toolbar-btn" onclick="toggleView('gantt')" title="Vista Gantt" aria-label="Vista Gantt">
-      <i class="fa-solid fa-chart-gantt"></i> Gantt
-    </button>
+    <div class="project-view-nav" aria-label="Navegacion de vistas del proyecto">
+      <button class="toolbar-btn" onclick="toggleView('board')" title="Vista Board" aria-label="Vista Board">
+        <i class="fa-solid fa-table-cells"></i>
+        <span class="visually-hidden">Board</span>
+      </button>
+      <button class="toolbar-btn active" title="Vista Kanban" aria-label="Vista Kanban" aria-current="page">
+        <i class="fa-solid fa-columns"></i>
+        <span class="visually-hidden">Kanban</span>
+      </button>
+      <button class="toolbar-btn" onclick="toggleView('gantt')" title="Vista Gantt" aria-label="Vista Gantt">
+        <i class="fa-solid fa-chart-gantt"></i>
+        <span class="visually-hidden">Gantt</span>
+      </button>
+      <a class="toolbar-btn" href="{{ url_for('main.project_report', project_id=project.id) }}" title="Exportar PDF" target="_blank">
+        <i class="fa-solid fa-file-pdf"></i>
+        <span class="visually-hidden">PDF</span>
+      </a>
+    </div>
   </div>
+</div>
+
+<!-- Priority filter + swimlane bar -->
+<div class="kanban-filter-bar">
+  <span class="text-muted" style="font-size:12px;white-space:nowrap"><i class="fa-solid fa-filter me-1"></i>Prioridad:</span>
+  <button class="prio-btn active" data-p="ALL"      onclick="filterByPriority(this)">Todas</button>
+  <button class="prio-btn"        data-p="LOW"      onclick="filterByPriority(this)">Baja</button>
+  <button class="prio-btn"        data-p="MEDIUM"   onclick="filterByPriority(this)">Media</button>
+  <button class="prio-btn"        data-p="HIGH"     onclick="filterByPriority(this)">Alta</button>
+  <button class="prio-btn"        data-p="CRITICAL" onclick="filterByPriority(this)">Crítica</button>
+  <div class="vr mx-1 d-none d-sm-block"></div>
+  <button class="toolbar-btn kanban-toggle-btn active" id="swimlaneToggleBtn" onclick="toggleSwimlane()" title="Agrupar por responsable" aria-pressed="true">
+    <i class="fa-solid fa-layer-group"></i><span class="d-none d-sm-inline">Agrupar por responsable</span>
+  </button>
+  {% if current_user.is_internal and current_user.role and current_user.role.name in ['PMP', 'Admin'] %}
+  <div class="vr mx-1 d-none d-sm-block"></div>
+  <button class="toolbar-btn ms-auto" data-bs-toggle="modal" data-bs-target="#wipModal" title="Configurar límites WIP">
+    <i class="fa-solid fa-sliders me-1"></i><span class="d-none d-sm-inline">WIP</span>
+  </button>
+  {% endif %}
 </div>
 
 <div class="kanban-container">
@@ -243,11 +321,11 @@
   <div class="kanban-column" data-status="BACKLOG">
     <div class="column-header backlog">
       <span><i class="fa-solid fa-inbox me-2"></i>Backlog</span>
-      <span class="column-count">{{ tasks_by_status.BACKLOG|length }}</span>
+      <span class="column-count" id="cnt-BACKLOG"><span class="num-txt">{{ tasks_by_status.BACKLOG|length }}</span>{% if wip_limits['BACKLOG'] %}<span class="wip-lim">/{{ wip_limits['BACKLOG'] }}</span>{% endif %}</span>
     </div>
     <div class="column-tasks" data-status="BACKLOG">
       {% for task in tasks_by_status.BACKLOG %}
-      <div class="kanban-card priority-{{ task.priority }}" data-task-id="{{ task.id }}" data-assignee-ids="{{ task.assignee_list|map(attribute='id')|join(',') }}" draggable="true">
+      <div class="kanban-card priority-{{ task.priority }}" data-task-id="{{ task.id }}" data-priority="{{ task.priority }}" data-assignee-ids="{{ task.assignee_list|map(attribute='id')|join(',') }}" data-assignee-name="{{ (task.assignees[0].first_name or task.assignees[0].email) if task.assignees else (task.assigned_to.first_name or task.assigned_to.email if task.assigned_to else 'Sin asignar') }}" draggable="true">
         <div class="card-title">
           <a href="{{ url_for('main.task_detail', task_id=task.id) }}">{{ task.title }}</a>
         </div>
@@ -304,11 +382,11 @@
   <div class="kanban-column" data-status="IN_PROGRESS">
     <div class="column-header in-progress">
       <span><i class="fa-solid fa-spinner me-2"></i>En Progreso</span>
-      <span class="column-count">{{ tasks_by_status.IN_PROGRESS|length }}</span>
+      <span class="column-count" id="cnt-IN_PROGRESS"><span class="num-txt">{{ tasks_by_status.IN_PROGRESS|length }}</span>{% if wip_limits['IN_PROGRESS'] %}<span class="wip-lim">/{{ wip_limits['IN_PROGRESS'] }}</span>{% endif %}</span>
     </div>
     <div class="column-tasks" data-status="IN_PROGRESS">
       {% for task in tasks_by_status.IN_PROGRESS %}
-      <div class="kanban-card priority-{{ task.priority }}" data-task-id="{{ task.id }}" data-assignee-ids="{{ task.assignee_list|map(attribute='id')|join(',') }}" draggable="true">
+      <div class="kanban-card priority-{{ task.priority }}" data-task-id="{{ task.id }}" data-priority="{{ task.priority }}" data-assignee-ids="{{ task.assignee_list|map(attribute='id')|join(',') }}" data-assignee-name="{{ (task.assignees[0].first_name or task.assignees[0].email) if task.assignees else (task.assigned_to.first_name or task.assigned_to.email if task.assigned_to else 'Sin asignar') }}" draggable="true">
         <div class="card-title">
           <a href="{{ url_for('main.task_detail', task_id=task.id) }}">{{ task.title }}</a>
         </div>
@@ -353,11 +431,11 @@
   <div class="kanban-column" data-status="IN_REVIEW">
     <div class="column-header in-review">
       <span><i class="fa-solid fa-eye me-2"></i>En Revisión</span>
-      <span class="column-count">{{ tasks_by_status.IN_REVIEW|length }}</span>
+      <span class="column-count" id="cnt-IN_REVIEW"><span class="num-txt">{{ tasks_by_status.IN_REVIEW|length }}</span>{% if wip_limits['IN_REVIEW'] %}<span class="wip-lim">/{{ wip_limits['IN_REVIEW'] }}</span>{% endif %}</span>
     </div>
     <div class="column-tasks" data-status="IN_REVIEW">
       {% for task in tasks_by_status.IN_REVIEW %}
-      <div class="kanban-card priority-{{ task.priority }}" data-task-id="{{ task.id }}" data-assignee-ids="{{ task.assignee_list|map(attribute='id')|join(',') }}" draggable="true">
+      <div class="kanban-card priority-{{ task.priority }}" data-task-id="{{ task.id }}" data-priority="{{ task.priority }}" data-assignee-ids="{{ task.assignee_list|map(attribute='id')|join(',') }}" data-assignee-name="{{ (task.assignees[0].first_name or task.assignees[0].email) if task.assignees else (task.assigned_to.first_name or task.assigned_to.email if task.assigned_to else 'Sin asignar') }}" draggable="true">
         <div class="card-title">
           <a href="{{ url_for('main.task_detail', task_id=task.id) }}">{{ task.title }}</a>
         </div>
@@ -402,11 +480,11 @@
   <div class="kanban-column" data-status="COMPLETED">
     <div class="column-header completed">
       <span><i class="fa-solid fa-check-circle me-2"></i>Completado</span>
-      <span class="column-count">{{ tasks_by_status.COMPLETED|length }}</span>
+      <span class="column-count" id="cnt-COMPLETED"><span class="num-txt">{{ tasks_by_status.COMPLETED|length }}</span>{% if wip_limits['COMPLETED'] %}<span class="wip-lim">/{{ wip_limits['COMPLETED'] }}</span>{% endif %}</span>
     </div>
     <div class="column-tasks" data-status="COMPLETED">
       {% for task in tasks_by_status.COMPLETED %}
-      <div class="kanban-card priority-{{ task.priority }}" data-task-id="{{ task.id }}" data-assignee-ids="{{ task.assignee_list|map(attribute='id')|join(',') }}" draggable="true">
+      <div class="kanban-card priority-{{ task.priority }}" data-task-id="{{ task.id }}" data-priority="{{ task.priority }}" data-assignee-ids="{{ task.assignee_list|map(attribute='id')|join(',') }}" data-assignee-name="{{ (task.assignees[0].first_name or task.assignees[0].email) if task.assignees else (task.assigned_to.first_name or task.assigned_to.email if task.assigned_to else 'Sin asignar') }}" draggable="true">
         <div class="card-title">
           <a href="{{ url_for('main.task_detail', task_id=task.id) }}">{{ task.title }}</a>
         </div>
@@ -437,6 +515,39 @@
     </div>
   </div>
 </div>
+
+<!-- WIP Limits Modal -->
+{% if current_user.is_internal and current_user.role and current_user.role.name in ['PMP', 'Admin'] %}
+<div class="modal fade" id="wipModal" tabindex="-1" aria-labelledby="wipModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="wipModalLabel"><i class="fa-solid fa-sliders me-2"></i>Límites WIP por columna</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted small mb-3">Define el máximo de tareas permitidas por columna. El contador se vuelve amarillo al 80% y rojo al superar el límite. Deja en blanco para sin límite.</p>
+        <div class="row g-3">
+          {% for st, label in [('BACKLOG','Backlog'),('IN_PROGRESS','En Progreso'),('IN_REVIEW','En Revisión'),('COMPLETED','Completado')] %}
+          <div class="col-6">
+            <label class="form-label small fw-semibold">{{ label }}</label>
+            <input type="number" class="form-control form-control-sm wip-input" data-status="{{ st }}"
+                   value="{{ wip_limits[st] or '' }}" min="1" max="999" placeholder="Sin límite">
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+        <button type="button" class="btn btn-primary btn-sm" onclick="saveWipLimits()">
+          <i class="fa-solid fa-save me-1"></i>Guardar
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
 {% endblock %}
 
 {% block scripts %}
@@ -444,8 +555,101 @@
 <script>
 const projectId = {{ project.id }};
 const currentUserId = {{ current_user.id if current_user.is_authenticated else 'null' }};
-const currentUserRole = {{ ('"' + current_user.role.name + '"') if (current_user.is_authenticated and current_user.role) else 'null' }};
+const currentUserRole = {{ (current_user.role.name if (current_user.is_authenticated and current_user.role) else None) | tojson }};
 const isParticipantRole = currentUserRole === 'Participante';
+
+// WIP limits (from server, mutable via modal)
+const wipLimits = {{ wip_limits | tojson }};
+
+// ── Priority filter ───────────────────────────────────────────────────────────
+let activePriority = 'ALL';
+function filterByPriority(btn) {
+  activePriority = btn.dataset.p;
+  document.querySelectorAll('.prio-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  applyCardFilters();
+}
+
+function applyCardFilters() {
+  document.querySelectorAll('.kanban-card').forEach(card => {
+    const ok = activePriority === 'ALL' || card.dataset.priority === activePriority;
+    card.classList.toggle('filtered-out', !ok);
+  });
+  updateColumnCounts();
+}
+
+// ── Swimlanes ─────────────────────────────────────────────────────────────────
+let swimlaneActive = true;
+function toggleSwimlane() {
+  swimlaneActive = !swimlaneActive;
+  const toggleBtn = document.getElementById('swimlaneToggleBtn');
+  toggleBtn.classList.toggle('active', swimlaneActive);
+  toggleBtn.setAttribute('aria-pressed', swimlaneActive ? 'true' : 'false');
+  swimlaneActive ? buildSwimlanes() : destroySwimlanes();
+}
+
+function buildSwimlanes() {
+  document.querySelectorAll('.column-tasks').forEach(col => {
+    const cards = Array.from(col.querySelectorAll('.kanban-card'));
+    const groups = {}, order = [];
+    cards.forEach(c => {
+      const name = c.dataset.assigneeName || 'Sin asignar';
+      if (!groups[name]) { groups[name] = []; order.push(name); }
+      groups[name].push(c);
+    });
+    cards.forEach(c => col.removeChild(c));
+    order.forEach(name => {
+      const hdr = document.createElement('div');
+      hdr.className = 'swimlane-hdr';
+      hdr.dataset.swimlane = name;
+      const av = document.createElement('span');
+      av.className = 'sw-av';
+      av.textContent = name[0].toUpperCase();
+      const badge = document.createElement('span');
+      badge.className = 'badge bg-secondary ms-1 fw-normal';
+      badge.textContent = groups[name].length;
+      hdr.appendChild(av);
+      hdr.appendChild(document.createTextNode(name + ' '));
+      hdr.appendChild(badge);
+      col.appendChild(hdr);
+      groups[name].forEach(c => col.appendChild(c));
+    });
+  });
+}
+
+function destroySwimlanes() {
+  document.querySelectorAll('.swimlane-hdr').forEach(h => h.remove());
+}
+
+// ── WIP limits ────────────────────────────────────────────────────────────────
+function saveWipLimits() {
+  const limits = {};
+  document.querySelectorAll('.wip-input').forEach(inp => {
+    limits[inp.dataset.status] = inp.value ? parseInt(inp.value, 10) : null;
+  });
+  fetch(`/api/projects/${projectId}/wip-limits`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ wip_limits: limits })
+  })
+  .then(r => { if (!r.ok) throw new Error(); return r.json(); })
+  .then(() => {
+    Object.assign(wipLimits, limits);
+    // Refresh wip-lim spans in headers
+    ['BACKLOG','IN_PROGRESS','IN_REVIEW','COMPLETED'].forEach(st => {
+      const cnt = document.getElementById(`cnt-${st}`);
+      if (!cnt) return;
+      let lim = cnt.querySelector('.wip-lim');
+      if (wipLimits[st]) {
+        if (!lim) { lim = document.createElement('span'); lim.className = 'wip-lim'; cnt.appendChild(lim); }
+        lim.textContent = `/${wipLimits[st]}`;
+      } else if (lim) { lim.remove(); }
+    });
+    updateColumnCounts();
+    bootstrap.Modal.getInstance(document.getElementById('wipModal')).hide();
+  })
+  .catch(() => alert('Error al guardar límites WIP'));
+}
 
 function canCurrentUserMoveKanbanCard(card) {
   if (currentUserRole === 'PMP' || currentUserRole === 'Admin') return true;
@@ -531,8 +735,18 @@ function updateTaskStatus(taskId, status) {
 function updateColumnCounts() {
   document.querySelectorAll('.kanban-column').forEach(col => {
     const status = col.dataset.status;
-    const count = col.querySelectorAll('.kanban-card').length;
-    col.querySelector('.column-count').textContent = count;
+    const total = col.querySelectorAll('.kanban-card').length;
+    const cntEl = col.querySelector('.column-count');
+    if (!cntEl) return;
+    const numTxt = cntEl.querySelector('.num-txt');
+    if (numTxt) numTxt.textContent = total;
+    // WIP visual state
+    const limit = wipLimits[status];
+    cntEl.classList.remove('wip-near', 'wip-over');
+    if (limit) {
+      if (total > limit) cntEl.classList.add('wip-over');
+      else if (total >= Math.ceil(limit * 0.8)) cntEl.classList.add('wip-near');
+    }
   });
 }
 
@@ -565,5 +779,9 @@ window.toggleView = function(view) {
     window.location.href = `/project/${projectId}/gantt`;
   }
 };
+
+// Default to grouped swimlanes on first render.
+buildSwimlanes();
+updateColumnCounts();
 </script>
 {% endblock %}

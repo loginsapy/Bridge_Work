@@ -26,7 +26,7 @@
       <a href="{{ url_for('main.projects') }}" class="btn btn-primary">Ir a Proyectos</a>
       <a href="{{ url_for('main.tasks') }}" class="btn btn-outline-secondary">Ir a Tareas</a>
       {% if current_user.is_authenticated and current_user.role and current_user.role.name in ['Admin','PMP'] and canonical_entity %}
-      <a href="{{ url_for('main.admin_audit') }}?entity={{ canonical_entity }}&id={{ entity_id }}" class="btn btn-outline-dark">Ver Auditoría</a>
+      <a href="{{ url_for('main.audit_log', entity_type=canonical_entity, entity_id=entity_id) }}" class="btn btn-outline-dark">Ver Auditoría</a>
       {% endif %}
     </div>
   </div>

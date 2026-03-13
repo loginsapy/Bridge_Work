@@ -81,7 +81,7 @@ def generate_alerts(cutoff_days=None, idempotency_hours=24):
     # Persist last run metadata to SystemSettings for admin visibility
     try:
         from ..models import SystemSettings
-        SystemSettings.set('last_due_reminder_run', datetime.utcnow().isoformat(), category='notifications', value_type='string')
+        SystemSettings.set('last_due_reminder_run', datetime.now().isoformat(), category='notifications', value_type='string')
         SystemSettings.set('last_due_reminder_created', str(len(created)), category='notifications', value_type='number')
         db.session.commit()
     except Exception:

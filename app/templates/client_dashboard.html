@@ -1,0 +1,315 @@
+{% extends 'base.html' %}
+{% block title %}Mi Portal{% endblock %}
+
+{% block head %}
+<style>
+.hover-card { transition: box-shadow 0.18s, transform 0.18s; }
+.hover-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.13) !important; transform: translateY(-2px); }
+.approval-badge { font-size: 11px; padding: 3px 9px; border-radius: 10px; font-weight: 600; }
+.stat-card { border-radius: 12px; border: none; box-shadow: 0 1px 6px rgba(0,0,0,0.08); }
+.stat-card .stat-num { font-size: 2rem; font-weight: 700; line-height: 1; }
+.task-row-overdue td { background: #fff5f5; }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Welcome header -->
+<div class="d-flex align-items-center justify-content-between mb-4">
+  <div>
+    <h4 class="mb-1 fw-bold">
+      Hola, {{ current_user.first_name or current_user.email.split('@')[0] }}
+    </h4>
+    <p class="text-muted mb-0 small">Tu portal de proyectos — solo ves información relacionada contigo</p>
+  </div>
+  <span class="badge bg-secondary px-3 py-2 rounded-pill">
+    <i class="fa-solid fa-user me-1"></i>Cliente
+  </span>
+</div>
+
+<!-- KPI cards -->
+<div class="row g-3 mb-4">
+  <div class="col-6 col-lg-3">
+    <div class="card stat-card p-3 text-center">
+      <div class="stat-num text-primary">{{ projects|length }}</div>
+      <div class="small text-muted mt-1"><i class="fa-solid fa-folder me-1"></i>Proyectos</div>
+    </div>
+  </div>
+  <div class="col-6 col-lg-3">
+    <div class="card stat-card p-3 text-center">
+      <div class="stat-num {% if pending_approval %}text-warning{% else %}text-muted{% endif %}">{{ pending_approval|length }}</div>
+      <div class="small text-muted mt-1"><i class="fa-solid fa-clock me-1"></i>Pendientes aprobación</div>
+    </div>
+  </div>
+  <div class="col-6 col-lg-3">
+    <div class="card stat-card p-3 text-center">
+      <div class="stat-num {% if overdue_tasks %}text-danger{% else %}text-muted{% endif %}">{{ overdue_tasks|length }}</div>
+      <div class="small text-muted mt-1"><i class="fa-solid fa-triangle-exclamation me-1"></i>Atrasadas</div>
+    </div>
+  </div>
+  <div class="col-6 col-lg-3">
+    <div class="card stat-card p-3 text-center">
+      <div class="stat-num text-success">{{ assigned_tasks|selectattr('status','eq','COMPLETED')|list|length }}</div>
+      <div class="small text-muted mt-1"><i class="fa-solid fa-check-circle me-1"></i>Completadas</div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Pending approvals ─────────────────────────────────────────────── -->
+{% if pending_approval %}
+<div class="card mb-4 border-warning border-opacity-50">
+  <div class="card-header bg-warning bg-opacity-10 d-flex align-items-center gap-2 border-warning border-opacity-25">
+    <i class="fa-solid fa-clock-rotate-left text-warning"></i>
+    <span class="fw-semibold">Tareas pendientes de tu aprobación</span>
+    <span class="badge bg-warning text-dark ms-1">{{ pending_approval|length }}</span>
+  </div>
+  <div class="list-group list-group-flush">
+    {% for task in pending_approval %}
+    <div class="list-group-item d-flex align-items-center justify-content-between py-3" id="approval-row-{{ task.id }}">
+      <div>
+        <a href="{{ url_for('main.task_detail', task_id=task.id) }}" class="fw-semibold text-decoration-none text-dark">{{ task.title }}</a>
+        <div class="small text-muted mt-1">
+          <i class="fa-solid fa-folder me-1"></i>{{ task.project.name }}
+          {% if task.due_date %}
+          <span class="ms-2 {% if task.id in overdue_ids %}text-danger{% endif %}">
+            <i class="fa-regular fa-calendar me-1"></i>{{ task.due_date|fecha_es }}
+          </span>
+          {% endif %}
+        </div>
+      </div>
+      <div class="d-flex gap-2 ms-3">
+        <button class="btn btn-success btn-sm" onclick="submitApproval({{ task.id }}, 'APPROVED')">
+          <i class="fa-solid fa-check me-1"></i><span class="d-none d-sm-inline">Aprobar</span>
+        </button>
+        <button class="btn btn-outline-danger btn-sm" onclick="submitApproval({{ task.id }}, 'REJECTED')">
+          <i class="fa-solid fa-xmark me-1"></i><span class="d-none d-sm-inline">Rechazar</span>
+        </button>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+<!-- ── My projects ───────────────────────────────────────────────────── -->
+<div class="card mb-4">
+  <div class="card-header fw-semibold">
+    <i class="fa-solid fa-folder me-2 text-primary"></i>Mis Proyectos
+  </div>
+  <div class="card-body">
+    {% if projects %}
+    <div class="row g-3">
+      {% for proj in projects %}
+      {% set m = project_metrics[proj.id] %}
+      <div class="col-md-6 col-lg-4">
+        <a href="{{ url_for('main.project_kanban', project_id=proj.id) }}" class="text-decoration-none">
+          <div class="card h-100 border hover-card">
+            <div class="card-body">
+              <div class="d-flex align-items-start justify-content-between mb-2">
+                <h6 class="fw-semibold mb-0 text-dark lh-sm">{{ proj.name }}</h6>
+                <span class="badge ms-2 flex-shrink-0
+                  {% if proj.status == 'ACTIVE' %}bg-success
+                  {% elif proj.status == 'PLANNING' %}bg-info
+                  {% elif proj.status == 'ON_HOLD' %}bg-warning text-dark
+                  {% elif proj.status == 'COMPLETED' %}bg-secondary
+                  {% else %}bg-light text-dark{% endif %}">
+                  {{ proj.status|replace('_',' ')|title }}
+                </span>
+              </div>
+              {% if proj.description %}
+              <p class="small text-muted mb-2" style="overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;">{{ proj.description }}</p>
+              {% endif %}
+              <div class="mt-3">
+                <div class="d-flex justify-content-between small mb-1">
+                  <span class="text-muted">Progreso</span>
+                  <span class="fw-semibold">{{ m.pct }}%</span>
+                </div>
+                <div class="progress" style="height:6px;">
+                  <div class="progress-bar bg-success" style="width:{{ m.pct }}%" role="progressbar"></div>
+                </div>
+                <div class="d-flex justify-content-between small text-muted mt-1">
+                  <span>{{ m.completed }}/{{ m.total }} tareas</span>
+                  {% if proj.end_date %}
+                  <span><i class="fa-regular fa-calendar me-1"></i>{{ proj.end_date|fecha_es }}</span>
+                  {% endif %}
+                </div>
+              </div>
+            </div>
+          </div>
+        </a>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="text-center text-muted py-5">
+      <i class="fa-solid fa-folder-open fa-2x mb-3 d-block opacity-40"></i>
+      No tienes proyectos asignados aún. Contacta a tu gestor de proyecto.
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- ── All my tasks ──────────────────────────────────────────────────── -->
+{% if assigned_tasks %}
+<div class="card">
+  <div class="card-header d-flex align-items-center justify-content-between">
+    <span class="fw-semibold"><i class="fa-solid fa-list-check me-2 text-primary"></i>Todas mis tareas</span>
+    <span class="badge bg-secondary rounded-pill">{{ assigned_tasks|length }}</span>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-sm table-hover mb-0 align-middle">
+      <thead class="table-light">
+        <tr>
+          <th class="ps-3">Tarea</th>
+          <th>Proyecto</th>
+          <th>Estado</th>
+          <th>Vencimiento</th>
+          <th>Aprobación</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for task in assigned_tasks %}
+        {% set is_overdue = task.id in overdue_ids %}
+        <tr class="{% if is_overdue %}task-row-overdue{% endif %}" id="task-row-{{ task.id }}">
+          <td class="ps-3">
+            <a href="{{ url_for('main.task_detail', task_id=task.id) }}" class="text-decoration-none fw-semibold text-dark">{{ task.title }}</a>
+          </td>
+          <td><span class="text-muted small">{{ task.project.name }}</span></td>
+          <td>
+            <span class="badge
+              {% if task.status=='COMPLETED' %}bg-success
+              {% elif task.status=='IN_REVIEW' %}bg-purple
+              {% elif task.status=='IN_PROGRESS' %}bg-primary
+              {% else %}bg-secondary{% endif %}">
+              {% if task.status=='COMPLETED' %}Completado
+              {% elif task.status=='IN_REVIEW' %}En Revisión
+              {% elif task.status=='IN_PROGRESS' %}En Progreso
+              {% else %}Backlog{% endif %}
+            </span>
+          </td>
+          <td>
+            {% if task.due_date %}
+            <span class="small {% if is_overdue %}text-danger fw-semibold{% else %}text-muted{% endif %}">
+              {% if is_overdue %}<i class="fa-solid fa-circle-exclamation me-1"></i>{% endif %}
+              {{ task.due_date|fecha_es }}
+            </span>
+            {% else %}
+            <span class="text-muted small">—</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if task.requires_approval %}
+              {% if task.approval_status == 'PENDING' %}
+              <span class="badge bg-warning text-dark approval-badge"><i class="fa-solid fa-clock me-1"></i>Pendiente</span>
+              {% elif task.approval_status == 'APPROVED' %}
+              <span class="badge bg-success approval-badge"><i class="fa-solid fa-check me-1"></i>Aprobada</span>
+              {% elif task.approval_status == 'REJECTED' %}
+              <span class="badge bg-danger approval-badge"><i class="fa-solid fa-xmark me-1"></i>Rechazada</span>
+              {% else %}
+              <span class="text-muted small">—</span>
+              {% endif %}
+            {% else %}
+            <span class="text-muted small">—</span>
+            {% endif %}
+          </td>
+          <td class="text-end pe-3">
+            {% if task.requires_approval and task.approval_status == 'PENDING' %}
+            <div class="d-flex gap-1 justify-content-end">
+              <button class="btn btn-success btn-sm px-2" onclick="submitApproval({{ task.id }}, 'APPROVED')" title="Aprobar">
+                <i class="fa-solid fa-check"></i>
+              </button>
+              <button class="btn btn-outline-danger btn-sm px-2" onclick="submitApproval({{ task.id }}, 'REJECTED')" title="Rechazar">
+                <i class="fa-solid fa-xmark"></i>
+              </button>
+            </div>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+<!-- Rejection notes modal -->
+<div class="modal fade" id="rejectModal" tabindex="-1">
+  <div class="modal-dialog modal-sm">
+    <div class="modal-content">
+      <div class="modal-header py-2">
+        <h6 class="modal-title"><i class="fa-solid fa-xmark text-danger me-2"></i>Rechazar tarea</h6>
+        <button type="button" class="btn-close btn-sm" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <label class="form-label small">Motivo (opcional)</label>
+        <textarea id="rejectNotes" class="form-control form-control-sm" rows="3" placeholder="Indica el motivo del rechazo..."></textarea>
+      </div>
+      <div class="modal-footer py-2">
+        <button class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+        <button class="btn btn-danger btn-sm" id="confirmRejectBtn">Confirmar rechazo</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+let _pendingRejectId = null;
+
+function submitApproval(taskId, status) {
+  if (status === 'REJECTED') {
+    _pendingRejectId = taskId;
+    document.getElementById('rejectNotes').value = '';
+    new bootstrap.Modal(document.getElementById('rejectModal')).show();
+    return;
+  }
+  _doApproval(taskId, status, '');
+}
+
+document.getElementById('confirmRejectBtn').addEventListener('click', () => {
+  const notes = document.getElementById('rejectNotes').value.trim();
+  bootstrap.Modal.getInstance(document.getElementById('rejectModal')).hide();
+  _doApproval(_pendingRejectId, 'REJECTED', notes);
+});
+
+function _doApproval(taskId, status, notes) {
+  const body = { approval_status: status };
+  if (notes) body.approval_notes = notes;
+
+  fetch(`/api/tasks/${taskId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  })
+  .then(r => { if (!r.ok) throw new Error(); return r.json(); })
+  .then(() => {
+    // Update approval badge inline without page reload
+    const row = document.getElementById(`task-row-${taskId}`);
+    const approvalRow = document.getElementById(`approval-row-${taskId}`);
+    if (approvalRow) approvalRow.remove();
+    if (row) {
+      const badgeCell = row.cells[4];
+      const actionCell = row.cells[5];
+      if (status === 'APPROVED') {
+        badgeCell.innerHTML = '<span class="badge bg-success approval-badge"><i class="fa-solid fa-check me-1"></i>Aprobada</span>';
+      } else {
+        badgeCell.innerHTML = '<span class="badge bg-danger approval-badge"><i class="fa-solid fa-xmark me-1"></i>Rechazada</span>';
+      }
+      if (actionCell) actionCell.innerHTML = '';
+    }
+    // Update KPI counter
+    const pendingEl = document.querySelector('.stat-num.text-warning');
+    if (pendingEl) {
+      const cur = parseInt(pendingEl.textContent, 10) - 1;
+      pendingEl.textContent = cur;
+      if (cur === 0) pendingEl.classList.replace('text-warning', 'text-muted');
+    }
+  })
+  .catch(() => {
+    alert('Error al procesar la aprobación. Inténtalo de nuevo.');
+  });
+}
+</script>
+{% endblock %}

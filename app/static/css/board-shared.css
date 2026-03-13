@@ -185,6 +185,31 @@
   .tasks-toolbar { flex-wrap:wrap; height:auto; padding:10px; }
 }
 
+/* Shared toolbar button styles (used in board, kanban, gantt) */
+.toolbar-btn {
+  padding: 8px 12px;
+  border: 1px solid var(--monday-border, #e6e8eb);
+  background: white;
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--monday-dark, #111827);
+  transition: all 0.15s;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.toolbar-btn:hover {
+  background: var(--monday-light-grey, #f5f6f8);
+  border-color: var(--monday-blue, #0073ea);
+  color: var(--monday-blue, #0073ea);
+}
+.toolbar-btn.active {
+  background: var(--monday-blue, #0073ea);
+  color: white;
+  border-color: var(--monday-blue, #0073ea);
+}
+
 /* Client building icon (shared) */
 .client-icon { width:20px; height:20px; display:inline-flex; align-items:center; justify-content:center; border-radius:4px; background:#f1f5f9; color:#374151; font-size:10px; }
 .client-icon i { font-size:12px; }

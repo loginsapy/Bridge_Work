@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta
 from sqlalchemy import Enum as SAEnum
+from sqlalchemy.orm import validates
 from flask_login import UserMixin
 from werkzeug.security import generate_password_hash, check_password_hash
 from . import db
@@ -175,7 +176,7 @@ class Task(db.Model):
             return 0
         
         # Use completed_at if task is completed, otherwise use today's date
-        reference_date = self.completed_at if self.completed_at else datetime.utcnow()
+        reference_date = self.completed_at if self.completed_at else datetime.now()
         days = (reference_date.date() - self.due_date.date()).days
         return max(0, days)  # Don't show negative delays
 
@@ -392,39 +393,53 @@ class Task(db.Model):
     
     def can_advance_status(self, new_status):
         """Check if task can advance to a new status.
-        
-        Reglas:
-        - Una tarea con predecesoras incompletas NO puede avanzar a ningún estado
-          (debe permanecer en BACKLOG hasta que sus predecesoras se completen)
-        - Una tarea padre NO puede completarse si tiene subtareas incompletas
+
+        Reglas del modelo árbol:
+        - Para avanzar a estados intermedios (IN_PROGRESS, IN_REVIEW): verificar predecesoras incompletas
+        - Para completar (COMPLETED/DONE):
+          * NO se verifica predecesoras propias (el hijo puede completarse antes que el padre)
+          * SE verifica sucesoras incompletas (si tengo sucesoras = soy padre en el árbol, debo esperar)
+          * SE verifica subtareas jerárquicas incompletas (parent_task_id)
         - Siempre se puede retroceder (mover a BACKLOG)
-        
+
         Returns:
             tuple: (can_advance: bool, error_message: str or None, blockers: dict or None)
         """
         STATUS_ORDER = {'BACKLOG': 0, 'IN_PROGRESS': 1, 'IN_REVIEW': 2, 'COMPLETED': 3, 'DONE': 3}
-        
+
         current_order = STATUS_ORDER.get(self.status, 0)
         new_order = STATUS_ORDER.get(new_status, 0)
-        
+
         # Si está retrocediendo (ej: de IN_PROGRESS a BACKLOG), siempre permitir
         if new_order <= current_order:
             return (True, None, None)
-        
-        # Para cualquier avance, verificar predecesoras incompletas
-        incomplete_preds = self.incomplete_predecessors()
-        if incomplete_preds:
-            pred_titles = ', '.join([p.title for p in incomplete_preds[:3]])
-            if len(incomplete_preds) > 3:
-                pred_titles += f' (+{len(incomplete_preds) - 3} más)'
-            return (
-                False,
-                f'No se puede avanzar la tarea: tiene predecesoras incompletas ({pred_titles})',
-                {'incomplete_predecessors': [{'id': p.id, 'title': p.title, 'status': p.status} for p in incomplete_preds]}
-            )
-        
-        # Si intenta completar, también verificar subtareas
+
+        # Para avanzar a estados NO-completados, verificar predecesoras incompletas
+        if new_status not in ('COMPLETED', 'DONE'):
+            incomplete_preds = self.incomplete_predecessors()
+            if incomplete_preds:
+                pred_titles = ', '.join([p.title for p in incomplete_preds[:3]])
+                if len(incomplete_preds) > 3:
+                    pred_titles += f' (+{len(incomplete_preds) - 3} más)'
+                return (
+                    False,
+                    f'No se puede avanzar la tarea: tiene predecesoras incompletas ({pred_titles})',
+                    {'incomplete_predecessors': [{'id': p.id, 'title': p.title, 'status': p.status} for p in incomplete_preds]}
+                )
+
+        # Si intenta completar, verificar sucesoras incompletas (soy padre en árbol de dependencias)
         if new_status in ('COMPLETED', 'DONE'):
+            incomplete_successors = [s for s in getattr(self, 'successors', []) or [] if s.status != 'COMPLETED']
+            if incomplete_successors:
+                child_titles = ', '.join([c.title for c in incomplete_successors[:3]])
+                if len(incomplete_successors) > 3:
+                    child_titles += f' (+{len(incomplete_successors) - 3} más)'
+                return (
+                    False,
+                    f'No se puede completar: tiene sucesoras incompletas ({child_titles})',
+                    {'incomplete_children': [{'id': c.id, 'title': c.title, 'status': c.status} for c in incomplete_successors]}
+                )
+            # También verificar subtareas jerárquicas (parent_task_id)
             incomplete_children = self.all_incomplete_children()
             if incomplete_children:
                 child_titles = ', '.join([c.title for c in incomplete_children[:3]])
@@ -435,9 +450,19 @@ class Task(db.Model):
                     f'No se puede completar: tiene subtareas incompletas ({child_titles})',
                     {'incomplete_children': [{'id': c.id, 'title': c.title, 'status': c.status} for c in incomplete_children]}
                 )
-        
+
         return (True, None, None)
 
+
+    _VALID_APPROVAL_STATUSES = {'PENDING', 'APPROVED', 'REJECTED'}
+
+    @validates('approval_status')
+    def validate_approval_status(self, key, value):
+        if value is not None and value not in self._VALID_APPROVAL_STATUSES:
+            raise ValueError(
+                f"approval_status '{value}' inválido. Valores permitidos: {self._VALID_APPROVAL_STATUSES}"
+            )
+        return value
 
     def validate_predecessor_ids(self, predecessor_ids):
         """Validate a list of predecessor IDs before assignment.
@@ -538,6 +563,7 @@ class AlertLog(db.Model):
 
 class TaskAttachment(db.Model):
     __tablename__ = 'task_attachments'
+    __table_args__ = {'sqlite_autoincrement': True}
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     task_id = db.Column(db.Integer, db.ForeignKey('tasks.id'), nullable=False)
     filename = db.Column(db.String(255), nullable=False)  # Original filename
@@ -553,6 +579,7 @@ class TaskAttachment(db.Model):
 
 class AuditLog(db.Model):
     __tablename__ = 'audit_logs'
+    __table_args__ = {'sqlite_autoincrement': True}
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     entity_type = db.Column(db.String(64), nullable=False)  # 'Project', 'Task', etc.
     entity_id = db.Column(db.Integer, nullable=False)

@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -n \"</div>.*tab-content\\\\|^</div>$\" c:/Users/david/Proyectos/BridgeWork-Recuperar/app/templates/admin_settings.html)",
+      "Bash(python -c \":*)",
+      "Bash(python -c \"import ast; ast.parse\\(open\\(''app/__init__.py'', encoding=''utf-8''\\).read\\(\\)\\); print\\(''OK''\\)\")",
+      "Bash(venv/Scripts/pip install:*)",
+      "Bash(venv/Scripts/pytest tests/test_wip_limits.py tests/test_client_dashboard.py tests/test_webhooks.py -v --tb=short)",
+      "Bash(venv/Scripts/pytest tests/test_wip_limits.py::test_set_wip_limits tests/test_client_dashboard.py::test_client_can_access_dashboard tests/test_webhooks.py::test_create_webhook -v --tb=long)",
+      "Bash(venv/Scripts/pytest tests/test_client_dashboard.py::test_client_cannot_approve_other_client_task tests/test_client_dashboard.py::test_client_cannot_edit_title -v --tb=short)",
+      "Bash(venv/Scripts/pytest tests/test_webhooks.py::test_delete_webhook -v --tb=long)",
+      "Bash(venv/Scripts/pytest tests/test_wip_limits.py tests/test_client_dashboard.py tests/test_webhooks.py -v)",
+      "Bash(python -m pytest tests/test_wip_limits.py tests/test_client_dashboard.py tests/test_webhooks.py -q)",
+      "Bash(python -m pytest tests/test_wip_limits.py -q)",
+      "Bash(pip install:*)",
+      "Bash(python -m pytest tests/test_wip_limits.py tests/test_client_dashboard.py tests/test_webhooks.py)",
+      "Bash(python -m pytest tests/test_wip_limits.py tests/test_client_dashboard.py tests/test_webhooks.py -v)",
+      "Bash(taskkill /F /IM python.exe)",
+      "Bash(taskkill /F /IM flask.exe)"
+    ]
+  }
+}

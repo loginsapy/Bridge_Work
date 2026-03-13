@@ -1,6 +1,6 @@
 from flask import jsonify, request, abort, current_app
 from . import api_bp
-from .. import db
+from .. import db, limiter
 from ..models import Project, Task, TimeEntry, User, TaskAttachment
 from ..models import AuditLog
 from sqlalchemy.exc import SQLAlchemyError
@@ -70,7 +70,10 @@ def parse_date(val):
     if val is None:
         return None
     if isinstance(val, str):
-        return date.fromisoformat(val)
+        try:
+            return date.fromisoformat(val)
+        except ValueError:
+            raise ValueError(f'Formato de fecha inválido: {val!r}. Use YYYY-MM-DD.')
     return val
 
 
@@ -78,7 +81,10 @@ def parse_datetime(val):
     if val is None:
         return None
     if isinstance(val, str):
-        return datetime.fromisoformat(val)
+        try:
+            return datetime.fromisoformat(val)
+        except ValueError:
+            raise ValueError(f'Formato de fecha/hora inválido: {val!r}. Use ISO 8601.')
     return val
 
 
@@ -114,6 +120,7 @@ def get_project(project_id):
 
 @api_bp.route("/projects", methods=["POST"])
 @internal_required
+@limiter.limit("30/minute")
 def create_project():
     from flask_login import current_user
     # Prevent participants from creating projects via API
@@ -143,7 +150,8 @@ def create_project():
         db.session.commit()
     except SQLAlchemyError as e:
         db.session.rollback()
-        abort(500, description=str(e))
+        current_app.logger.exception('Error creating project: %s', e)
+        abort(500, description='Error interno del servidor')
     return jsonify(project_to_dict(p)), 201
 
 
@@ -164,7 +172,8 @@ def update_project(project_id):
         db.session.commit()
     except SQLAlchemyError as e:
         db.session.rollback()
-        abort(500, description=str(e))
+        current_app.logger.exception('Error updating project %s: %s', project_id, e)
+        abort(500, description='Error interno del servidor')
     return jsonify(project_to_dict(p))
 
 
@@ -177,7 +186,7 @@ def delete_project(project_id):
     try:
         for t in tasks:
             # delete time entries
-            TimeEntry.query.filter(TimeEntry.task_id == t.id).delete(synchronize_session=False)
+            TimeEntry.query.filter(TimeEntry.task_id == t.id).delete(synchronize_session='evaluate')
             # delete attachments records and try to remove files
             atts = TaskAttachment.query.filter(TaskAttachment.task_id == t.id).all()
             for a in atts:
@@ -187,7 +196,7 @@ def delete_project(project_id):
                         os.remove(os.path.join(task_folder, a.stored_filename))
                 except Exception:
                     current_app.logger.exception('Failed to remove attachment file for %s', a.id)
-            TaskAttachment.query.filter(TaskAttachment.task_id == t.id).delete(synchronize_session=False)
+            TaskAttachment.query.filter(TaskAttachment.task_id == t.id).delete(synchronize_session='evaluate')
 
             # audit task deletion
             audit = AuditLog(
@@ -205,8 +214,57 @@ def delete_project(project_id):
         db.session.commit()
     except SQLAlchemyError as e:
         db.session.rollback()
-        abort(500, description=str(e))
+        current_app.logger.exception('Error deleting project %s: %s', project_id, e)
+        abort(500, description='Error interno del servidor')
     return jsonify({"deleted": project_id}), 200
+
+
+@api_bp.route("/projects/<int:project_id>/wip-limits", methods=["PATCH"])
+@internal_required
+def update_wip_limits(project_id):
+    """Update WIP limits for a project's Kanban columns (PMP/Admin only)."""
+    if not (current_user.role and current_user.role.name in ('PMP', 'Admin')):
+        abort(403)
+    project = Project.query.get_or_404(project_id)
+    data = request.get_json(silent=True) or {}
+    limits = data.get('wip_limits', {})
+    # Validate: values must be positive int or null
+    clean = {}
+    for col in ('BACKLOG', 'IN_PROGRESS', 'IN_REVIEW', 'COMPLETED'):
+        v = limits.get(col)
+        if v is not None:
+            try:
+                v = int(v)
+                if v < 1:
+                    return jsonify({'error': f'WIP limit for {col} must be >= 1'}), 400
+            except (ValueError, TypeError):
+                return jsonify({'error': f'Invalid WIP limit for {col}'}), 400
+        clean[col] = v
+    meta = project.metadata_json or {}
+    old_limits = (meta.get('wip_limits') or {}).copy() if isinstance(meta.get('wip_limits'), dict) else {}
+    meta['wip_limits'] = clean
+    project.metadata_json = meta
+    try:
+        if old_limits != clean:
+            audit = AuditLog(
+                user_id=getattr(current_user, 'id', None),
+                action='UPDATE',
+                entity_type='Project',
+                entity_id=project.id,
+                changes={
+                    'wip_limits': {
+                        'old': old_limits,
+                        'new': clean,
+                    }
+                }
+            )
+            db.session.add(audit)
+        db.session.commit()
+    except SQLAlchemyError:
+        db.session.rollback()
+        current_app.logger.exception('Failed to save WIP limits for project %s', project_id)
+        abort(500, description='Error interno del servidor')
+    return jsonify({'wip_limits': clean})
 
 
 # Tasks endpoints
@@ -300,6 +358,7 @@ def get_task(task_id):
 
 @api_bp.route("/tasks", methods=["POST"])
 @internal_required
+@limiter.limit("60/minute")
 def create_task():
     from flask_login import current_user
     # Prevent participants from creating tasks via API
@@ -343,20 +402,70 @@ def create_task():
     try:
         db.session.add(t)
         db.session.flush()  # Get task ID
-        
+
         # Assign position at the end of the list
         max_position = db.session.query(db.func.max(Task.position)).filter(Task.project_id == t.project_id).scalar()
         t.position = (max_position + 1) if max_position is not None else 0
-        
+
+        # Validate and assign predecessors (with cycle detection)
+        if validated.get('predecessors'):
+            predecessor_ids = [int(pid) for pid in validated.get('predecessors')]
+            try:
+                t.validate_predecessor_ids(predecessor_ids)
+            except ValueError as e:
+                db.session.rollback()
+                return jsonify({'error': str(e)}), 400
+            t.predecessors = Task.query.filter(Task.id.in_(predecessor_ids)).all()
+
         db.session.commit()
         # If API provided multiple assignees, assign them after creation
         if validated.get('assignees'):
             users = User.query.filter(User.id.in_(validated.get('assignees'))).all()
             t.assignees = users
             db.session.commit()
+
+        # Audit CREATE after task is fully persisted (including assignees).
+        try:
+            audit = AuditLog(
+                user_id=getattr(current_user, 'id', None),
+                action='CREATE',
+                entity_type='Task',
+                entity_id=t.id,
+                changes={
+                    'title': t.title,
+                    'status': t.status,
+                    'priority': t.priority,
+                    'project_id': t.project_id,
+                    'assignees': sorted([u.id for u in (t.assignees or [])]),
+                    'start_date': t.start_date.isoformat() if t.start_date else None,
+                    'due_date': t.due_date.isoformat() if t.due_date else None,
+                }
+            )
+            db.session.add(audit)
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+            current_app.logger.exception('Failed to write audit CREATE for task %s', t.id)
     except SQLAlchemyError as e:
         db.session.rollback()
-        abort(500, description=str(e))
+        abort(500, description='Error interno del servidor')
+
+    # Dispatch webhook task.created (non-blocking)
+    try:
+        from app.services import webhook_service
+        project = Project.query.get(t.project_id) if t.project_id else None
+        actor = current_user if getattr(current_user, 'is_authenticated', False) else None
+        webhook_service.dispatch('task.created', {
+            'task_id': t.id,
+            'task_title': t.title,
+            'project_id': t.project_id,
+            'project_name': project.name if project else None,
+            'user_name': actor.name if actor else None,
+            'new_status': t.status,
+        })
+    except Exception:
+        current_app.logger.exception('Error dispatching webhook for created task %s', t.id)
+
     return jsonify(task_to_dict(t)), 201
 
 
@@ -364,12 +473,26 @@ def create_task():
 def update_task(task_id):
     t = Task.query.get_or_404(task_id)
     data = request.get_json() or {}
+
+    def _serialize(value):
+        if isinstance(value, (datetime, date)):
+            return value.isoformat()
+        if isinstance(value, set):
+            return sorted(list(value))
+        return value
+
+    def _field_value(task_obj, field_name):
+        if field_name == 'assignees':
+            return sorted([u.id for u in (task_obj.assignees or [])])
+        if field_name == 'predecessors':
+            return sorted([p.id for p in (task_obj.predecessors or [])])
+        return getattr(task_obj, field_name, None)
     
     # Role-based restrictions: participants and clients may only change 'status' via API
     from flask_login import current_user
     is_pmp_admin = (getattr(current_user, 'is_authenticated', False) and getattr(current_user, 'is_internal', False) and getattr(current_user, 'role', None) and current_user.role.name in ('PMP','Admin'))
     is_participant = (getattr(current_user, 'is_authenticated', False) and getattr(current_user, 'is_internal', False) and getattr(current_user, 'role', None) and current_user.role.name == 'Participante')
-    is_client = (not getattr(current_user, 'is_internal', True)) and (t.project and t.project.client_id == getattr(current_user, 'id', None))
+    is_client = not getattr(current_user, 'is_internal', True)
 
     is_assigned_participant = bool(
         is_participant and (
@@ -381,11 +504,19 @@ def update_task(task_id):
     if is_participant and not is_assigned_participant:
         return jsonify({'error': 'Solo puedes cambiar estado de tareas asignadas a ti.'}), 403
 
-    if is_participant or is_client:
+    if is_participant:
         allowed_keys = {'status'}
         extra = set([k for k in data.keys() if k not in allowed_keys])
         if extra:
             return jsonify({'error': 'No tienes permiso para modificar campos además de status'}), 403
+    elif is_client:
+        # Clients may set approval_status on tasks assigned to them
+        allowed_keys = {'status', 'approval_status', 'approval_notes'}
+        if 'approval_status' in data and t.assigned_client_id != getattr(current_user, 'id', None):
+            return jsonify({'error': 'Solo puedes aprobar/rechazar tareas asignadas a ti'}), 403
+        extra = set([k for k in data.keys() if k not in allowed_keys])
+        if extra:
+            return jsonify({'error': 'No tienes permiso para modificar esos campos'}), 403
 
     # Validate status transition using can_advance_status (normalize legacy values)
     if 'status' in data:
@@ -400,16 +531,37 @@ def update_task(task_id):
 
     # Validar coherencia de fechas antes de actualizar
     if 'start_date' in data or 'due_date' in data:
-        new_start = parse_datetime(data['start_date']) if 'start_date' in data else t.start_date
-        new_due = parse_datetime(data['due_date']) if 'due_date' in data else t.due_date
+        try:
+            new_start = parse_datetime(data['start_date']) if 'start_date' in data else t.start_date
+            new_due = parse_datetime(data['due_date']) if 'due_date' in data else t.due_date
+        except ValueError as e:
+            return jsonify({'error': str(e)}), 400
         is_valid, error_msg = Task.validate_dates(new_start, new_due)
         if not is_valid:
             return jsonify({'error': error_msg}), 400
 
-    # Capture old assignment values to detect changes
+    # Capture old values to detect changes
+    old_status = t.status
     old_assigned_to = t.assigned_to_id
     old_assigned_client = t.assigned_client_id
     old_assignees = set([u.id for u in t.assignees]) if getattr(t, 'assignees', None) else set()
+
+    audit_fields = set(data.keys())
+    # Assignees and predecessors are managed outside the generic field loop.
+    audit_fields.update({'assignees', 'predecessors'} & set(data.keys()))
+    old_values = {k: _serialize(_field_value(t, k)) for k in audit_fields}
+
+    # Handle approval fields
+    if 'approval_status' in data:
+        valid_statuses = {'PENDING', 'APPROVED', 'REJECTED'}
+        if data['approval_status'] not in valid_statuses:
+            return jsonify({'error': f'approval_status must be one of {valid_statuses}'}), 400
+        t.approval_status = data['approval_status']
+        if data['approval_status'] in ('APPROVED', 'REJECTED'):
+            t.approved_by_id = getattr(current_user, 'id', None)
+            t.approved_at = datetime.now()
+        if 'approval_notes' in data:
+            t.approval_notes = data.get('approval_notes', '')
 
     for field in ["project_id", "parent_task_id", "title", "description", "assigned_to_id", "assigned_client_id", "status", "priority", "start_date", "due_date", "is_external_visible", "estimated_hours"]:
         if field in data:
@@ -418,13 +570,28 @@ def update_task(task_id):
                 from flask_login import current_user
                 if not (getattr(current_user, 'is_authenticated', False) and current_user.is_internal and getattr(current_user, 'role', None) and current_user.role.name in ('PMP', 'Admin')):
                     return jsonify({'error': 'No tienes permiso para modificar fechas'}), 403
-                setattr(t, field, parse_datetime(data[field]))
+                try:
+                    setattr(t, field, parse_datetime(data[field]))
+                except ValueError as e:
+                    return jsonify({'error': str(e)}), 400
             else:
                 if field == 'status':
                     # Normalize and set canonical status
                     t.set_status(data[field])
                 else:
                     setattr(t, field, data[field])
+
+    # Handle 'predecessors' (list of task ids) with cycle detection
+    if 'predecessors' in data:
+        try:
+            predecessor_ids = [int(pid) for pid in (data.get('predecessors') or [])]
+        except Exception:
+            return jsonify({'error': 'predecessors must be a list of task ids'}), 400
+        try:
+            t.validate_predecessor_ids(predecessor_ids)
+        except ValueError as e:
+            return jsonify({'error': str(e)}), 400
+        t.predecessors = Task.query.filter(Task.id.in_(predecessor_ids)).all()
 
     # Handle 'assignees' (list of user ids) explicitly
     if 'assignees' in data:
@@ -444,10 +611,30 @@ def update_task(task_id):
             t.assigned_to_id = None
 
     try:
+        # Capture final values and build audit diff before commit.
+        new_values = {k: _serialize(_field_value(t, k)) for k in audit_fields}
+        changes = {}
+        for key in sorted(audit_fields):
+            if old_values.get(key) != new_values.get(key):
+                changes[key] = {
+                    'old': old_values.get(key),
+                    'new': new_values.get(key)
+                }
+
+        if changes:
+            audit = AuditLog(
+                user_id=getattr(current_user, 'id', None),
+                action='UPDATE',
+                entity_type='Task',
+                entity_id=t.id,
+                changes=changes
+            )
+            db.session.add(audit)
+
         db.session.commit()
     except SQLAlchemyError as e:
         db.session.rollback()
-        abort(500, description=str(e))
+        abort(500, description='Error interno del servidor')
 
     # After commit: notify on assignment changes (for API updates)
     try:
@@ -493,6 +680,31 @@ def update_task(task_id):
         # Log and ignore notification errors to keep API update successful
         current_app.logger.exception('Error while sending assignment notifications: %s', e)
 
+    # Dispatch webhooks (non-blocking)
+    try:
+        from app.services import webhook_service
+        project = Project.query.get(t.project_id) if t.project_id else None
+        actor = current_user if getattr(current_user, 'is_authenticated', False) else None
+        webhook_data = {
+            'task_id': t.id,
+            'task_title': t.title,
+            'project_id': t.project_id,
+            'project_name': project.name if project else None,
+            'user_name': actor.name if actor else None,
+        }
+        if 'status' in data and t.status != old_status:
+            webhook_data['old_status'] = old_status
+            webhook_data['new_status'] = t.status
+            if t.status == 'COMPLETED':
+                webhook_service.dispatch('task.completed', webhook_data)
+            else:
+                webhook_service.dispatch('task.status_changed', webhook_data)
+        new_assignees_after = set([u.id for u in t.assignees]) if getattr(t, 'assignees', None) else set()
+        if new_assignees_after - old_assignees:
+            webhook_service.dispatch('task.assigned', webhook_data)
+    except Exception:
+        current_app.logger.exception('Error dispatching webhooks for task %s', task_id)
+
     return jsonify(task_to_dict(t))
 
 
@@ -510,7 +722,7 @@ def delete_task(task_id):
         audit = AuditLog(
             user_id=getattr(current_user, 'id', None),
             action='DELETE',
-            entity_type='task',
+            entity_type='Task',
             entity_id=t.id,
             changes={
                 'message': f"Tarea '{t.title}' eliminada por {getattr(current_user, 'email', 'sistema')}",
@@ -522,7 +734,7 @@ def delete_task(task_id):
         db.session.commit()
     except SQLAlchemyError as e:
         db.session.rollback()
-        abort(500, description=str(e))
+        abort(500, description='Error interno del servidor')
     return jsonify({"deleted": task_id}), 200
 
 
@@ -649,7 +861,7 @@ def create_time_entry():
             current_app.logger.exception('Failed to write AuditLog for time entry create')
     except SQLAlchemyError as e:
         db.session.rollback()
-        abort(500, description=str(e))
+        abort(500, description='Error interno del servidor')
     return jsonify(timeentry_to_dict(te)), 201
 
 
@@ -693,7 +905,7 @@ def update_time_entry(entry_id):
             current_app.logger.exception('Failed to write AuditLog for time entry update')
     except SQLAlchemyError as e:
         db.session.rollback()
-        abort(500, description=str(e))
+        abort(500, description='Error interno del servidor')
     return jsonify(timeentry_to_dict(te))
 
 
@@ -727,7 +939,7 @@ def delete_time_entry(entry_id):
         db.session.commit()
     except SQLAlchemyError as e:
         db.session.rollback()
-        abort(500, description=str(e))
+        abort(500, description='Error interno del servidor')
     return jsonify({"deleted": entry_id}), 200
 
 
@@ -739,14 +951,18 @@ def delete_attachment(attachment_id):
     
     attachment = TaskAttachment.query.get_or_404(attachment_id)
     task = attachment.task
-    
+
+    # Use session-based user lookup to avoid Flask-Login current_user caching issues
+    from ..auth.decorators import _get_user_from_session
+    _user = _get_user_from_session()
+
     # Check permissions - only PMP/Admin (internal) or the original uploader may delete
     can_delete = False
-    if current_user.is_internal and current_user.role and current_user.role.name in ('PMP','Admin'):
+    if _user and _user.is_internal and _user.role and _user.role.name in ('PMP', 'Admin'):
         can_delete = True
-    elif attachment.uploaded_by_id == current_user.id:
+    elif _user and attachment.uploaded_by_id == _user.id:
         can_delete = True
-    
+
     if not can_delete:
         abort(403, description="No tienes permiso para eliminar este archivo")
     
@@ -754,7 +970,7 @@ def delete_attachment(attachment_id):
         # audit entry before removal
         try:
             audit = AuditLog(
-                user_id=getattr(current_user, 'id', 0),
+                user_id=_user.id if _user else getattr(current_user, 'id', 0),
                 action='DELETE',
                 entity_type='task_attachment',
                 entity_id=attachment.id,
@@ -779,7 +995,7 @@ def delete_attachment(attachment_id):
         db.session.commit()
     except SQLAlchemyError as e:
         db.session.rollback()
-        abort(500, description=str(e))
+        abort(500, description='Error interno del servidor')
     except OSError as e:
         current_app.logger.error(f"Error deleting file: {e}")
         # Still delete from DB even if file deletion fails
@@ -796,28 +1012,24 @@ def allowed_file(filename):
 
 
 def get_unique_filename(task_id, filename):
-    """Generate a unique filename to avoid duplicates"""
+    """Generate a unique filename using UUID to avoid race conditions."""
+    import uuid as _uuid
     safe_name = secure_filename(filename)
     if not safe_name:
         safe_name = 'file'
-    
-    name, ext = os.path.splitext(safe_name)
-    if not ext:
-        ext = ''
-    
+
+    _, ext = os.path.splitext(safe_name)
+    # Use UUID to guarantee uniqueness without filesystem race conditions
+    final_name = f"{_uuid.uuid4().hex}{ext}"
+
     task_folder = os.path.join(current_app.config['UPLOAD_FOLDER'], f'task_{task_id}')
     os.makedirs(task_folder, exist_ok=True)
-    
-    final_name = safe_name
-    counter = 1
-    while os.path.exists(os.path.join(task_folder, final_name)):
-        final_name = f"{name}_{counter}{ext}"
-        counter += 1
-    
+
     return final_name, task_folder
 
 
 @api_bp.route("/tasks/<int:task_id>/attachments", methods=["POST"])
+@limiter.limit("20/minute")
 def upload_attachment(task_id):
     """Upload attachment(s) to a task"""
     if not current_user.is_authenticated:
@@ -921,6 +1133,7 @@ def get_user(user_id):
 from ..services import license_service
 
 @api_bp.route("/license/activate", methods=["POST"])
+@limiter.limit("10/minute")
 def activate_license():
     """Activate a new license"""
     if not current_user.is_authenticated:
@@ -946,6 +1159,125 @@ def activate_license():
             return jsonify(result), 503
         return jsonify(result), 400
     return jsonify(result), 200
+
+
+# ==================== WEBHOOK ENDPOINTS ====================
+from ..services import webhook_service as _wh
+
+
+def _require_admin():
+    if not current_user.is_authenticated:
+        abort(401)
+    if not current_user.role or current_user.role.name not in ('Admin', 'PMP'):
+        abort(403, description='Solo administradores/PMP pueden gestionar webhooks')
+
+
+def _validate_webhook_url(url: str) -> bool:
+    """Validates webhook URL is safe: must be http/https and not point to internal/private IPs."""
+    from urllib.parse import urlparse
+    import ipaddress
+    if not url:
+        return False
+    try:
+        parsed = urlparse(url)
+        if parsed.scheme not in ('http', 'https'):
+            return False
+        host = parsed.hostname
+        if not host:
+            return False
+        # Block loopback and common internal hostnames
+        if host.lower() in ('localhost', '127.0.0.1', '::1', '0.0.0.0', 'metadata.google.internal'):
+            return False
+        try:
+            addr = ipaddress.ip_address(host)
+            if addr.is_private or addr.is_loopback or addr.is_link_local or addr.is_reserved or addr.is_multicast:
+                return False
+        except ValueError:
+            pass  # It's a hostname, not a raw IP — allow it
+        return True
+    except Exception:
+        return False
+
+
+@api_bp.route('/webhooks', methods=['GET'])
+@limiter.limit("30/minute")
+def list_webhooks():
+    _require_admin()
+    webhooks = _wh.get_webhooks()
+    # Mask secret in list view
+    safe = [{**w, 'secret': '***' if w.get('secret') else ''} for w in webhooks]
+    return jsonify({'webhooks': safe, 'available_events': _wh.EVENTS})
+
+
+@api_bp.route('/webhooks', methods=['POST'])
+@limiter.limit("20/minute")
+def create_webhook():
+    _require_admin()
+    data = request.get_json() or {}
+    name = (data.get('name') or '').strip()
+    url = (data.get('url') or '').strip()
+    events = data.get('events') or []
+    secret = data.get('secret', '')
+    active = bool(data.get('active', True))
+
+    if not name:
+        return jsonify({'error': 'El nombre es obligatorio'}), 400
+    if not _validate_webhook_url(url):
+        return jsonify({'error': 'URL inválida. Debe ser http/https y no apuntar a IPs privadas.'}), 400
+    if not events:
+        return jsonify({'error': 'Selecciona al menos un evento'}), 400
+    invalid = [e for e in events if e not in _wh.EVENTS]
+    if invalid:
+        return jsonify({'error': f'Eventos inválidos: {invalid}'}), 400
+
+    wh = _wh.upsert_webhook(None, name, url, events, secret, active)
+    return jsonify(wh), 201
+
+
+@api_bp.route('/webhooks/<webhook_id>', methods=['PUT', 'PATCH'])
+@limiter.limit("20/minute")
+def update_webhook(webhook_id):
+    _require_admin()
+    data = request.get_json() or {}
+    existing = next((w for w in _wh.get_webhooks() if w.get('id') == webhook_id), None)
+    if not existing:
+        abort(404)
+
+    name = (data.get('name') or existing['name']).strip()
+    url = (data.get('url') or existing['url']).strip()
+    events = data.get('events', existing['events'])
+    secret = data.get('secret', existing.get('secret', ''))
+    # Don't overwrite secret if client sends '***' (masked)
+    if secret == '***':
+        secret = existing.get('secret', '')
+    active = bool(data.get('active', existing.get('active', True)))
+
+    if not name:
+        return jsonify({'error': 'El nombre es obligatorio'}), 400
+    if not _validate_webhook_url(url):
+        return jsonify({'error': 'URL inválida. Debe ser http/https y no apuntar a IPs privadas.'}), 400
+
+    wh = _wh.upsert_webhook(webhook_id, name, url, events, secret, active)
+    return jsonify(wh)
+
+
+@api_bp.route('/webhooks/<webhook_id>', methods=['DELETE'])
+@limiter.limit("10/minute")
+def delete_webhook(webhook_id):
+    _require_admin()
+    deleted = _wh.delete_webhook(webhook_id)
+    if not deleted:
+        abort(404)
+    return jsonify({'deleted': webhook_id})
+
+
+@api_bp.route('/webhooks/<webhook_id>/test', methods=['POST'])
+@limiter.limit("10/minute")
+def test_webhook_endpoint(webhook_id):
+    _require_admin()
+    result = _wh.test_webhook(webhook_id)
+    status = 200 if result.get('success') else 502
+    return jsonify(result), status
 
 
 @api_bp.route("/license/validate", methods=["POST"])

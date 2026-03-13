@@ -302,6 +302,11 @@
         <i class="fa-solid fa-exclamation-circle"></i>Alerta Global
       </button>
     </li>
+    <li class="nav-item">
+      <button class="nav-link" id="webhooks-tab" data-bs-toggle="tab" data-bs-target="#webhooks" type="button">
+        <i class="fa-solid fa-plug"></i>Webhooks
+      </button>
+    </li>
   </ul>
 </nav>
 
@@ -1383,7 +1388,209 @@
       </div>
     </form>
   </div>
-  
+
+  <!-- ==================== WEBHOOKS TAB ==================== -->
+  <div class="tab-pane fade" id="webhooks" role="tabpanel">
+    <div class="settings-section">
+      <div class="settings-section-header">
+        <i class="fa-solid fa-plug"></i>
+        <h5>Webhooks</h5>
+        <span class="text-muted ms-2" style="font-size:13px;font-weight:400">Notifica sistemas externos cuando ocurren eventos en BridgeWork</span>
+      </div>
+      <div class="settings-section-body">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <p class="text-muted mb-0" style="font-size:13px">
+            Soporta <strong>Slack</strong>, <strong>Microsoft Teams</strong> y cualquier endpoint HTTP.
+          </p>
+          <button class="btn btn-primary btn-sm" onclick="openWebhookModal()">
+            <i class="fa-solid fa-plus me-1"></i>Agregar Webhook
+          </button>
+        </div>
+
+        <!-- Webhook list -->
+        <div id="webhookList" style="display:flex;flex-direction:column;gap:8px;">
+          <div class="text-center text-muted py-3" id="webhookEmpty" style="display:none">
+            <i class="fa-solid fa-plug" style="font-size:32px;opacity:0.3"></i>
+            <p class="mt-2 mb-0">No hay webhooks configurados</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Webhook Modal -->
+  <div class="modal fade" id="webhookModal" tabindex="-1">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="webhookModalTitle">Nuevo Webhook</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <input type="hidden" id="webhookId">
+          <div class="mb-3">
+            <label class="form-label">Nombre <span class="text-danger">*</span></label>
+            <input type="text" id="webhookName" class="form-control" placeholder="Ej: Slack #proyectos">
+          </div>
+          <div class="mb-3">
+            <label class="form-label">URL del endpoint <span class="text-danger">*</span></label>
+            <input type="url" id="webhookUrl" class="form-control" placeholder="https://hooks.slack.com/...">
+            <div class="form-text">Slack, Teams o cualquier URL HTTP/HTTPS</div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Eventos <span class="text-danger">*</span></label>
+            <div id="webhookEvents" style="display:flex;flex-direction:column;gap:6px;padding:8px;background:#f8f9fa;border-radius:6px">
+              <label class="d-flex align-items-center gap-2" style="cursor:pointer">
+                <input type="checkbox" value="task.created"> <span>Tarea creada</span>
+              </label>
+              <label class="d-flex align-items-center gap-2" style="cursor:pointer">
+                <input type="checkbox" value="task.status_changed"> <span>Cambio de estado</span>
+              </label>
+              <label class="d-flex align-items-center gap-2" style="cursor:pointer">
+                <input type="checkbox" value="task.completed"> <span>Tarea completada</span>
+              </label>
+              <label class="d-flex align-items-center gap-2" style="cursor:pointer">
+                <input type="checkbox" value="task.assigned"> <span>Tarea asignada</span>
+              </label>
+            </div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Secret (opcional)</label>
+            <input type="text" id="webhookSecret" class="form-control" placeholder="Para verificar firma HMAC-SHA256">
+            <div class="form-text">Se incluye como cabecera <code>X-BridgeWork-Signature</code></div>
+          </div>
+          <div class="form-check">
+            <input type="checkbox" id="webhookActive" class="form-check-input" checked>
+            <label class="form-check-label" for="webhookActive">Activo</label>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+          <button type="button" class="btn btn-primary" onclick="saveWebhook()">
+            <i class="fa-solid fa-save me-1"></i>Guardar
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  // ===== Webhooks admin UI =====
+  const webhookModal = new bootstrap.Modal(document.getElementById('webhookModal'));
+
+  function renderWebhookList(webhooks) {
+    const list = document.getElementById('webhookList');
+    const empty = document.getElementById('webhookEmpty');
+    // Remove existing cards (keep empty message)
+    list.querySelectorAll('.webhook-card').forEach(el => el.remove());
+    if (!webhooks.length) {
+      empty.style.display = '';
+      return;
+    }
+    empty.style.display = 'none';
+    webhooks.forEach(wh => {
+      const card = document.createElement('div');
+      card.className = 'webhook-card d-flex align-items-center justify-content-between p-3 border rounded';
+      card.style.cssText = 'background:white;gap:12px';
+      const statusDot = `<span style="width:8px;height:8px;border-radius:50%;background:${wh.active ? '#198754' : '#6c757d'};display:inline-block;flex-shrink:0"></span>`;
+      const evBadges = (wh.events || []).map(e => `<span class="badge bg-secondary" style="font-size:10px">${e}</span>`).join(' ');
+      card.innerHTML = `
+        <div style="flex:1;min-width:0">
+          <div class="fw-600 d-flex align-items-center gap-2">${statusDot} ${escHtml(wh.name)}</div>
+          <div class="text-muted" style="font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escHtml(wh.url)}</div>
+          <div style="margin-top:4px">${evBadges}</div>
+        </div>
+        <div class="d-flex gap-2 flex-shrink-0">
+          <button class="btn btn-outline-secondary btn-sm" onclick="testWebhook('${wh.id}')" title="Enviar prueba">
+            <i class="fa-solid fa-paper-plane"></i>
+          </button>
+          <button class="btn btn-outline-primary btn-sm" onclick="editWebhook(${JSON.stringify(wh).replace(/"/g,'&quot;')})" title="Editar">
+            <i class="fa-solid fa-pen"></i>
+          </button>
+          <button class="btn btn-outline-danger btn-sm" onclick="deleteWebhook('${wh.id}','${escHtml(wh.name)}')" title="Eliminar">
+            <i class="fa-solid fa-trash"></i>
+          </button>
+        </div>`;
+      list.appendChild(card);
+    });
+  }
+
+  function escHtml(str) {
+    return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  function loadWebhooks() {
+    fetch('/api/webhooks').then(r => r.json()).then(d => renderWebhookList(d.webhooks || [])).catch(e => console.error(e));
+  }
+
+  function openWebhookModal(wh) {
+    document.getElementById('webhookId').value = wh ? wh.id : '';
+    document.getElementById('webhookName').value = wh ? wh.name : '';
+    document.getElementById('webhookUrl').value = wh ? wh.url : '';
+    document.getElementById('webhookSecret').value = wh ? wh.secret : '';
+    document.getElementById('webhookActive').checked = wh ? wh.active : true;
+    document.getElementById('webhookModalTitle').textContent = wh ? 'Editar Webhook' : 'Nuevo Webhook';
+    document.querySelectorAll('#webhookEvents input[type=checkbox]').forEach(cb => {
+      cb.checked = wh ? (wh.events || []).includes(cb.value) : false;
+    });
+    webhookModal.show();
+  }
+
+  function editWebhook(wh) { openWebhookModal(wh); }
+
+  function saveWebhook() {
+    const id = document.getElementById('webhookId').value;
+    const name = document.getElementById('webhookName').value.trim();
+    const url = document.getElementById('webhookUrl').value.trim();
+    const secret = document.getElementById('webhookSecret').value.trim();
+    const active = document.getElementById('webhookActive').checked;
+    const events = [...document.querySelectorAll('#webhookEvents input:checked')].map(cb => cb.value);
+
+    if (!name || !url || !events.length) {
+      alert('Completa nombre, URL y al menos un evento');
+      return;
+    }
+
+    const method = id ? 'PATCH' : 'POST';
+    const endpoint = id ? `/api/webhooks/${id}` : '/api/webhooks';
+    fetch(endpoint, {
+      method,
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({name, url, events, secret, active})
+    }).then(r => r.json()).then(d => {
+      if (d.error) { alert('Error: ' + d.error); return; }
+      webhookModal.hide();
+      loadWebhooks();
+    }).catch(e => alert('Error al guardar webhook'));
+  }
+
+  function deleteWebhook(id, name) {
+    if (!confirm(`¿Eliminar el webhook "${name}"?`)) return;
+    fetch(`/api/webhooks/${id}`, {method: 'DELETE'}).then(() => loadWebhooks());
+  }
+
+  function testWebhook(id) {
+    const btn = event.currentTarget;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+    fetch(`/api/webhooks/${id}/test`, {method: 'POST'}).then(r => r.json()).then(d => {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fa-solid fa-paper-plane"></i>';
+      if (d.success) alert(`✅ Webhook respondió con HTTP ${d.status_code}`);
+      else alert(`❌ Falló: ${d.error || ('HTTP ' + d.status_code)}`);
+    }).catch(e => {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fa-solid fa-paper-plane"></i>';
+      alert('Error de red');
+    });
+  }
+
+  // Load on tab click
+  document.getElementById('webhooks-tab').addEventListener('shown.bs.tab', loadWebhooks);
+  // Also load if tab is active on page load
+  if (document.querySelector('#webhooks-tab.active')) loadWebhooks();
+  </script>
+
   <script>
   function activateLicense(e) {
     e.preventDefault();

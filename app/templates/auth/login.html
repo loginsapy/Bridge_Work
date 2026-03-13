@@ -4,7 +4,7 @@
 
 {% block head %}
 <style>
-/* Login hero and animated bridge background */
+/* ── Bridge hero layout ── */
 .login-hero {
   position: relative;
   min-height: calc(100vh - 80px);
@@ -12,7 +12,7 @@
   align-items: center;
   justify-content: center;
   overflow: hidden;
-  background: linear-gradient(180deg, #f6f8fb 0%, #ffffff 60%);
+  background: linear-gradient(180deg, #eef6fd 0%, #f5f9ff 55%, #ffffff 100%);
 }
 .login-hero .bridge-bg {
   position: absolute;
@@ -21,51 +21,62 @@
   height: 100%;
   pointer-events: none;
   display: block;
-  opacity: 0.45; /* increased for visibility */
+  opacity: 0.58;
 }
 
-/* subtle parallax pan of the gradient/bridge lines */
+/* ── Bridge animations ── */
 @keyframes bridge-pan {
-  0% { transform: translateX(-5%) translateY(0) }
-  50% { transform: translateX(5%) translateY(-2%) }
-  100% { transform: translateX(-5%) translateY(0) }
+  0%, 100% { transform: translateX(-2%); }
+  50%       { transform: translateX(2%);  }
 }
-@keyframes bridge-float {
-  0% { transform: translateY(0) }
-  50% { transform: translateY(-8px) }
-  100% { transform: translateY(0) }
-}
-@keyframes stroke-move {
-  to { stroke-dashoffset: -64; }
-}
-.bridge-anim { animation: bridge-pan 20s ease-in-out infinite, bridge-float 6s ease-in-out infinite; transform-origin: center; }
+.bridge-anim { animation: bridge-pan 28s ease-in-out infinite; transform-origin: center; }
 
-/* Make the bridge more visible but still subtle and add stroke animation */
-.bridge-bg { filter: drop-shadow(0 6px 18px rgba(0,0,0,0.06)); }
-.bridge-bg path, .bridge-bg rect { vector-effect: non-scaling-stroke; stroke-linecap: round; stroke-width: 2; }
-.bridge-bg path { stroke-dasharray: 12 8; animation: stroke-move 6s linear infinite; }
-/* Allow variation in stroke animation speed per-class */
-.stroke-fast { animation-duration: 4s !important; }
-.stroke-medium { animation-duration: 6s !important; }
-.stroke-slow { animation-duration: 10s !important; }
-/* Slightly thicker colored strokes for logo bridges */
-.logo-bridge { stroke-width: 2.5; stroke-opacity: 0.95; }
+@keyframes cable-march { to { stroke-dashoffset: -200; } }
+.cable-a { stroke-dasharray: 24 10; animation: cable-march 10s linear infinite; }
+.cable-b { stroke-dasharray: 18 12; animation: cable-march 14s linear infinite reverse; }
 
-/* Add a soft animated radial glow to catch the eye */
+@keyframes beacon-pulse {
+  0%, 100% { opacity: 0.92; }
+  50%       { opacity: 0.18; }
+}
+.tower-beacon-1 { animation: beacon-pulse 2.4s ease-in-out infinite; }
+.tower-beacon-2 { animation: beacon-pulse 2.4s ease-in-out infinite 1.2s; }
+
+@keyframes car-move-right {
+  from { transform: translateX(-200px); }
+  to   { transform: translateX(1850px); }
+}
+@keyframes car-move-left {
+  from { transform: translateX(200px); }
+  to   { transform: translateX(-1850px); }
+}
+.car-right   { animation: car-move-right 18s linear infinite; }
+.car-right-2 { animation: car-move-right 26s linear infinite 10s; }
+.car-left    { animation: car-move-left  22s linear infinite 5s; }
+
+@keyframes water-shimmer {
+  0%, 100% { opacity: 0.20; }
+  50%       { opacity: 0.50; }
+}
+.water-ripple-1 { animation: water-shimmer 4s ease-in-out infinite; }
+.water-ripple-2 { animation: water-shimmer 4s ease-in-out infinite 2s; }
+
+/* ── Glow overlay ── */
 .bridge-glow {
   position: absolute;
-  left: -10%;
-  top: -10%;
-  width: 120%;
-  height: 120%;
+  left: -10%; top: -10%;
+  width: 120%; height: 120%;
   pointer-events: none;
-  background: radial-gradient(circle at 20% 30%, rgba(96,165,250,0.12), rgba(96,165,250,0) 30%), radial-gradient(circle at 80% 70%, rgba(125,211,252,0.08), rgba(125,211,252,0) 30%);
+  background:
+    radial-gradient(circle at 15% 25%, rgba(96,165,250,0.10), transparent 35%),
+    radial-gradient(circle at 85% 70%, rgba(232,106,51,0.08), transparent 30%),
+    radial-gradient(circle at 50% 50%, rgba(245,185,69,0.05), transparent 40%);
   mix-blend-mode: screen;
-  animation: bridge-pan 24s ease-in-out infinite;
-  opacity: 0.9;
+  animation: bridge-pan 32s ease-in-out infinite reverse;
+  opacity: 0.85;
 }
 
-/* Brand logo in card */
+/* ── Brand logo in card ── */
 .brand-logo { display:block; margin: 0 auto 10px; width: 140px; max-width: 70%; height: auto }
 
 /* Microsoft-style SSO button (inspired by MS corporate styles) */
@@ -85,71 +96,20 @@
 .btn-ms .ms-logo { width: 20px; height: 20px; display:inline-block; }
 .btn-ms .ms-text { font-size: .95rem; }
 
-/* Compact inline tabs for login hero - improved visibility and styling */
-.login-tabs {
-  display: flex;
-  gap: 0.5rem;
-  justify-content: center;
-  align-items: center;
-  background: #f1f3f5;
-  padding: 0.35rem;
-  border-radius: 0.75rem;
-}
-.login-tabs .nav-item {
-  flex: 1;
-}
-.login-tabs .nav-link {
-  display: block;
-  width: 100%;
-  padding: 0.6rem 1rem;
-  border-radius: 0.5rem;
-  min-width: 120px;
-  text-align: center;
-  font-size: 0.9rem;
-  font-weight: 600;
-  color: #495057;
-  background: transparent;
-  border: none;
-  transition: all 0.2s ease;
-}
-.login-tabs .nav-link:hover:not(.active) {
-  background: rgba(255,255,255,0.7);
-  color: var(--brand-primary, #E86A33);
-}
-.login-tabs .nav-link.active {
-  background: #fff;
-  color: var(--brand-primary, #E86A33);
-  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-}
-@media (max-width: 480px) {
-  .login-tabs { gap: 0.25rem; padding: 0.25rem; }
-  .login-tabs .nav-link { min-width: 100px; font-size: 0.85rem; padding: 0.5rem 0.75rem; }
-}
 
 /* Guest page full-viewport adjustments (no sidebar) */
 .guest-page #wrapper { margin-left: 0 !important; }
 .guest-page #page-content-wrapper { margin-left: 0 !important; width: 100% !important; padding: 0 !important; }
 .guest-page .login-hero {
-  position: fixed;
-  inset: 0;
-  width: 100vw;
-  height: 100vh;
-  min-height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  z-index: 0;
+  position: fixed; inset: 0;
+  width: 100vw; height: 100vh; min-height: 100vh;
+  align-items: center; justify-content: center;
+  padding: 0; z-index: 0;
 }
 .guest-page .login-hero .container { max-width: 980px; padding: 2rem; }
 .guest-page .login-card { position: relative; z-index: 20; }
-/* Ensure SVG background covers entire hero area */
-.guest-page .bridge-bg, .guest-page .bridge-bg svg { width: 100%; height: 100%; }
-
-/* Make page background match the hero so there are no visible white gutters */
 html, body { height: 100%; }
-body.guest-page { background: linear-gradient(180deg, #f6f8fb 0%, #ffffff 60%); overflow-x: hidden; }
-
+body.guest-page { background: linear-gradient(180deg, #eef6fd 0%, #f5f9ff 55%, #ffffff 100%); overflow-x: hidden; }
 @media (max-width: 768px) {
   .guest-page .login-hero { align-items: flex-start; padding-top: 40px; }
   .guest-page .login-hero .container { padding: 1rem; }
@@ -159,58 +119,12 @@ body.guest-page { background: linear-gradient(180deg, #f6f8fb 0%, #ffffff 60%); 
 
 {% block content %}
 <div class="login-hero">
-  <!-- Animated SVG bridge background -->
-  <svg class="bridge-bg bridge-anim" viewBox="0 0 1600 900" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-    <defs>
-      <linearGradient id="g1" x1="0" x2="1" y1="0" y2="1">
-        <stop offset="0%" stop-color="#7dd3fc" stop-opacity="0.35"/>
-        <stop offset="100%" stop-color="#60a5fa" stop-opacity="0.15"/>
-      </linearGradient>
-
-      <!-- Logo color gradients (using subtle brand palette) -->
-      <linearGradient id="g-logo-1" x1="0" x2="1" y1="0" y2="0">
-        <stop offset="0%" stop-color="#E86A33"/>
-        <stop offset="100%" stop-color="#C74B6D"/>
-      </linearGradient>
-      <linearGradient id="g-logo-2" x1="0" x2="1" y1="0" y2="0">
-        <stop offset="0%" stop-color="#F5B945"/>
-        <stop offset="100%" stop-color="#E86A33"/>
-      </linearGradient>
-      <linearGradient id="g-logo-3" x1="0" x2="1" y1="0" y2="0">
-        <stop offset="0%" stop-color="#C74B6D"/>
-        <stop offset="100%" stop-color="#F5B945"/>
-      </linearGradient>
-    </defs>
-    <rect width="100%" height="100%" fill="url(#g1)" />
-    <!-- Simple bridge silhouette composed of paths for a refined look -->
-    <g transform="translate(0,420) scale(1)">
-      <path class="stroke-medium" d="M0 170 C200 90 400 50 800 80 C1200 110 1400 140 1600 120" stroke="#0ea5e9" stroke-width="2" fill="none" stroke-linecap="round" stroke-opacity="0.45"/>
-      <path class="stroke-slow" d="M50 170 L150 40 L250 170" stroke="#0ea5e9" stroke-width="1.5" fill="none" stroke-opacity="0.35"/>
-      <!-- bridge cables -->
-      <g stroke="#0ea5e9" stroke-opacity="0.28" stroke-width="1">
-        <path class="stroke-fast" d="M200 170 Q400 40 600 170" fill="none"/>
-        <path class="stroke-medium" d="M600 170 Q800 40 1000 170" fill="none"/>
-        <path class="stroke-slow" d="M1000 170 Q1200 40 1400 170" fill="none"/>
-      </g>
-
-      <!-- Additional decorative bridges using logo palette -->
-      <g class="logo-bridges" aria-hidden="true">
-        <path class="logo-bridge stroke-slow" d="M30 190 C220 120 420 80 800 110 C1180 140 1380 160 1570 150" stroke="url(#g-logo-1)" fill="none" />
-        <path class="logo-bridge stroke-medium" d="M10 150 C220 70 440 40 780 60 C1160 80 1360 100 1590 90" stroke="url(#g-logo-2)" fill="none" />
-        <path class="logo-bridge stroke-fast" d="M70 210 C260 140 460 100 820 130 C1190 160 1410 180 1620 170" stroke="url(#g-logo-3)" fill="none" />
-        <!-- subtle dotted decorative lines -->
-        <path d="M150 200 Q400 80 650 160 Q900 240 1200 160" stroke="rgba(232,106,51,0.15)" stroke-width="1" stroke-dasharray="6 6" fill="none" />
-      </g>
-    </g>
-  </svg>
-
-  <!-- subtle animated glow overlay to enhance visibility -->
-  <div class="bridge-glow" aria-hidden="true"></div>
+  {% include 'auth/_animated_bridge_bg.html' %}
 
   <div class="container py-5">
     <div class="row justify-content-center">
       <div class="col-lg-6">
-        <div class="card shadow-sm login-card">
+        <div class="card shadow-sm login-card" style="position:relative;z-index:30;">
           <div class="card-body p-4">
           <div class="text-center mb-4">
             <img src="{{ url_for('static', filename='images/sbwlogo.png') }}" alt="{{ sys_app_name }}" class="brand-logo" />
@@ -230,80 +144,53 @@ body.guest-page { background: linear-gradient(180deg, #f6f8fb 0%, #ffffff 60%); 
           {% endif %}
           {% endwith %}
 
-          <div class="row g-3">
-            <div class="col-12">
-              {# Decide if SSO is available - default to showing Entra ID tab when configured #}
-              {% set sso_available = config.AZURE_CLIENT_ID and config.AZURE_CLIENT_ID != 'tu-client-id-de-azure' %}
+          {% set sso_available = config.AZURE_CLIENT_ID and config.AZURE_CLIENT_ID != 'tu-client-id-de-azure' %}
 
-              <ul class="nav nav-tabs login-tabs mb-3 justify-content-center flex-nowrap" role="tablist" style="gap:.5rem;">
-                <li class="nav-item" role="presentation">
-                  <button class="nav-link px-3 py-2 {% if sso_available %}active{% endif %}" id="sso-tab" data-bs-toggle="tab" data-bs-target="#sso" type="button" role="tab" aria-controls="sso" aria-selected="{{ 'true' if sso_available else 'false' }}">Entra ID</button>
-                </li>
-                <li class="nav-item" role="presentation">
-                  <button class="nav-link px-3 py-2 {% if not sso_available %}active{% endif %}" id="local-tab" data-bs-toggle="tab" data-bs-target="#local" type="button" role="tab" aria-controls="local" aria-selected="{{ 'true' if not sso_available else 'false' }}">Usuario Local</button>
-                </li>
-              </ul>
+          {% if sso_available %}
+          {# ── Entra ID ── #}
+          <div class="d-grid mb-3">
+            <a href="{{ url_for('auth.login_microsoft') }}" class="btn btn-ms justify-content-center">
+              <span class="ms-logo" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="20" height="20" xmlns="http://www.w3.org/2000/svg">
+                  <rect x="1" y="1" width="10" height="10" fill="#F35325"/>
+                  <rect x="13" y="1" width="10" height="10" fill="#81BC06"/>
+                  <rect x="1" y="13" width="10" height="10" fill="#05A6F0"/>
+                  <rect x="13" y="13" width="10" height="10" fill="#FFBB00"/>
+                </svg>
+              </span>
+              <span class="ms-text">Acceder con Entra ID</span>
+            </a>
+            <small class="text-muted text-center mt-1">{{ _('redirect_provider') }}</small>
+          </div>
 
-              <div class="tab-content">
-                <div class="tab-pane fade {% if sso_available %}show active{% endif %}" id="sso" role="tabpanel" aria-labelledby="sso-tab">
-                  <div class="border rounded p-3 h-100">
-                    <div class="d-grid">
-                      {% if sso_available %}
-                        <a href="{{ url_for('auth.login_microsoft') }}" class="btn btn-ms" aria-label="Acceder con Entra ID">
-                          <span class="ms-logo" aria-hidden="true">
-                            <svg viewBox="0 0 24 24" width="20" height="20" xmlns="http://www.w3.org/2000/svg">
-                              <rect x="1" y="1" width="10" height="10" fill="#F35325"/>
-                              <rect x="13" y="1" width="10" height="10" fill="#81BC06"/>
-                              <rect x="1" y="13" width="10" height="10" fill="#05A6F0"/>
-                              <rect x="13" y="13" width="10" height="10" fill="#FFBB00"/>
-                            </svg>
-                          </span>
-                          <span class="ms-text">Acceder con Entra ID</span>
-                        </a>
-                        <small class="text-muted d-block mt-2">{{ _('redirect_provider') }}</small>
-                      {% else %}
-                          <button type="button" class="btn btn-ms" disabled>
-                            <span class="ms-logo" aria-hidden="true">
-                              <svg viewBox="0 0 24 24" width="20" height="20" xmlns="http://www.w3.org/2000/svg">
-                                <rect x="1" y="1" width="10" height="10" fill="#F35325"/>
-                                <rect x="13" y="1" width="10" height="10" fill="#81BC06"/>
-                                <rect x="1" y="13" width="10" height="10" fill="#05A6F0"/>
-                                <rect x="13" y="13" width="10" height="10" fill="#FFBB00"/>
-                              </svg>
-                            </span>
-                            <span class="ms-text">{{ _('entra_not_configured') }}</span>
-                          </button>
-                          <small class="text-warning d-block mt-2"><i class="fa-solid fa-exclamation-triangle me-1"></i>{{ _('sso_not_configured') }}</small>
-                        {% endif %}
-                    </div>
-                  </div>
-                </div>
+          <div class="d-flex align-items-center gap-2 mb-3">
+            <hr class="flex-grow-1 m-0">
+            <span class="text-muted small px-1">o</span>
+            <hr class="flex-grow-1 m-0">
+          </div>
+          {% endif %}
 
-                <div class="tab-pane fade {% if not sso_available %}show active{% endif %}" id="local" role="tabpanel" aria-labelledby="local-tab">
-                  <div class="border rounded p-3 h-100">
-                    <h6 class="fw-semibold mb-3">{{ _('local_access') }}</h6>
-                    <form method="post" action="{{ url_for('auth.login') }}" class="needs-validation" novalidate>
-                      <div class="mb-3">
-                        <label class="form-label">{{ _('email_address') }}</label>
-                        <input type="email" class="form-control" name="email" placeholder="tu@correo.com" required>
-                        <div class="invalid-feedback">{{ _('enter_valid_email') }}</div>
-                      </div>
-                      <div class="mb-3">
-                        <label class="form-label">{{ _('password') }}</label>
-                        <input type="password" class="form-control" name="password" placeholder="••••••••" required>
-                        <div class="invalid-feedback">{{ _('password_required') }}</div>
-                      </div>
-                      <div class="d-grid">
-                        <button type="submit" class="btn btn-primary" name="action" value="local">
-                          <i class="fa-solid fa-right-to-bracket me-2"></i> {{ _('login') }}
-                        </button>
-                      </div>
-                    </form>
-                  </div>
-                </div>
-              </div>
+          {# ── Login Local ── #}
+          <form method="post" action="{{ url_for('auth.login') }}" class="needs-validation" novalidate>
+            <div class="mb-3">
+              <label class="form-label">{{ _('email_address') }}</label>
+              <input type="email" class="form-control" name="email" placeholder="tu@correo.com" required>
+              <div class="invalid-feedback">{{ _('enter_valid_email') }}</div>
             </div>
-          </div> 
+            <div class="mb-3">
+              <label class="form-label">{{ _('password') }}</label>
+              <input type="password" class="form-control" name="password" placeholder="••••••••" required>
+              <div class="invalid-feedback">{{ _('password_required') }}</div>
+            </div>
+            <div class="d-flex justify-content-end mb-3">
+              <a href="{{ url_for('auth.forgot_password') }}" class="small text-decoration-none">¿Olvidaste tu contraseña?</a>
+            </div>
+            <div class="d-grid">
+              <button type="submit" class="btn btn-primary" name="action" value="local">
+                <i class="fa-solid fa-right-to-bracket me-2"></i> {{ _('login') }}
+              </button>
+            </div>
+          </form>
 
           <div class="text-center mt-3">
             <small class="text-muted">{{ _('need_help') }}</small>
@@ -330,33 +217,5 @@ body.guest-page { background: linear-gradient(180deg, #f6f8fb 0%, #ffffff 60%); 
     })
   })()
 
-  // small accessibility: focus first input on load
-  document.addEventListener('DOMContentLoaded', function() {
-    const email = document.querySelector('input[name="email"]');
-    if (email) email.focus();
-  });
-</script>
-</div>
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
-
-<script>
-  // Bootstrap validation helpers
-  (function () {
-    'use strict'
-    const forms = document.querySelectorAll('.needs-validation')
-    Array.prototype.slice.call(forms).forEach(function (form) {
-      form.addEventListener('submit', function (event) {
-        if (!form.checkValidity()) {
-          event.preventDefault()
-          event.stopPropagation()
-        }
-        form.classList.add('was-validated')
-      }, false)
-    })
-  })()
 </script>
 {% endblock %}

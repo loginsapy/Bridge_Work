@@ -404,7 +404,7 @@
   
   <form method="GET" id="filterForm">
     <div class="filter-buttons" role="tablist" aria-label="Filtro por estado">
-      {% set states = ['TODO','BACKLOG','IN_PROGRESS','IN_REVIEW','COMPLETED'] %}
+      {% set states = ['TODO','BACKLOG','IN_PROGRESS','IN_REVIEW','COMPLETED','DONE'] %}
       <button type="button" class="filter-button {% if not status_filter %}active{% endif %}" data-status="">Todas</button>
       {% for s in states %}
       <button type="button" class="filter-button {% if status_filter == s %}active{% endif %}" data-status="{{ s }}">{{ s if s == 'TODO' else _(s.lower()) }}</button>
