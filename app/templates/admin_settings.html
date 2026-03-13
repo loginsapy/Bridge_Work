@@ -1097,12 +1097,12 @@
             </div>
             <div class="setting-control">
               <div class="form-check form-switch">
-                <input type="checkbox" name="enable_azure_auth" class="form-check-input" 
-                  {% if settings.enable_azure_auth != 'false' %}checked{% endif %}>
+                <input type="checkbox" name="enable_azure_auth" class="form-check-input"
+                  {% if settings.enable_azure_auth and settings.enable_azure_auth not in (False, 'false', '0', 'no') %}checked{% endif %}>
               </div>
             </div>
           </div>
-          
+
           <div class="setting-row">
             <div class="setting-info">
               <div class="setting-label">Autenticación Local (Email/Contraseña)</div>
@@ -1110,8 +1110,8 @@
             </div>
             <div class="setting-control">
               <div class="form-check form-switch">
-                <input type="checkbox" name="enable_local_auth" class="form-check-input" 
-                  {% if settings.enable_local_auth != 'false' %}checked{% endif %}>
+                <input type="checkbox" name="enable_local_auth" class="form-check-input"
+                  {% if settings.enable_local_auth and settings.enable_local_auth not in (False, 'false', '0', 'no') %}checked{% endif %}>
               </div>
             </div>
           </div>

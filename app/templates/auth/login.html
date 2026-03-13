@@ -144,9 +144,7 @@ body.guest-page { background: linear-gradient(180deg, #eef6fd 0%, #f5f9ff 55%, #
           {% endif %}
           {% endwith %}
 
-          {% set sso_available = config.AZURE_CLIENT_ID and config.AZURE_CLIENT_ID != 'tu-client-id-de-azure' %}
-
-          {% if sso_available %}
+          {% if microsoft_enabled %}
           {# ── Entra ID ── #}
           <div class="d-grid mb-3">
             <a href="{{ url_for('auth.login_microsoft') }}" class="btn btn-ms justify-content-center">
@@ -163,14 +161,17 @@ body.guest-page { background: linear-gradient(180deg, #eef6fd 0%, #f5f9ff 55%, #
             <small class="text-muted text-center mt-1">{{ _('redirect_provider') }}</small>
           </div>
 
+          {% if local_auth_enabled %}
           <div class="d-flex align-items-center gap-2 mb-3">
             <hr class="flex-grow-1 m-0">
             <span class="text-muted small px-1">o</span>
             <hr class="flex-grow-1 m-0">
           </div>
           {% endif %}
+          {% endif %}
 
           {# ── Login Local ── #}
+          {% if local_auth_enabled %}
           <form method="post" action="{{ url_for('auth.login') }}" class="needs-validation" novalidate>
             <div class="mb-3">
               <label class="form-label">{{ _('email_address') }}</label>
@@ -191,6 +192,9 @@ body.guest-page { background: linear-gradient(180deg, #eef6fd 0%, #f5f9ff 55%, #
               </button>
             </div>
           </form>
+          {% elif not microsoft_enabled %}
+          <div class="alert alert-warning">No hay métodos de autenticación habilitados. Contacta al administrador.</div>
+          {% endif %}
 
           <div class="text-center mt-3">
             <small class="text-muted">{{ _('need_help') }}</small>

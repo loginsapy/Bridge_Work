@@ -4569,7 +4569,8 @@ def admin_settings_page():
     notify_keys = [
         'notify_task_assigned', 'notify_task_completed', 'notify_task_approved',
         'notify_task_rejected', 'notify_task_comment', 'notify_due_date_reminder',
-        'show_notification_center', 'enable_push_notifications'
+        'show_notification_center', 'enable_push_notifications',
+        'enable_azure_auth', 'enable_local_auth',
     ]
     # Treat global alert enabled as boolean for templates
     notify_keys.append('global_alert_enabled')

@@ -78,14 +78,25 @@ def login():
     """Login page with local auth + Microsoft SSO"""
     if current_user.is_authenticated:
         return redirect(url_for('main.dashboard'))
-    
+
+    local_auth_enabled = SystemSettings.get('enable_local_auth', True)
+    azure_auth_enabled = SystemSettings.get('enable_azure_auth', True)
+
+    # Safety net: never lock everyone out — if both are disabled, re-enable local auth
+    if not local_auth_enabled and not azure_auth_enabled:
+        local_auth_enabled = True
+
     if request.method == 'POST':
+        if not local_auth_enabled:
+            flash('El acceso con email y contraseña está deshabilitado. Use Entra ID.', 'warning')
+            return redirect(url_for('auth.login'))
+
         # Handle local login
         email = request.form.get('email')
         password = request.form.get('password')
-        
+
         user = User.query.filter_by(email=email).first()
-        
+
         if not user:
             flash('Email o contraseña inválidos.', 'danger')
         elif not user.password_hash:
@@ -103,11 +114,13 @@ def login():
                 next_page = url_for('main.dashboard')
             flash(f'¡Bienvenido {user.name}!', 'success')
             return redirect(next_page)
-    
-    # For GET requests, prepare OAuth button
-    microsoft_enabled = bool(current_app.config.get('AZURE_CLIENT_ID'))
-    
-    return render_template('auth/login.html', microsoft_enabled=microsoft_enabled)
+
+    # Azure button is shown only when configured AND enabled in settings
+    microsoft_enabled = bool(current_app.config.get('AZURE_CLIENT_ID')) and bool(azure_auth_enabled)
+
+    return render_template('auth/login.html',
+                           microsoft_enabled=microsoft_enabled,
+                           local_auth_enabled=bool(local_auth_enabled))
 
 
 @auth_bp.route('/forgot-password', methods=['GET', 'POST'])
@@ -183,6 +196,10 @@ def login_microsoft():
             flash('Microsoft authentication is not configured', 'danger')
             return redirect(url_for('auth.login'))
 
+        if not SystemSettings.get('enable_azure_auth', True):
+            flash('El acceso con Entra ID está deshabilitado por el administrador.', 'warning')
+            return redirect(url_for('auth.login'))
+
         state = secrets.token_urlsafe(32)
         session['oauth_state'] = state
 
@@ -216,6 +233,11 @@ def login_microsoft():
 def callback():
     """Handle Microsoft Entra ID OAuth callback"""
     try:
+        # Enforce admin setting — reject the callback if Azure auth is disabled
+        if not SystemSettings.get('enable_azure_auth', True):
+            flash('El acceso con Entra ID está deshabilitado por el administrador.', 'warning')
+            return redirect(url_for('auth.login'))
+
         code = request.values.get('code')
         state = request.values.get('state')
         error = request.values.get('error')
