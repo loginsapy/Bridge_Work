@@ -271,6 +271,16 @@
     <button class="toolbar-btn" id="btn-today" title="Ir a hoy">
       <i class="fa-regular fa-calendar-check"></i> Hoy
     </button>
+    <div style="width:1px;height:24px;background:#e0e0e0;margin:0 4px;"></div>
+    <div class="dropdown">
+      <button class="toolbar-btn dropdown-toggle" id="btn-export" data-bs-toggle="dropdown" aria-expanded="false" title="Exportar Gantt">
+        <i class="fa-solid fa-download"></i> Exportar
+      </button>
+      <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="btn-export">
+        <li><button class="dropdown-item" id="export-png"><i class="fa-solid fa-image me-2"></i>Exportar como PNG</button></li>
+        <li><button class="dropdown-item" id="export-pdf"><i class="fa-solid fa-file-pdf me-2"></i>Exportar como PDF</button></li>
+      </ul>
+    </div>
     {% endif %}
   </div>
 </div>
@@ -338,6 +348,7 @@
 {% block scripts %}
 {{ super() }}
 <script src="https://cdn.jsdelivr.net/npm/frappe-gantt@0.6.1/dist/frappe-gantt.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 
 {% if gantt_tasks %}
 <script>
@@ -498,6 +509,224 @@ if (btnToday && gantt) {
     }
   });
 }
+
+// ── Export Gantt ──────────────────────────────────────────────────────────────
+// Inline fill colors into a cloned SVG so it renders correctly as a standalone image
+function inlineGanttSvgStyles(clone) {
+  // Bar fill colors by status class
+  clone.querySelectorAll('.bar-wrapper').forEach(wrapper => {
+    const cls = (wrapper.getAttribute('class') || '');
+    let color = '#6c757d'; // BACKLOG
+    if (cls.includes('blocked'))              color = '#dc3545';
+    else if (cls.includes('status-COMPLETED'))    color = '#198754';
+    else if (cls.includes('status-IN_PROGRESS'))  color = '#0d6efd';
+    else if (cls.includes('status-IN_REVIEW'))    color = '#fd7e14';
+
+    const bar = wrapper.querySelector('.bar');
+    if (bar) { bar.setAttribute('fill', color); bar.setAttribute('rx', '4'); }
+
+    const progress = wrapper.querySelector('.bar-progress');
+    if (progress) progress.setAttribute('fill', 'rgba(255,255,255,0.25)');
+  });
+
+  // Grid row zebra
+  clone.querySelectorAll('.grid-row').forEach((row, i) => {
+    row.setAttribute('fill', i % 2 === 0 ? '#ffffff' : '#f8f9fa');
+  });
+
+  // Grid header background
+  clone.querySelectorAll('.grid-header').forEach(h => h.setAttribute('fill', '#f0f2f5'));
+
+  // Today highlight
+  const th = clone.querySelector('.today-highlight');
+  if (th) th.setAttribute('fill', 'rgba(0,115,234,0.08)');
+
+  // Tick / grid lines
+  clone.querySelectorAll('.tick').forEach(t => {
+    t.setAttribute('stroke', '#dee2e6');
+    t.setAttribute('stroke-width', '1');
+  });
+
+  // Dependency arrows
+  clone.querySelectorAll('.arrow').forEach(a => {
+    a.setAttribute('stroke', '#adb5bd');
+    a.setAttribute('fill', 'none');
+    a.setAttribute('stroke-width', '1.5');
+  });
+
+  // Bar labels (white text on colored bars)
+  clone.querySelectorAll('.bar-label').forEach(t => {
+    t.setAttribute('fill', '#ffffff');
+    t.setAttribute('font-size', '11');
+    t.setAttribute('font-weight', '500');
+    t.setAttribute('font-family', 'Arial, Helvetica, sans-serif');
+  });
+
+  // Date header labels
+  clone.querySelectorAll('.lower-text, .upper-text').forEach(t => {
+    t.setAttribute('fill', '#495057');
+    t.setAttribute('font-size', '11');
+    t.setAttribute('font-family', 'Arial, Helvetica, sans-serif');
+  });
+}
+
+function buildExportCanvas() {
+  const svgEl = document.getElementById('gantt');
+  if (!svgEl) return Promise.reject(new Error('SVG no encontrado'));
+
+  const svgW = svgEl.scrollWidth || parseFloat(svgEl.getAttribute('width')) || svgEl.getBoundingClientRect().width;
+  const svgH = svgEl.scrollHeight || parseFloat(svgEl.getAttribute('height')) || svgEl.getBoundingClientRect().height;
+
+  // Clone and inline styles
+  const clone = svgEl.cloneNode(true);
+  clone.setAttribute('width', svgW);
+  clone.setAttribute('height', svgH);
+  clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+  inlineGanttSvgStyles(clone);
+
+  const svgStr = new XMLSerializer().serializeToString(clone);
+  const blob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+
+  // Layout constants (CSS px, before SCALE)
+  const SCALE = 2;
+  const PAD = 20;
+  const HEADER_H = 72;
+  const LEGEND_H = 38;
+  const totalW = svgW + PAD * 2;
+  const totalH = HEADER_H + svgH + LEGEND_H + PAD;
+
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width  = totalW * SCALE;
+      canvas.height = totalH * SCALE;
+      const ctx = canvas.getContext('2d');
+      ctx.scale(SCALE, SCALE);
+
+      // ── Background ──────────────────────────────────────────────────────────
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, totalW, totalH);
+
+      // ── Header bar ──────────────────────────────────────────────────────────
+      ctx.fillStyle = '#f8f9fa';
+      ctx.fillRect(0, 0, totalW, HEADER_H);
+      ctx.strokeStyle = '#dee2e6';
+      ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(0, HEADER_H); ctx.lineTo(totalW, HEADER_H); ctx.stroke();
+
+      // Project name
+      ctx.fillStyle = '#1a1a2e';
+      ctx.font = 'bold 16px Arial, Helvetica, sans-serif';
+      ctx.fillText('{{ project.name }}', PAD, PAD + 16);
+
+      // Subtitle
+      ctx.fillStyle = '#6c757d';
+      ctx.font = '11px Arial, Helvetica, sans-serif';
+      const today = new Date().toLocaleDateString('es-ES', { weekday:'long', year:'numeric', month:'long', day:'numeric' });
+      ctx.fillText('Diagrama de Gantt  ·  ' + today, PAD, PAD + 32);
+
+      // Metric pills
+      const metricItems = [
+        { label: 'Total tareas', val: '{{ tasks|length }}',                                             color: '#1a1a2e' },
+        { label: 'Completadas',  val: '{{ tasks|selectattr("status","eq","COMPLETED")|list|length }}',  color: '#198754' },
+        { label: 'En progreso',  val: '{{ tasks|selectattr("status","eq","IN_PROGRESS")|list|length }}',color: '#0d6efd' },
+        { label: 'Con fechas',   val: '{{ gantt_tasks|length }}',                                       color: '#6c757d' },
+      ];
+      let mx = PAD;
+      const pillY = PAD + 48;
+      metricItems.forEach(m => {
+        // pill background
+        ctx.fillStyle = m.color + '18';
+        const valW = ctx.measureText(m.val).width;
+        ctx.beginPath();
+        ctx.roundRect(mx, pillY - 14, valW + ctx.measureText(' ' + m.label).width + 16, 18, 4);
+        ctx.fill();
+        // value
+        ctx.fillStyle = m.color;
+        ctx.font = 'bold 12px Arial, Helvetica, sans-serif';
+        ctx.fillText(m.val, mx + 8, pillY);
+        // label
+        ctx.fillStyle = '#495057';
+        ctx.font = '11px Arial, Helvetica, sans-serif';
+        ctx.fillText(m.label, mx + 8 + valW + 4, pillY);
+        mx += valW + ctx.measureText(' ' + m.label).width + 24;
+      });
+
+      // ── Gantt SVG ───────────────────────────────────────────────────────────
+      ctx.drawImage(img, PAD, HEADER_H, svgW, svgH);
+
+      // Border around gantt area
+      ctx.strokeStyle = '#dee2e6';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(PAD, HEADER_H, svgW, svgH);
+
+      // ── Legend ──────────────────────────────────────────────────────────────
+      const legendY = HEADER_H + svgH + 12;
+      const legendItems = [
+        { label: 'Backlog',     color: '#6c757d' },
+        { label: 'En Progreso', color: '#0d6efd' },
+        { label: 'En Revisión', color: '#fd7e14' },
+        { label: 'Completado',  color: '#198754' },
+        { label: 'Bloqueada',   color: '#dc3545' },
+      ];
+      ctx.font = '11px Arial, Helvetica, sans-serif';
+      let lx = PAD;
+      legendItems.forEach(item => {
+        ctx.fillStyle = item.color;
+        ctx.beginPath(); ctx.roundRect(lx, legendY, 12, 12, 2); ctx.fill();
+        ctx.fillStyle = '#495057';
+        ctx.fillText(item.label, lx + 16, legendY + 10);
+        lx += 16 + ctx.measureText(item.label).width + 16;
+      });
+
+      URL.revokeObjectURL(url);
+      resolve(canvas);
+    };
+    img.onerror = e => { URL.revokeObjectURL(url); reject(e); };
+    img.src = url;
+  });
+}
+
+async function runExport(format) {
+  const pngBtn = document.getElementById('export-png');
+  const pdfBtn = document.getElementById('export-pdf');
+  const btn = format === 'png' ? pngBtn : pdfBtn;
+  const original = btn.innerHTML;
+  btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-2"></i>Generando…';
+  btn.disabled = true;
+  try {
+    const canvas = await buildExportCanvas();
+    if (format === 'png') {
+      const link = document.createElement('a');
+      link.download = `gantt-{{ project.name|replace(' ', '-') }}.png`;
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+    } else {
+      const imgData = canvas.toDataURL('image/png');
+      const { jsPDF } = window.jspdf;
+      const mmPerPx = 0.2645;
+      const pageW = Math.round(canvas.width / 2 * mmPerPx);
+      const pageH = Math.round(canvas.height / 2 * mmPerPx);
+      const pdf = new jsPDF({ orientation: pageW > pageH ? 'l' : 'p', unit: 'mm', format: [pageW, pageH] });
+      pdf.addImage(imgData, 'PNG', 0, 0, pageW, pageH);
+      pdf.save(`gantt-{{ project.name|replace(' ', '-') }}.pdf`);
+    }
+  } catch(e) {
+    console.error(e);
+    alert('Error al exportar: ' + e.message);
+  } finally {
+    btn.innerHTML = original;
+    btn.disabled = false;
+  }
+}
+
+const exportBtn = document.getElementById('export-png');
+if (exportBtn) exportBtn.addEventListener('click', () => runExport('png'));
+
+const exportPdfBtn = document.getElementById('export-pdf');
+if (exportPdfBtn) exportPdfBtn.addEventListener('click', () => runExport('pdf'));
 </script>
 {% endif %}
 {% endblock %}

@@ -29,7 +29,7 @@ Usage:
 """
 
 from datetime import datetime
-from flask import current_app, render_template, url_for
+from flask import current_app, render_template, url_for, request as flask_request
 from .. import db
 from ..models import SystemNotification, User, Task, Project
 from ..models import AuditLog
@@ -246,18 +246,18 @@ class NotificationService:
             from ..models import SystemSettings
             app_name = SystemSettings.get('app_name', 'BridgeWork')
             
-            # Build context and handle environments without SERVER_NAME or request context
+            # Build dashboard URL from actual request host
             try:
-                dashboard_url = url_for('main.dashboard', _external=True)
-            except Exception as e:
-                current_app.logger.debug(f"Could not build external dashboard URL using url_for: {e}")
-                # Fallback: try SERVER_NAME or BASE_URL from config
-                host = current_app.config.get('SERVER_NAME') or SystemSettings.get('base_url') or current_app.config.get('BASE_URL')
-                scheme = current_app.config.get('PREFERRED_URL_SCHEME', 'https')
-                if host:
-                    dashboard_url = f"{scheme}://{host}/"
+                dashboard_url = flask_request.url_root  # e.g. "https://myserver.com/"
+            except RuntimeError:
+                # Outside request context: use configured base_url or Flask config
+                base_url = SystemSettings.get('base_url')
+                if base_url:
+                    dashboard_url = base_url.rstrip('/') + '/'
                 else:
-                    dashboard_url = ''
+                    host = current_app.config.get('SERVER_NAME') or current_app.config.get('BASE_URL')
+                    scheme = current_app.config.get('PREFERRED_URL_SCHEME', 'https')
+                    dashboard_url = f"{scheme}://{host}/" if host else ''
 
             # Build context
             email_context = {
@@ -267,6 +267,10 @@ class NotificationService:
                 'dashboard_url': dashboard_url,
                 **(context or {})
             }
+
+            # Auto-build task_url if a task is in context but task_url was not provided
+            if 'task_url' not in email_context and email_context.get('task'):
+                email_context['task_url'] = cls._build_task_url(email_context['task'])
             
             # Render templates using Jinja environment directly to avoid request-only context processors
             try:
@@ -333,6 +337,38 @@ class NotificationService:
         """Convert HTML email to plain text fallback."""
         message = context.get('message', '') if context else ''
         return f"{subject}\n\n{message}\n\n---\nBridgeWork - Sistema de Gestión de Proyectos"
+
+    @classmethod
+    def _build_task_url(cls, task: Task) -> str:
+        """Build an external URL to the task detail page.
+
+        Priority:
+          1. request.url_root — actual incoming HTTP request host (no SERVER_NAME issues)
+          2. SystemSettings.base_url — fallback for background tasks / cron jobs
+          3. Relative path — last resort
+        """
+        # 1. Best: read the real scheme+host directly from the current HTTP request
+        try:
+            return flask_request.url_root.rstrip('/') + f'/task/{task.id}'
+        except RuntimeError:
+            pass  # No active request context (background task, cron, CLI)
+
+        # 2. Admin-configured public base URL (outside request context)
+        try:
+            from ..models import SystemSettings
+            base = SystemSettings.get('base_url')
+        except Exception:
+            base = None
+
+        if base:
+            return f"{base.rstrip('/')}/task/{task.id}"
+
+        # 3. Flask SERVER_NAME / BASE_URL config
+        host = current_app.config.get('SERVER_NAME') or current_app.config.get('BASE_URL')
+        if host:
+            return f"{host.rstrip('/')}/task/{task.id}"
+
+        return f"/task/{task.id}"
     
     # ============================================
     # Convenience methods for specific events
@@ -377,27 +413,7 @@ class NotificationService:
         if assigned_by_user:
             message += f" por {assigned_by_user.name or assigned_by_user.username}"
 
-        # Build task-specific external URL (safe outside request context)
-        try:
-            task_url = url_for('main.task_detail', task_id=task.id, _external=True)
-        except Exception as e:
-            current_app.logger.debug(f"Could not build task external URL via url_for: {e}")
-            # Prefer explicit base URL from SystemSettings, else fall back to SERVER_NAME or BASE_URL in config
-            base = None
-            try:
-                from ..models import SystemSettings
-                base = SystemSettings.get('base_url')
-            except Exception:
-                base = None
-            if not base:
-                base = current_app.config.get('SERVER_NAME') or current_app.config.get('BASE_URL')
-            if base:
-                base = base.rstrip('/')
-                task_url = f"{base}/task/{task.id}"
-            else:
-                # Last resort: relative path (will be rendered as-is in email)
-                task_url = f"/task/{task.id}"
-            current_app.logger.debug(f"build task_url fallback -> {task_url}")
+        task_url = cls._build_task_url(task)
 
         current_app.logger.info(f"notify_task_assigned: enviando a {assignee.email}, send_email={send_email}, notify_client={notify_client}")
         
@@ -437,7 +453,9 @@ class NotificationService:
         message = f"La tarea '{task.title}' ha sido marcada como completada"
         if completed_by_user:
             message += f" por {completed_by_user.name or completed_by_user.username}"
-        
+
+        task_url = cls._build_task_url(task)
+
         # Notify project creator/manager
         if project.created_by and project.created_by != (completed_by_user.id if completed_by_user else None):
             n = cls.notify(
@@ -453,11 +471,12 @@ class NotificationService:
                     'project': project,
                     'completed_by': completed_by_user,
                     'message': message,
-                    'title': title
+                    'title': title,
+                    'task_url': task_url,
                 }
             )
             notifications.append(n)
-        
+
         # Notify clients if task requires approval
         if notify_client and task.requires_client_approval:
             # Get clients associated with the project
@@ -465,7 +484,7 @@ class NotificationService:
             client_ids = db.session.query(project_clients.c.user_id).filter(
                 project_clients.c.project_id == project.id
             ).all()
-            
+
             for (client_id,) in client_ids:
                 n = cls.notify(
                     user_id=client_id,
@@ -480,7 +499,8 @@ class NotificationService:
                         'project': project,
                         'completed_by': completed_by_user,
                         'message': f"La tarea '{task.title}' está lista para tu revisión",
-                        'title': "Tarea pendiente de aprobación"
+                        'title': "Tarea pendiente de aprobación",
+                        'task_url': task_url,
                     }
                 )
                 notifications.append(n)
@@ -516,7 +536,8 @@ class NotificationService:
                 'new_status': task.status,
                 'changed_by': changed_by_user,
                 'message': message,
-                'title': title
+                'title': title,
+                'task_url': cls._build_task_url(task),
             }
         )
     
@@ -544,7 +565,8 @@ class NotificationService:
                 'task': task,
                 'approved_by': approved_by_user,
                 'message': message,
-                'title': title
+                'title': title,
+                'task_url': cls._build_task_url(task),
             }
         )
     
@@ -576,7 +598,8 @@ class NotificationService:
                 'rejected_by': rejected_by_user,
                 'rejection_reason': rejection_reason,
                 'message': message,
-                'title': title
+                'title': title,
+                'task_url': cls._build_task_url(task),
             }
         )
     
@@ -612,7 +635,8 @@ class NotificationService:
                 'project': project,
                 'days_until_due': days_until_due,
                 'message': message,
-                'title': title
+                'title': title,
+                'task_url': cls._build_task_url(task),
             }
         )
     

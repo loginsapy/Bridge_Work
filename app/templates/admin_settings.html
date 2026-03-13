@@ -1444,6 +1444,9 @@
                 <input type="checkbox" value="task.created"> <span>Tarea creada</span>
               </label>
               <label class="d-flex align-items-center gap-2" style="cursor:pointer">
+                <input type="checkbox" value="task.updated"> <span>Tarea editada</span>
+              </label>
+              <label class="d-flex align-items-center gap-2" style="cursor:pointer">
                 <input type="checkbox" value="task.status_changed"> <span>Cambio de estado</span>
               </label>
               <label class="d-flex align-items-center gap-2" style="cursor:pointer">
@@ -1476,7 +1479,12 @@
 
   <script>
   // ===== Webhooks admin UI =====
-  const webhookModal = new bootstrap.Modal(document.getElementById('webhookModal'));
+  // Lazy-init: Bootstrap JS loads after the content block, so we can't instantiate at parse time
+  let _webhookModal = null;
+  function getWebhookModal() {
+    if (!_webhookModal) _webhookModal = new bootstrap.Modal(document.getElementById('webhookModal'));
+    return _webhookModal;
+  }
 
   function renderWebhookList(webhooks) {
     const list = document.getElementById('webhookList');
@@ -1533,7 +1541,7 @@
     document.querySelectorAll('#webhookEvents input[type=checkbox]').forEach(cb => {
       cb.checked = wh ? (wh.events || []).includes(cb.value) : false;
     });
-    webhookModal.show();
+    getWebhookModal().show();
   }
 
   function editWebhook(wh) { openWebhookModal(wh); }
@@ -1559,7 +1567,7 @@
       body: JSON.stringify({name, url, events, secret, active})
     }).then(r => r.json()).then(d => {
       if (d.error) { alert('Error: ' + d.error); return; }
-      webhookModal.hide();
+      getWebhookModal().hide();
       loadWebhooks();
     }).catch(e => alert('Error al guardar webhook'));
   }

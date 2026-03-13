@@ -1314,6 +1314,20 @@ def create_task():
         db.session.add(audit)
         db.session.commit()
 
+        # Dispatch webhook task.created (non-blocking)
+        try:
+            from app.services import webhook_service
+            webhook_service.dispatch('task.created', {
+                'task_id': task.id,
+                'task_title': task.title,
+                'project_id': task.project_id,
+                'project_name': project.name if project else None,
+                'user_name': current_user.name if current_user else None,
+                'new_status': task.status,
+            })
+        except Exception:
+            current_app.logger.exception('Error dispatching webhook for created task %s', task.id)
+
         # Handle file attachments
         files = request.files.getlist('attachments')
         attachment_count = 0
@@ -1363,7 +1377,7 @@ def create_task():
                         related_entity_type='task',
                         related_entity_id=task.id,
                         send_email=send_email,
-                        email_context={'task': task, 'project': project_obj, 'assigned_by': current_user}
+                        email_context={'task': task, 'project': project_obj, 'assigned_by': current_user, 'task_url': NotificationService._build_task_url(task)}
                     )
                     email_sent = True
                 except Exception:
@@ -3311,7 +3325,8 @@ def update_task_status(task_id):
     
     try:
         new_status = request.form.get('status')
-        
+        old_status = task.status
+
         # Validate if task can advance to new status
         if new_status:
             can_advance, error_msg, blockers = task.can_advance_status(new_status)
@@ -3323,6 +3338,27 @@ def update_task_status(task_id):
 
         task.set_status(new_status)
         db.session.commit()
+
+        # Dispatch webhooks (non-blocking)
+        try:
+            from app.services import webhook_service
+            if new_status and new_status != old_status:
+                webhook_data = {
+                    'task_id': task.id,
+                    'task_title': task.title,
+                    'project_id': task.project_id,
+                    'project_name': project.name if project else None,
+                    'user_name': user.name if user else None,
+                    'old_status': old_status,
+                    'new_status': task.status,
+                }
+                if task.status == 'COMPLETED':
+                    webhook_service.dispatch('task.completed', webhook_data)
+                else:
+                    webhook_service.dispatch('task.status_changed', webhook_data)
+        except Exception:
+            current_app.logger.exception('Error dispatching webhook for task %s', task.id)
+
         return redirect(url_for('main.task_detail', task_id=task.id))
     except Exception as e:
         db.session.rollback()
@@ -3754,6 +3790,27 @@ def move_task(task_id):
             )
         
         db.session.commit()
+
+        # Dispatch webhooks (non-blocking)
+        try:
+            from app.services import webhook_service
+            if old_status != normalized_new:
+                webhook_data = {
+                    'task_id': task.id,
+                    'task_title': task.title,
+                    'project_id': task.project_id,
+                    'project_name': project.name if project else None,
+                    'user_name': user.name if user else None,
+                    'old_status': old_status,
+                    'new_status': normalized_new,
+                }
+                if normalized_new == 'COMPLETED':
+                    webhook_service.dispatch('task.completed', webhook_data)
+                else:
+                    webhook_service.dispatch('task.status_changed', webhook_data)
+        except Exception:
+            current_app.logger.exception('Error dispatching webhook for task %s', task.id)
+
         return jsonify({'status': 'ok', 'task_id': task.id, 'new_status': task.status})
     except Exception as e:
         db.session.rollback()
@@ -3859,12 +3916,16 @@ def edit_task(task_id):
             old_assignees = set([u.id for u in task.assignees]) if getattr(task, 'assignees', None) else set()
             old_values = {
                 'title': task.title,
+                'description': task.description,
                 'status': task.status,
                 'priority': task.priority,
                 'assigned_to_id': task.assigned_to_id,
                 'is_internal_only': task.is_internal_only,
+                'parent_task_id': task.parent_task_id,
+                'start_date': str(task.start_date),
+                'due_date': str(task.due_date),
+                'estimated_hours': str(task.estimated_hours),
                 'predecessor_ids': sorted([p.id for p in task.predecessors]),
-                'parent_task_id': task.parent_task_id
             }
 
             # Role checks: only PMP/Admin can modify most fields. Participants and Clients may only change status and upload files.
@@ -4041,12 +4102,16 @@ def edit_task(task_id):
             # Registrar auditoría de cambios en tarea
             new_values = {
                 'title': task.title,
+                'description': task.description,
                 'status': task.status,
                 'priority': task.priority,
                 'assigned_to_id': task.assigned_to_id,
                 'is_internal_only': task.is_internal_only,
+                'parent_task_id': task.parent_task_id,
+                'start_date': str(task.start_date),
+                'due_date': str(task.due_date),
+                'estimated_hours': str(task.estimated_hours),
                 'predecessor_ids': sorted([p.id for p in task.predecessors]),
-                'parent_task_id': task.parent_task_id
             }
             changes = {k: {'old': old_values[k], 'new': new_values[k]} for k in old_values if old_values[k] != new_values[k]}
             
@@ -4061,7 +4126,47 @@ def edit_task(task_id):
                 db.session.add(audit)
 
             db.session.commit()
-            
+
+            # Dispatch webhooks for edits
+            try:
+                from app.services import webhook_service
+                _old_st = old_values.get('status')
+                _wh_base = {
+                    'task_id': task.id,
+                    'task_title': task.title,
+                    'project_id': task.project_id,
+                    'project_name': task.project.name if task.project else None,
+                    'user_name': current_user.name if current_user else None,
+                }
+                # Status-specific events
+                if _old_st and _old_st != task.status:
+                    _wh_status = {**_wh_base, 'old_status': _old_st, 'new_status': task.status}
+                    if task.status == 'COMPLETED':
+                        webhook_service.dispatch('task.completed', _wh_status)
+                    else:
+                        webhook_service.dispatch('task.status_changed', _wh_status)
+                # General update event for any field change
+                # Build new_values matching the same keys as old_values
+                _new_values = {
+                    'title': task.title,
+                    'description': task.description,
+                    'status': task.status,
+                    'priority': task.priority,
+                    'assigned_to_id': task.assigned_to_id,
+                    'is_internal_only': task.is_internal_only,
+                    'parent_task_id': task.parent_task_id,
+                    'start_date': str(task.start_date),
+                    'due_date': str(task.due_date),
+                    'estimated_hours': str(task.estimated_hours),
+                    'predecessor_ids': sorted([p.id for p in task.predecessors]),
+                }
+                _changed = [k for k in old_values if str(old_values[k]) != str(_new_values.get(k))]
+                current_app.logger.info('Webhook task.updated: changed_fields=%s task=%s', _changed, task.id)
+                if _changed:
+                    webhook_service.dispatch('task.updated', {**_wh_base, 'changed_fields': _changed})
+            except Exception:
+                current_app.logger.exception('Error dispatching webhook for task %s', task.id)
+
             send_email_setting = SystemSettings.get('notify_task_assigned', 'true')
             send_email = send_email_setting == 'true' or send_email_setting == True
             email_sent = False
@@ -4081,7 +4186,7 @@ def edit_task(task_id):
                             related_entity_type='task',
                             related_entity_id=task.id,
                             send_email=send_email,
-                            email_context={'task': task, 'project': project_obj, 'assigned_by': current_user}
+                            email_context={'task': task, 'project': project_obj, 'assigned_by': current_user, 'task_url': NotificationService._build_task_url(task)}
                         )
                         email_sent = True
                     except Exception:
@@ -4178,6 +4283,21 @@ def client_accept_task(task_id):
         )
         db.session.add(audit)
         db.session.commit()
+
+        try:
+            from app.services import webhook_service
+            webhook_service.dispatch('task.completed', {
+                'task_id': task.id,
+                'task_title': task.title,
+                'project_id': task.project_id,
+                'project_name': task.project.name if task.project else None,
+                'user_name': current_user.name if current_user else None,
+                'old_status': old_status,
+                'new_status': 'COMPLETED',
+            })
+        except Exception:
+            current_app.logger.exception('Error dispatching webhook for task %s', task.id)
+
         flash('Tarea aceptada y marcada como completada.', 'success')
     except Exception as e:
         db.session.rollback()
@@ -4231,7 +4351,21 @@ def reject_task(task_id):
         ).update({'is_read': True})
         
         db.session.commit()
-        
+
+        try:
+            from app.services import webhook_service
+            webhook_service.dispatch('task.status_changed', {
+                'task_id': task.id,
+                'task_title': task.title,
+                'project_id': task.project_id,
+                'project_name': project.name if project else None,
+                'user_name': current_user.name if current_user else None,
+                'old_status': 'COMPLETED',
+                'new_status': 'IN_REVIEW',
+            })
+        except Exception:
+            current_app.logger.exception('Error dispatching webhook for task %s', task.id)
+
         # Notificar al responsable de la tarea que fue rechazada (con email)
         NotificationService.notify_task_rejected(
             task=task,

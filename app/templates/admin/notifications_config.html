@@ -54,9 +54,9 @@
             </div>
           </div>
           <div class="mb-3">
-            <label class="form-label fw-semibold">Base URL (para enlaces en emails)</label>
-            <input type="text" name="base_url" id="baseUrlInput" class="form-control" value="{{ settings.base_url }}" placeholder="https://app.yourcompany.com">
-            <div id="baseUrlHelp" class="form-text text-muted">Si se configura, los enlaces en los correos (ej. Ver Tarea) usarán esta URL como prefijo.</div>
+            <label class="form-label fw-semibold">Base URL <span class="text-muted fw-normal">(opcional — solo para tareas programadas fuera del servidor web)</span></label>
+            <input type="text" name="base_url" id="baseUrlInput" class="form-control" value="{{ settings.base_url }}" placeholder="Dejar vacío para usar el servidor automáticamente">
+            <div id="baseUrlHelp" class="form-text text-muted">Normalmente déjalo vacío: los enlaces en los correos se generan automáticamente con el dominio real del servidor. Solo configúralo si envías notificaciones desde tareas programadas (cron) fuera del contexto web.</div>
             <div id="baseUrlError" class="invalid-feedback" style="display:none;">La Base URL debe comenzar con http:// o https://</div>
           </div>        </div>
       </div>

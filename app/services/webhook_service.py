@@ -36,6 +36,7 @@ logger = logging.getLogger(__name__)
 # Eventos soportados
 EVENTS = {
     'task.created': 'Tarea creada',
+    'task.updated': 'Tarea editada',
     'task.status_changed': 'Cambio de estado de tarea',
     'task.completed': 'Tarea completada',
     'task.assigned': 'Tarea asignada',
