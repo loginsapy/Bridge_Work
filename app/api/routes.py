@@ -8,7 +8,7 @@ from sqlalchemy import func
 from datetime import date, datetime
 from marshmallow import ValidationError
 from .schemas import ProjectSchema, TaskSchema, TimeEntrySchema
-from flask_login import current_user
+from flask_login import current_user, login_required
 from ..auth.decorators import internal_required, client_required
 import os
 import mimetypes
@@ -469,6 +469,139 @@ def create_task():
     return jsonify(task_to_dict(t)), 201
 
 
+@api_bp.route("/tasks/bulk", methods=["PATCH"])
+@login_required
+def bulk_update_tasks():
+    """Apply a single field change to multiple tasks at once.
+
+    Body: { "task_ids": [1,2,3], "field": "status"|"priority"|"assignees", "value": ... }
+    Returns: { "updated": [ids], "skipped": [ids], "errors": [...] }
+    """
+    data = request.get_json(force=True, silent=True) or {}
+    task_ids = data.get('task_ids', [])
+    field    = data.get('field', '')
+    value    = data.get('value')
+
+    if not task_ids or not field:
+        return jsonify({'error': 'task_ids y field son requeridos'}), 400
+
+    allowed_fields = {'status', 'priority', 'assignees'}
+    if field not in allowed_fields:
+        return jsonify({'error': f'Campo no permitido: {field}'}), 400
+
+    user_role = current_user.role.name if current_user.role else None
+
+    updated = []
+    skipped = []
+    errors  = []
+
+    for tid in task_ids:
+        try:
+            t = Task.query.get(tid)
+            if not t:
+                skipped.append(tid)
+                continue
+
+            # Permission check
+            can_edit = user_role in ('PMP', 'Admin') or t.assigned_to_id == current_user.id
+            if not can_edit:
+                skipped.append(tid)
+                continue
+
+            if field == 'status':
+                if value not in ('BACKLOG', 'IN_PROGRESS', 'IN_REVIEW', 'COMPLETED'):
+                    errors.append({'id': tid, 'error': f'Estado inválido: {value}'})
+                    continue
+                t.status = value
+                if value == 'COMPLETED':
+                    from datetime import datetime as _dt
+                    t.completed_at = _dt.now()
+
+            elif field == 'priority':
+                if value not in ('LOW', 'MEDIUM', 'HIGH', 'CRITICAL'):
+                    errors.append({'id': tid, 'error': f'Prioridad inválida: {value}'})
+                    continue
+                t.priority = value
+
+            elif field == 'assignees':
+                # value is a list of user IDs
+                ids = [int(i) for i in (value or [])]
+                from ..models import User as _User
+                new_assignees = _User.query.filter(_User.id.in_(ids)).all()
+                t.assignees = new_assignees
+                if new_assignees:
+                    t.assigned_to_id = new_assignees[0].id
+
+            updated.append(tid)
+        except Exception as e:
+            errors.append({'id': tid, 'error': str(e)})
+
+    try:
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+    return jsonify({'updated': updated, 'skipped': skipped, 'errors': errors})
+
+
+@api_bp.route("/tasks/bulk", methods=["DELETE"])
+@login_required
+def bulk_delete_tasks():
+    """Delete multiple tasks and log each deletion to AuditLog.
+
+    Body: { "task_ids": [1,2,3] }
+    Returns: { "deleted": [ids], "skipped": [ids], "errors": [...] }
+    """
+    data = request.get_json(force=True, silent=True) or {}
+    task_ids = data.get('task_ids', [])
+
+    if not task_ids:
+        return jsonify({'error': 'task_ids es requerido'}), 400
+
+    # Only PMP and Admin can bulk-delete
+    user_role = current_user.role.name if current_user.role else None
+    if not (current_user.is_internal and user_role in ('PMP', 'Admin')):
+        return jsonify({'error': 'Solo PMP o Admin pueden eliminar tareas'}), 403
+
+    deleted = []
+    skipped = []
+    errors  = []
+
+    for tid in task_ids:
+        try:
+            t = Task.query.get(tid)
+            if not t:
+                skipped.append(tid)
+                continue
+
+            audit = AuditLog(
+                user_id=current_user.id,
+                action='DELETE',
+                entity_type='Task',
+                entity_id=t.id,
+                changes={
+                    'message': f"Tarea '{t.title}' eliminada en lote por {current_user.email}",
+                    'task_title': t.title,
+                    'project_id': t.project_id,
+                    'bulk': True,
+                }
+            )
+            db.session.add(audit)
+            db.session.delete(t)
+            deleted.append(tid)
+        except Exception as e:
+            errors.append({'id': tid, 'error': str(e)})
+
+    try:
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+    return jsonify({'deleted': deleted, 'skipped': skipped, 'errors': errors})
+
+
 @api_bp.route("/tasks/<int:task_id>", methods=["PUT", "PATCH"])
 def update_task(task_id):
     t = Task.query.get_or_404(task_id)
@@ -736,6 +869,61 @@ def delete_task(task_id):
         db.session.rollback()
         abort(500, description='Error interno del servidor')
     return jsonify({"deleted": task_id}), 200
+
+
+# ── Task Predecessors (dependencies) ─────────────────────────────────────────
+
+@api_bp.route("/tasks/<int:task_id>/predecessors", methods=["GET"])
+@login_required
+def get_task_predecessors(task_id):
+    task = Task.query.get_or_404(task_id)
+    return jsonify({
+        'task_id': task.id,
+        'predecessors': [{'id': p.id, 'title': p.title, 'status': p.status} for p in task.predecessors]
+    })
+
+
+@api_bp.route("/tasks/<int:task_id>/predecessors", methods=["POST"])
+@login_required
+def add_task_predecessor(task_id):
+    from flask_login import current_user
+    if not (current_user.is_internal and current_user.role and current_user.role.name in ('PMP', 'Admin')):
+        return jsonify({'error': 'Solo PMP o Admin pueden gestionar dependencias'}), 403
+    data = request.get_json(force=True, silent=True) or {}
+    pred_id = data.get('predecessor_id')
+    if not pred_id:
+        return jsonify({'error': 'predecessor_id requerido'}), 400
+    task = Task.query.get_or_404(task_id)
+    pred = Task.query.get_or_404(pred_id)
+    if pred.project_id != task.project_id:
+        return jsonify({'error': 'La tarea predecesora debe ser del mismo proyecto'}), 400
+    if pred in task.predecessors:
+        return jsonify({'error': 'Ya existe esa dependencia'}), 409
+    if task.id == pred.id:
+        return jsonify({'error': 'Una tarea no puede ser su propio predecesor'}), 400
+    # Cycle check
+    try:
+        existing_ids = [p.id for p in task.predecessors]
+        task.validate_predecessor_ids(existing_ids + [pred.id])
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 409
+    task.predecessors.append(pred)
+    db.session.commit()
+    return jsonify({'ok': True, 'predecessor': {'id': pred.id, 'title': pred.title, 'status': pred.status}}), 201
+
+
+@api_bp.route("/tasks/<int:task_id>/predecessors/<int:pred_id>", methods=["DELETE"])
+@login_required
+def remove_task_predecessor(task_id, pred_id):
+    from flask_login import current_user
+    if not (current_user.is_internal and current_user.role and current_user.role.name in ('PMP', 'Admin')):
+        return jsonify({'error': 'Solo PMP o Admin pueden gestionar dependencias'}), 403
+    task = Task.query.get_or_404(task_id)
+    pred = Task.query.get(pred_id)
+    if pred and pred in task.predecessors:
+        task.predecessors.remove(pred)
+        db.session.commit()
+    return jsonify({'ok': True})
 
 
 # TimeEntries endpoints
@@ -1278,6 +1466,30 @@ def test_webhook_endpoint(webhook_id):
     result = _wh.test_webhook(webhook_id)
     status = 200 if result.get('success') else 502
     return jsonify(result), status
+
+
+@api_bp.route('/webhooks/<webhook_id>/deliveries', methods=['GET'])
+@limiter.limit("30/minute")
+def get_webhook_deliveries(webhook_id):
+    _require_admin()
+    from app.models import WebhookDelivery
+    limit = min(int(request.args.get('limit', 50)), 200)
+    deliveries = (WebhookDelivery.query
+                  .filter_by(webhook_id=webhook_id)
+                  .order_by(WebhookDelivery.created_at.desc())
+                  .limit(limit)
+                  .all())
+    # Summary stats
+    total = WebhookDelivery.query.filter_by(webhook_id=webhook_id).count()
+    success_count = WebhookDelivery.query.filter_by(webhook_id=webhook_id, success=True).count()
+    return jsonify({
+        'webhook_id': webhook_id,
+        'total': total,
+        'success_count': success_count,
+        'failure_count': total - success_count,
+        'success_rate': round(success_count / total * 100) if total else None,
+        'deliveries': [d.to_dict() for d in deliveries],
+    })
 
 
 @api_bp.route("/license/validate", methods=["POST"])

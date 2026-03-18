@@ -1,0 +1,230 @@
+{% extends 'base.html' %}
+
+{% block title %}Plantillas de Proyecto — {{ sys_app_name }}{% endblock %}
+
+{% block head %}
+<style>
+.template-card {
+  border: 1px solid var(--bs-border-color);
+  border-radius: 12px;
+  padding: 20px;
+  background: #fff;
+  transition: box-shadow 0.2s, transform 0.2s;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+.template-card:hover {
+  box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+  transform: translateY(-2px);
+}
+.template-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 20px;
+  margin-bottom: 14px;
+  flex-shrink: 0;
+}
+.template-name {
+  font-size: 16px;
+  font-weight: 600;
+  color: #1e293b;
+  margin-bottom: 6px;
+}
+.template-description {
+  font-size: 13px;
+  color: #64748b;
+  flex: 1;
+  margin-bottom: 14px;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.template-meta {
+  font-size: 12px;
+  color: #94a3b8;
+  margin-bottom: 14px;
+}
+.template-meta span {
+  margin-right: 12px;
+}
+.template-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: auto;
+}
+.empty-state {
+  text-align: center;
+  padding: 80px 20px;
+  color: #94a3b8;
+}
+.empty-state i {
+  font-size: 56px;
+  margin-bottom: 16px;
+  opacity: 0.4;
+}
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 28px;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="h3 fw-bold mb-1"><i class="fa-solid fa-layer-group me-2 text-primary"></i>Plantillas de Proyecto</h1>
+    <p class="text-muted mb-0">Crea proyectos nuevos a partir de estructuras reutilizables.</p>
+  </div>
+  <a href="{{ url_for('main.projects') }}" class="btn btn-outline-secondary">
+    <i class="fa-solid fa-arrow-left me-1"></i>Volver a Proyectos
+  </a>
+</div>
+
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% for category, message in messages %}
+  <div class="alert alert-{{ 'success' if category == 'success' else 'danger' }} alert-dismissible fade show" role="alert">
+    {{ message }}
+    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+  </div>
+  {% endfor %}
+{% endwith %}
+
+{% if templates %}
+<div class="row g-4">
+  {% for tpl in templates %}
+  <div class="col-sm-6 col-lg-4">
+    <div class="template-card">
+      <div class="template-icon">
+        <i class="fa-solid fa-diagram-project"></i>
+      </div>
+      <div class="template-name">{{ tpl.name }}</div>
+      <div class="template-description">{{ tpl.description or 'Sin descripción.' }}</div>
+      <div class="template-meta">
+        <span><i class="fa-solid fa-list-check me-1"></i>{{ tpl.task_count }} tarea{{ 's' if tpl.task_count != 1 else '' }}</span>
+        <span><i class="fa-solid fa-tag me-1"></i>{{ tpl.project_type.replace('_', ' ').title() }}</span>
+        <span><i class="fa-solid fa-user me-1"></i>{{ tpl.created_by.name if tpl.created_by else '—' }}</span>
+      </div>
+      <div class="template-actions">
+        <button class="btn btn-primary btn-sm flex-grow-1"
+                data-bs-toggle="modal"
+                data-bs-target="#createFromTemplateModal"
+                data-template-id="{{ tpl.id }}"
+                data-template-name="{{ tpl.name }}">
+          <i class="fa-solid fa-rocket me-1"></i>Usar plantilla
+        </button>
+        {% if current_user_role_name in ['PMP', 'Admin'] %}
+        <button class="btn btn-outline-danger btn-sm"
+                data-bs-toggle="modal"
+                data-bs-target="#deleteTemplateModal"
+                data-template-id="{{ tpl.id }}"
+                data-template-name="{{ tpl.name }}"
+                title="Eliminar plantilla">
+          <i class="fa-solid fa-trash"></i>
+        </button>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="empty-state">
+  <i class="fa-solid fa-layer-group d-block"></i>
+  <h4 class="fw-semibold mt-2 text-secondary">No hay plantillas todavía</h4>
+  <p class="mb-4">Guarda un proyecto existente como plantilla para poder reutilizar su estructura.</p>
+  <a href="{{ url_for('main.projects') }}" class="btn btn-primary">
+    <i class="fa-solid fa-arrow-left me-1"></i>Ir a Proyectos
+  </a>
+</div>
+{% endif %}
+
+<!-- Modal: Crear proyecto desde plantilla -->
+<div class="modal fade" id="createFromTemplateModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <form method="POST" id="createFromTemplateForm" action="">
+        <div class="modal-header">
+          <h5 class="modal-title"><i class="fa-solid fa-rocket me-2 text-primary"></i>Nuevo proyecto desde plantilla</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <p class="text-muted mb-3">Plantilla: <strong id="selectedTemplateName"></strong></p>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Nombre del proyecto <span class="text-danger">*</span></label>
+            <input type="text" name="name" class="form-control" required placeholder="Nombre del nuevo proyecto">
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Descripción</label>
+            <textarea name="description" class="form-control" rows="2" placeholder="Descripción opcional"></textarea>
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Fecha de inicio</label>
+            <input type="date" name="start_date" class="form-control" id="startDateInput">
+            <div class="form-text">Las fechas de las tareas se calculan en relación a esta fecha.</div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn btn-primary"><i class="fa-solid fa-plus me-1"></i>Crear proyecto</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Eliminar plantilla -->
+<div class="modal fade" id="deleteTemplateModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-sm">
+    <div class="modal-content">
+      <form method="POST" id="deleteTemplateForm" action="">
+        <div class="modal-header">
+          <h5 class="modal-title text-danger"><i class="fa-solid fa-trash me-2"></i>Eliminar plantilla</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <p>¿Eliminar la plantilla <strong id="deleteTemplateName"></strong>? Esta acción no se puede deshacer.</p>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn btn-danger">Eliminar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Set today as default start date
+document.getElementById('startDateInput').value = new Date().toISOString().slice(0, 10);
+
+// Populate "Usar plantilla" modal
+document.getElementById('createFromTemplateModal').addEventListener('show.bs.modal', function (e) {
+  const btn = e.relatedTarget;
+  const id = btn.dataset.templateId;
+  const name = btn.dataset.templateName;
+  document.getElementById('selectedTemplateName').textContent = name;
+  document.getElementById('createFromTemplateForm').action = '/project-templates/' + id + '/create-project';
+});
+
+// Populate "Eliminar" modal
+document.getElementById('deleteTemplateModal').addEventListener('show.bs.modal', function (e) {
+  const btn = e.relatedTarget;
+  const id = btn.dataset.templateId;
+  const name = btn.dataset.templateName;
+  document.getElementById('deleteTemplateName').textContent = name;
+  document.getElementById('deleteTemplateForm').action = '/project-templates/' + id + '/delete';
+});
+</script>
+{% endblock %}

@@ -454,6 +454,9 @@
       </button>
     </div>
     {% if current_user_role_name in ['PMP', 'Admin'] %}
+    <a href="{{ url_for('main.project_templates') }}" class="btn btn-outline-secondary">
+      <i class="fa-solid fa-layer-group me-1"></i>Plantillas
+    </a>
     <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createProjectModalLocal">
       <i class="fa-solid fa-plus me-1"></i>{{ _('new_project') }}
     </button>

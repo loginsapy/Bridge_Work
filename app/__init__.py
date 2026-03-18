@@ -337,6 +337,15 @@ def create_app(config_object="config.DevConfig"):
                 SystemSettings.get('global_alert_enabled', 'false')
             ),
             'sys_global_alert_message': SystemSettings.get('global_alert_message', ''),
+            'sys_portfolio_enabled': (lambda v: (v.lower() not in ('false', '0', 'no')) if isinstance(v, str) else bool(v))(
+                SystemSettings.get('portfolio_enabled', 'true')
+            ),
+            'sys_budget_tracking_enabled': (lambda v: (v.lower() not in ('false', '0', 'no')) if isinstance(v, str) else bool(v))(
+                SystemSettings.get('budget_tracking_enabled', 'true')
+            ),
+            'sys_risks_enabled': (lambda v: (v.lower() not in ('false', '0', 'no')) if isinstance(v, str) else bool(v))(
+                SystemSettings.get('risks_enabled', 'true')
+            ),
             # Utility: safe url_for that returns '#' if endpoint can't be built (prevents BuildError in templates)
             'safe_url_for': lambda endpoint, **kwargs: _safe_url_for(endpoint, **kwargs)
         }

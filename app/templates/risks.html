@@ -1,0 +1,434 @@
+{% extends 'base.html' %}
+
+{% block title %}
+  {% if project %}Riesgos — {{ project.name }}{% else %}Registro de Riesgos e Issues{% endif %} — {{ sys_app_name }}
+{% endblock %}
+
+{% block head %}
+<style>
+.risks-header {
+  display: flex; justify-content: space-between; align-items: center;
+  flex-wrap: wrap; gap: 12px; margin-bottom: 24px;
+}
+.risks-header h1 { font-size: 22px; font-weight: 700; margin: 0; color: #1e293b; }
+
+/* KPI */
+.kpi-row { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 22px; }
+.kpi-card {
+  background: #fff; border-radius: 10px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+  padding: 14px 20px; flex: 1; min-width: 130px;
+}
+.kpi-card .kv  { font-size: 26px; font-weight: 700; color: #1e293b; }
+.kpi-card .kl  { font-size: 11px; color: #94a3b8; text-transform: uppercase; letter-spacing: .4px; }
+.kpi-card.danger .kv { color: #ef4444; }
+
+/* Badges */
+.type-badge {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 2px 9px; border-radius: 99px; font-size: 11px; font-weight: 600;
+}
+.type-RISK  { background: #eff6ff; color: #2563eb; }
+.type-ISSUE { background: #fff7ed; color: #c2410c; }
+
+.sev-badge {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 2px 9px; border-radius: 99px; font-size: 11px; font-weight: 600;
+}
+.sev-LOW      { background: #f0fdf4; color: #166534; }
+.sev-MEDIUM   { background: #fefce8; color: #854d0e; }
+.sev-HIGH     { background: #fff7ed; color: #9a3412; }
+.sev-CRITICAL { background: #fef2f2; color: #991b1b; }
+
+.status-badge {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 2px 9px; border-radius: 99px; font-size: 11px; font-weight: 600;
+}
+.st-OPEN      { background: #f1f5f9; color: #334155; }
+.st-MITIGATED { background: #f0fdf4; color: #166534; }
+.st-ACCEPTED  { background: #faf5ff; color: #6b21a8; }
+.st-CLOSED    { background: #e2e8f0; color: #64748b; }
+
+/* Table */
+.risk-table-card {
+  background: #fff; border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06); overflow: hidden;
+}
+.risk-table-card table th {
+  background: #f8fafc; font-size: 12px; text-transform: uppercase;
+  letter-spacing: .5px; color: #64748b; border-bottom: 2px solid #e2e8f0;
+  white-space: nowrap;
+}
+.risk-table-card table td { vertical-align: middle; font-size: 13px; }
+.risk-row-OPEN      { border-left: 3px solid #94a3b8; }
+.risk-row-CRITICAL  { border-left: 3px solid #ef4444 !important; }
+
+/* Score dot */
+.score-dot {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; border-radius: 50%;
+  font-size: 11px; font-weight: 700; color: #fff;
+}
+.score-low    { background: #10b981; }
+.score-medium { background: #f59e0b; }
+.score-high   { background: #ef4444; }
+
+/* Modal */
+.prob-row { display: none; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="risks-header">
+  <div>
+    {% if project %}
+    <div class="mb-1">
+      <a href="{{ url_for('main.project_detail', project_id=project.id) }}" class="text-muted text-decoration-none" style="font-size:13px">
+        <i class="fa-solid fa-chevron-left me-1"></i>{{ project.name }}
+      </a>
+    </div>
+    {% endif %}
+    <h1>
+      <i class="fa-solid fa-shield-halved me-2 text-primary"></i>
+      {% if project %}Riesgos e Issues — {{ project.name }}{% else %}Registro Global de Riesgos{% endif %}
+    </h1>
+  </div>
+  <div class="d-flex gap-2 flex-wrap align-items-center">
+    <!-- Filters -->
+    <form method="get" class="d-flex gap-2 flex-wrap align-items-center" id="filterForm">
+      {% if not project %}
+      <select name="project_id" class="form-select form-select-sm" style="min-width:180px" onchange="this.form.submit()">
+        <option value="">Todos los proyectos</option>
+        {% for p in projects %}
+        <option value="{{ p.id }}" {% if project_filter == p.id %}selected{% endif %}>{{ p.name }}</option>
+        {% endfor %}
+      </select>
+      {% endif %}
+      <select name="type" class="form-select form-select-sm" style="min-width:130px" onchange="this.form.submit()">
+        <option value="">Riesgo e Issue</option>
+        <option value="RISK"  {% if type_filter == 'RISK'  %}selected{% endif %}>Solo Riesgos</option>
+        <option value="ISSUE" {% if type_filter == 'ISSUE' %}selected{% endif %}>Solo Issues</option>
+      </select>
+      <select name="status" class="form-select form-select-sm" style="min-width:130px" onchange="this.form.submit()">
+        <option value="">Todos los estados</option>
+        <option value="OPEN"      {% if status_filter == 'OPEN'      %}selected{% endif %}>Abierto</option>
+        <option value="MITIGATED" {% if status_filter == 'MITIGATED' %}selected{% endif %}>Mitigado</option>
+        <option value="ACCEPTED"  {% if status_filter == 'ACCEPTED'  %}selected{% endif %}>Aceptado</option>
+        <option value="CLOSED"    {% if status_filter == 'CLOSED'    %}selected{% endif %}>Cerrado</option>
+      </select>
+      <select name="severity" class="form-select form-select-sm" style="min-width:130px" onchange="this.form.submit()">
+        <option value="">Toda severidad</option>
+        <option value="CRITICAL" {% if severity_filter == 'CRITICAL' %}selected{% endif %}>Crítica</option>
+        <option value="HIGH"     {% if severity_filter == 'HIGH'     %}selected{% endif %}>Alta</option>
+        <option value="MEDIUM"   {% if severity_filter == 'MEDIUM'   %}selected{% endif %}>Media</option>
+        <option value="LOW"      {% if severity_filter == 'LOW'      %}selected{% endif %}>Baja</option>
+      </select>
+    </form>
+    <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#riskModal" onclick="openNewRisk()">
+      <i class="fa-solid fa-plus me-1"></i>Nuevo
+    </button>
+  </div>
+</div>
+
+<!-- KPIs -->
+<div class="kpi-row">
+  <div class="kpi-card">
+    <div class="kv">{{ risks|length }}</div>
+    <div class="kl">Total</div>
+  </div>
+  <div class="kpi-card">
+    <div class="kv">{{ counts.open }}</div>
+    <div class="kl">Abiertos</div>
+  </div>
+  <div class="kpi-card">
+    <div class="kv">{{ counts.risk }}</div>
+    <div class="kl">Riesgos</div>
+  </div>
+  <div class="kpi-card">
+    <div class="kv">{{ counts.issue }}</div>
+    <div class="kl">Issues</div>
+  </div>
+  <div class="kpi-card {% if counts.critical > 0 %}danger{% endif %}">
+    <div class="kv">{{ counts.critical }}</div>
+    <div class="kl">Críticos abiertos</div>
+  </div>
+</div>
+
+<!-- Table -->
+<div class="risk-table-card">
+  <div class="table-responsive">
+    <table class="table table-hover mb-0">
+      <thead>
+        <tr>
+          <th class="ps-4">Título</th>
+          {% if not project %}<th>Proyecto</th>{% endif %}
+          <th>Tipo</th>
+          <th>Severidad</th>
+          <th>Probabilidad</th>
+          <th>Impacto</th>
+          <th>Estado</th>
+          <th>Responsable</th>
+          <th>Plan mitigación</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in risks %}
+        {% set score = r.impact_score %}
+        {% set score_cls = 'score-high' if score >= 6 else ('score-medium' if score >= 3 else 'score-low') %}
+        <tr class="risk-row-{{ r.status }} {% if r.severity == 'CRITICAL' and r.status == 'OPEN' %}risk-row-CRITICAL{% endif %}">
+          <td class="ps-4" style="max-width:260px">
+            <div style="font-weight:600">{{ r.title }}</div>
+            {% if r.description %}
+            <div class="text-muted" style="font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:250px">{{ r.description }}</div>
+            {% endif %}
+          </td>
+          {% if not project %}
+          <td>
+            <a href="{{ url_for('main.project_risks', project_id=r.project_id) }}" class="text-decoration-none text-muted" style="font-size:12px">
+              {{ r.project.name }}
+            </a>
+          </td>
+          {% endif %}
+          <td><span class="type-badge type-{{ r.type }}">{% if r.type == 'RISK' %}<i class="fa-solid fa-triangle-exclamation"></i> Riesgo{% else %}<i class="fa-solid fa-bug"></i> Issue{% endif %}</span></td>
+          <td><span class="sev-badge sev-{{ r.severity }}">{{ {'LOW':'Baja','MEDIUM':'Media','HIGH':'Alta','CRITICAL':'Crítica'}.get(r.severity, r.severity) }}</span></td>
+          <td>
+            {% if r.type == 'RISK' %}
+            <span class="text-muted" style="font-size:12px">{{ {'LOW':'Baja','MEDIUM':'Media','HIGH':'Alta'}.get(r.probability, '—') }}</span>
+            {% else %}<span class="text-muted">—</span>{% endif %}
+          </td>
+          <td>
+            {% if r.type == 'RISK' %}
+            <span class="score-dot {{ score_cls }}">{{ score }}</span>
+            {% else %}<span class="text-muted">—</span>{% endif %}
+          </td>
+          <td><span class="status-badge st-{{ r.status }}">{{ {'OPEN':'Abierto','MITIGATED':'Mitigado','ACCEPTED':'Aceptado','CLOSED':'Cerrado'}.get(r.status, r.status) }}</span></td>
+          <td>
+            {% if r.owner %}
+              <span style="font-size:12px">{{ r.owner.name }}</span>
+            {% else %}<span class="text-muted">—</span>{% endif %}
+          </td>
+          <td style="max-width:200px">
+            {% if r.mitigation_plan %}
+            <span class="text-muted" style="font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block;max-width:190px" title="{{ r.mitigation_plan }}">{{ r.mitigation_plan }}</span>
+            {% else %}<span class="text-muted">—</span>{% endif %}
+          </td>
+          <td>
+            <div class="d-flex gap-1">
+              <button class="btn btn-xs btn-outline-secondary" style="font-size:11px;padding:2px 7px"
+                onclick="openEditRisk({{ {'id':r.id,'project_id':r.project_id,'type':r.type,'title':r.title,'description':r.description or '','severity':r.severity,'probability':r.probability or 'MEDIUM','status':r.status,'mitigation_plan':r.mitigation_plan or '','owner_id':r.owner_id}|tojson }})">
+                <i class="fa-solid fa-pen"></i>
+              </button>
+              {% if current_user.role and current_user.role.name in ['PMP','Admin'] %}
+              <button class="btn btn-xs btn-outline-danger" style="font-size:11px;padding:2px 7px"
+                onclick="deleteRisk({{ r.id }}, {{ r.project_id }})">
+                <i class="fa-solid fa-trash"></i>
+              </button>
+              {% endif %}
+            </div>
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="11" class="text-center text-muted py-5">
+            <i class="fa-solid fa-shield-halved mb-2" style="font-size:2rem;opacity:.3;display:block"></i>
+            No hay riesgos ni issues registrados.
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Modal crear/editar -->
+<div class="modal fade" id="riskModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="riskModalTitle">Nuevo Riesgo / Issue</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="riskId">
+        <input type="hidden" id="riskProjectId" value="{{ project.id if project else (project_filter or '') }}">
+
+        <div class="row g-3">
+          <div class="col-md-6">
+            <label class="form-label fw-600">Tipo <span class="text-danger">*</span></label>
+            <select class="form-select" id="riskType" onchange="toggleProbRow()">
+              <option value="RISK">Riesgo (potencial)</option>
+              <option value="ISSUE">Issue (problema activo)</option>
+            </select>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label fw-600">Estado</label>
+            <select class="form-select" id="riskStatus">
+              <option value="OPEN">Abierto</option>
+              <option value="MITIGATED">Mitigado</option>
+              <option value="ACCEPTED">Aceptado</option>
+              <option value="CLOSED">Cerrado</option>
+            </select>
+          </div>
+          {% if not project %}
+          <div class="col-12">
+            <label class="form-label fw-600">Proyecto <span class="text-danger">*</span></label>
+            <select class="form-select" id="riskProjectSelect">
+              <option value="">Seleccionar proyecto…</option>
+              {% for p in projects %}
+              <option value="{{ p.id }}">{{ p.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          {% endif %}
+          <div class="col-12">
+            <label class="form-label fw-600">Título <span class="text-danger">*</span></label>
+            <input type="text" class="form-control" id="riskTitle" maxlength="255">
+          </div>
+          <div class="col-12">
+            <label class="form-label">Descripción</label>
+            <textarea class="form-control" id="riskDescription" rows="2"></textarea>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label fw-600">Severidad / Impacto</label>
+            <select class="form-select" id="riskSeverity">
+              <option value="LOW">Baja</option>
+              <option value="MEDIUM" selected>Media</option>
+              <option value="HIGH">Alta</option>
+              <option value="CRITICAL">Crítica</option>
+            </select>
+          </div>
+          <div class="col-md-6 prob-row" id="probRow">
+            <label class="form-label fw-600">Probabilidad</label>
+            <select class="form-select" id="riskProbability">
+              <option value="LOW">Baja</option>
+              <option value="MEDIUM" selected>Media</option>
+              <option value="HIGH">Alta</option>
+            </select>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Responsable</label>
+            <select class="form-select" id="riskOwner">
+              <option value="">Sin asignar</option>
+              {% for m in members %}
+              <option value="{{ m.id }}">{{ m.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-12">
+            <label class="form-label">Plan de Mitigación / Acción</label>
+            <textarea class="form-control" id="riskMitigation" rows="2" placeholder="Describe las acciones para mitigar o resolver este riesgo/issue…"></textarea>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+        <button type="button" class="btn btn-primary" id="riskSaveBtn" onclick="saveRisk()">
+          <i class="fa-solid fa-save me-1"></i>Guardar
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+const PROJECT_ID = {{ (project.id if project else (project_filter or 'null')) }};
+
+function toggleProbRow() {
+  const t = document.getElementById('riskType').value;
+  document.querySelectorAll('.prob-row').forEach(el => {
+    el.style.display = t === 'RISK' ? '' : 'none';
+  });
+}
+
+function openNewRisk() {
+  document.getElementById('riskModalTitle').textContent = 'Nuevo Riesgo / Issue';
+  document.getElementById('riskId').value = '';
+  document.getElementById('riskType').value = 'RISK';
+  document.getElementById('riskStatus').value = 'OPEN';
+  document.getElementById('riskTitle').value = '';
+  document.getElementById('riskDescription').value = '';
+  document.getElementById('riskSeverity').value = 'MEDIUM';
+  document.getElementById('riskProbability').value = 'MEDIUM';
+  document.getElementById('riskOwner').value = '';
+  document.getElementById('riskMitigation').value = '';
+  const sel = document.getElementById('riskProjectSelect');
+  if (sel) sel.value = '';
+  toggleProbRow();
+}
+
+function openEditRisk(r) {
+  document.getElementById('riskModalTitle').textContent = 'Editar Riesgo / Issue';
+  document.getElementById('riskId').value = r.id;
+  document.getElementById('riskProjectId').value = r.project_id;
+  document.getElementById('riskType').value = r.type;
+  document.getElementById('riskStatus').value = r.status;
+  document.getElementById('riskTitle').value = r.title;
+  document.getElementById('riskDescription').value = r.description || '';
+  document.getElementById('riskSeverity').value = r.severity;
+  document.getElementById('riskProbability').value = r.probability || 'MEDIUM';
+  document.getElementById('riskOwner').value = r.owner_id || '';
+  document.getElementById('riskMitigation').value = r.mitigation_plan || '';
+  const sel = document.getElementById('riskProjectSelect');
+  if (sel) sel.value = r.project_id;
+  toggleProbRow();
+  new bootstrap.Modal(document.getElementById('riskModal')).show();
+}
+
+function saveRisk() {
+  const id       = document.getElementById('riskId').value;
+  const projSel  = document.getElementById('riskProjectSelect');
+  const projectId = projSel ? parseInt(projSel.value) : (PROJECT_ID || parseInt(document.getElementById('riskProjectId').value));
+  const title    = document.getElementById('riskTitle').value.trim();
+
+  if (!title) { alert('El título es requerido.'); return; }
+  if (!projectId) { alert('Selecciona un proyecto.'); return; }
+
+  const payload = {
+    type:            document.getElementById('riskType').value,
+    title,
+    description:     document.getElementById('riskDescription').value,
+    severity:        document.getElementById('riskSeverity').value,
+    probability:     document.getElementById('riskProbability').value,
+    status:          document.getElementById('riskStatus').value,
+    mitigation_plan: document.getElementById('riskMitigation').value,
+    owner_id:        parseInt(document.getElementById('riskOwner').value) || null,
+  };
+
+  const btn = document.getElementById('riskSaveBtn');
+  btn.disabled = true;
+
+  const url    = id ? `/api/projects/${projectId}/risks/${id}` : `/api/projects/${projectId}/risks`;
+  const method = id ? 'PATCH' : 'POST';
+
+  fetch(url, {
+    method,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+  .then(r => r.json())
+  .then(data => {
+    if (data.error) { alert('Error: ' + data.error); btn.disabled = false; return; }
+    location.reload();
+  })
+  .catch(e => { alert('Error: ' + e); btn.disabled = false; });
+}
+
+function deleteRisk(riskId, projectId) {
+  if (!confirm('¿Eliminar este riesgo/issue? Esta acción no se puede deshacer.')) return;
+  fetch(`/api/projects/${projectId}/risks/${riskId}`, { method: 'DELETE' })
+    .then(r => r.json())
+    .then(data => {
+      if (data.error) { alert('Error: ' + data.error); return; }
+      location.reload();
+    })
+    .catch(e => alert('Error: ' + e));
+}
+
+// init
+toggleProbRow();
+</script>
+{% endblock %}

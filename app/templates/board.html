@@ -788,6 +788,69 @@ tr.table-warning:hover {
     .cell.cell-title input[type="text"] { width: 100%; border: none; background: transparent; }
     .cell.cell-title input[type="text"]:focus { outline: none; box-shadow: none; }
   </style>
+  <!-- Bulk Actions Bar (visible when tasks are selected) -->
+  {% if current_user.is_internal %}
+  <div id="bulkBar" style="display:none;background:#1e293b;color:#fff;border-radius:10px;padding:10px 16px;margin-bottom:10px;display:none;align-items:center;gap:10px;flex-wrap:wrap">
+    <span id="bulkCount" style="font-weight:600;white-space:nowrap">0 seleccionadas</span>
+    <div style="flex:1"></div>
+
+    <!-- Status -->
+    <div class="dropdown">
+      <button class="btn btn-sm btn-outline-light dropdown-toggle" data-bs-toggle="dropdown">
+        <i class="fa-solid fa-tag me-1"></i>Estado
+      </button>
+      <ul class="dropdown-menu">
+        <li><a class="dropdown-item" href="#" onclick="bulkApply('status','BACKLOG')">Backlog</a></li>
+        <li><a class="dropdown-item" href="#" onclick="bulkApply('status','IN_PROGRESS')">En Progreso</a></li>
+        <li><a class="dropdown-item" href="#" onclick="bulkApply('status','IN_REVIEW')">En Revisión</a></li>
+        <li><a class="dropdown-item" href="#" onclick="bulkApply('status','COMPLETED')">Completado</a></li>
+      </ul>
+    </div>
+
+    <!-- Priority -->
+    <div class="dropdown">
+      <button class="btn btn-sm btn-outline-light dropdown-toggle" data-bs-toggle="dropdown">
+        <i class="fa-solid fa-flag me-1"></i>Prioridad
+      </button>
+      <ul class="dropdown-menu">
+        <li><a class="dropdown-item" href="#" onclick="bulkApply('priority','LOW')">Baja</a></li>
+        <li><a class="dropdown-item" href="#" onclick="bulkApply('priority','MEDIUM')">Media</a></li>
+        <li><a class="dropdown-item" href="#" onclick="bulkApply('priority','HIGH')">Alta</a></li>
+        <li><a class="dropdown-item" href="#" onclick="bulkApply('priority','CRITICAL')">Crítica</a></li>
+      </ul>
+    </div>
+
+    <!-- Assignee -->
+    <div class="dropdown">
+      <button class="btn btn-sm btn-outline-light dropdown-toggle" data-bs-toggle="dropdown" id="bulkAssigneeBtn">
+        <i class="fa-solid fa-user me-1"></i>Asignar a
+      </button>
+      <ul class="dropdown-menu" style="max-height:220px;overflow-y:auto" id="bulkAssigneeMenu">
+        {% for u in users %}
+        <li>
+          <a class="dropdown-item" href="#" onclick="bulkApply('assignees',[{{ u.id }}])">
+            {{ u.name }}
+          </a>
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+
+    <button class="btn btn-sm btn-danger ms-2" onclick="bulkDelete()">
+      <i class="fa-solid fa-trash me-1"></i>Eliminar
+    </button>
+    <button class="btn btn-sm btn-outline-light ms-1" onclick="bulkClear()">
+      <i class="fa-solid fa-xmark me-1"></i>Cancelar
+    </button>
+
+    <!-- Loading indicator (hidden by default) -->
+    <span id="bulkLoadingIndicator" style="display:none;align-items:center;gap:8px;margin-left:12px;font-size:13px;opacity:.9;">
+      <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+      Procesando, por favor espere…
+    </span>
+  </div>
+  {% endif %}
+
   <div class="board-header">
     <div class="d-flex align-items-center gap-3">
       <h5 class="mb-0">{{ project.name }}</h5>
@@ -796,6 +859,20 @@ tr.table-warning:hover {
       <button class="btn btn-light btn-sm" data-bs-toggle="modal" data-bs-target="#importTasksModal">
         <i class="fa-solid fa-file-arrow-up me-1"></i>Importar Excel
       </button>
+      {% if current_user.role and current_user.role.name in ['PMP', 'Admin'] %}
+      {% if sys_risks_enabled %}
+      <a href="{{ url_for('main.project_risks', project_id=project.id) }}" class="btn btn-light btn-sm">
+        <i class="fa-solid fa-shield-halved me-1"></i>Riesgos
+        {% set open_risks = project.risks.filter_by(status='OPEN').count() %}
+        {% if open_risks > 0 %}
+        <span class="badge bg-danger ms-1" style="font-size:10px">{{ open_risks }}</span>
+        {% endif %}
+      </a>
+      {% endif %}
+      <button class="btn btn-light btn-sm" data-bs-toggle="modal" data-bs-target="#saveAsTemplateModal">
+        <i class="fa-solid fa-layer-group me-1"></i>Guardar como plantilla
+      </button>
+      {% endif %}
       <button class="btn btn-light btn-sm" onclick="openNewTaskModal()">
         <i class="fa-solid fa-plus me-1"></i>Nueva Tarea
       </button>
@@ -1756,6 +1833,43 @@ document.getElementById('newTaskForm')?.addEventListener('submit', function(e) {
 </script>
 {% endif %}
 
+<!-- Modal: Guardar como plantilla -->
+{% if current_user.role and current_user.role.name in ['PMP', 'Admin'] %}
+<div class="modal fade" id="saveAsTemplateModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <form method="POST" action="{{ url_for('main.save_project_as_template', project_id=project.id) }}">
+        <div class="modal-header">
+          <h5 class="modal-title"><i class="fa-solid fa-layer-group me-2 text-primary"></i>Guardar como plantilla</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Nombre de la plantilla <span class="text-danger">*</span></label>
+            <input type="text" name="template_name" class="form-control" required
+                   value="Plantilla: {{ project.name }}">
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Descripción</label>
+            <textarea name="template_description" class="form-control" rows="2"
+                      placeholder="Descripción de la plantilla">{{ project.description or '' }}</textarea>
+          </div>
+          <div class="alert alert-info py-2 mb-0">
+            <i class="fa-solid fa-circle-info me-1"></i>
+            Se copiarán <strong>{{ tasks|length }} tarea(s)</strong> con su estructura y fechas relativas.
+            Las asignaciones de usuarios no se copian.
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn btn-primary"><i class="fa-solid fa-floppy-disk me-1"></i>Guardar plantilla</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endif %}
+
 {% endblock %}
 
 {% block scripts %}
@@ -2367,8 +2481,97 @@ document.addEventListener('DOMContentLoaded', () => {
   const selectAllEl = document.getElementById('selectAll');
   if (selectAllEl) selectAllEl.addEventListener('change', function() {
     document.querySelectorAll('.task-check').forEach(cb => cb.checked = this.checked);
+    updateBulkBar();
+  });
+
+  // Update bulk bar when individual checkboxes change
+  document.getElementById('tasksBody')?.addEventListener('change', function(e) {
+    if (e.target.classList.contains('task-check')) updateBulkBar();
   });
 });
+
+const bulkBar = document.getElementById('bulkBar');
+
+function updateBulkBar() {
+  const checked = document.querySelectorAll('.task-check:checked');
+  if (!bulkBar) return;
+  if (checked.length > 0) {
+    bulkBar.style.display = 'flex';
+    document.getElementById('bulkCount').textContent = checked.length + ' seleccionada' + (checked.length > 1 ? 's' : '');
+  } else {
+    bulkBar.style.display = 'none';
+  }
+}
+
+function getSelectedTaskIds() {
+  return Array.from(document.querySelectorAll('.task-check:checked'))
+    .map(cb => parseInt(cb.closest('tr').dataset.taskId))
+    .filter(Boolean);
+}
+
+function bulkClear() {
+  document.querySelectorAll('.task-check, #selectAll').forEach(cb => cb.checked = false);
+  if (bulkBar) bulkBar.style.display = 'none';
+}
+
+function bulkSetLoading(loading) {
+  const bar = bulkBar;
+  if (!bar) return;
+  const btns = bar.querySelectorAll('button, a.dropdown-item');
+  const indicator = document.getElementById('bulkLoadingIndicator');
+  if (loading) {
+    btns.forEach(b => { b.disabled = true; b.style.pointerEvents = 'none'; b.style.opacity = '0.5'; });
+    if (indicator) indicator.style.display = 'inline-flex';
+    // Also block the rest of the page with a transparent overlay
+    let overlay = document.getElementById('bulkOverlay');
+    if (!overlay) {
+      overlay = document.createElement('div');
+      overlay.id = 'bulkOverlay';
+      overlay.style.cssText = 'position:fixed;inset:0;z-index:9998;cursor:wait;';
+      document.body.appendChild(overlay);
+    }
+  } else {
+    btns.forEach(b => { b.disabled = false; b.style.pointerEvents = ''; b.style.opacity = ''; });
+    if (indicator) indicator.style.display = 'none';
+    const overlay = document.getElementById('bulkOverlay');
+    if (overlay) overlay.remove();
+  }
+}
+
+function bulkApply(field, value) {
+  const ids = getSelectedTaskIds();
+  if (!ids.length) return;
+  bulkSetLoading(true);
+  fetch('/api/tasks/bulk', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ task_ids: ids, field, value })
+  })
+  .then(r => r.json())
+  .then(data => {
+    if (data.error) { bulkSetLoading(false); alert('Error: ' + data.error); return; }
+    location.reload();
+  })
+  .catch(e => { bulkSetLoading(false); alert('Error al aplicar acción: ' + e); });
+}
+
+function bulkDelete() {
+  const ids = getSelectedTaskIds();
+  if (!ids.length) return;
+  if (!confirm(`¿Eliminar ${ids.length} tarea${ids.length > 1 ? 's' : ''}? Esta acción no se puede deshacer.`)) return;
+  bulkSetLoading(true);
+  fetch('/api/tasks/bulk', {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ task_ids: ids })
+  })
+  .then(r => r.json())
+  .then(data => {
+    if (data.error) { bulkSetLoading(false); alert('Error: ' + data.error); return; }
+    location.reload();
+  })
+  .catch(e => { bulkSetLoading(false); alert('Error al eliminar tareas: ' + e); });
+}
 
 function persistTaskOrder() {
   const tbodyEl = document.getElementById('tasksBody');

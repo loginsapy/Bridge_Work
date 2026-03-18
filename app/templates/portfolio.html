@@ -1,0 +1,306 @@
+{% extends 'base.html' %}
+{% block title %}Portfolio — {{ sys_app_name }}{% endblock %}
+
+{% block head %}
+<style>
+/* ── Layout ── */
+.pf-header {
+  display:flex; justify-content:space-between; align-items:center;
+  flex-wrap:wrap; gap:12px; margin-bottom:24px;
+}
+.pf-header h1 { font-size:22px; font-weight:700; margin:0; color:#1e293b; }
+
+/* ── KPI strip ── */
+.kpi-strip { display:flex; gap:14px; flex-wrap:wrap; margin-bottom:22px; }
+.kpi-box {
+  background:#fff; border-radius:10px; box-shadow:0 2px 8px rgba(0,0,0,.06);
+  padding:14px 22px; flex:1; min-width:130px; border-top:3px solid #e2e8f0;
+}
+.kpi-box.kpi-green  { border-top-color:#10b981; }
+.kpi-box.kpi-yellow { border-top-color:#f59e0b; }
+.kpi-box.kpi-red    { border-top-color:#ef4444; }
+.kpi-box .kv { font-size:28px; font-weight:700; color:#1e293b; }
+.kpi-box .kl { font-size:11px; color:#94a3b8; text-transform:uppercase; letter-spacing:.4px; }
+
+/* ── RAG filter pills ── */
+.rag-pills { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:20px; }
+.rag-pill {
+  display:inline-flex; align-items:center; gap:6px;
+  padding:5px 14px; border-radius:99px; font-size:12px; font-weight:600;
+  border:2px solid transparent; cursor:pointer; text-decoration:none; color:#1e293b;
+}
+.rag-pill.all    { background:#f1f5f9; border-color:#e2e8f0; }
+.rag-pill.green  { background:#d1fae5; border-color:#10b981; color:#065f46; }
+.rag-pill.yellow { background:#fef3c7; border-color:#f59e0b; color:#92400e; }
+.rag-pill.red    { background:#fee2e2; border-color:#ef4444; color:#991b1b; }
+.rag-pill.active { box-shadow:0 0 0 3px rgba(99,102,241,.25); }
+
+/* ── Project cards ── */
+.pf-card {
+  background:#fff; border-radius:12px;
+  box-shadow:0 2px 8px rgba(0,0,0,.06);
+  border-left:5px solid #e2e8f0;
+  padding:20px 22px; margin-bottom:14px;
+  transition:box-shadow .2s;
+}
+.pf-card:hover { box-shadow:0 4px 16px rgba(0,0,0,.1); }
+.pf-card.rag-green  { border-left-color:#10b981; }
+.pf-card.rag-yellow { border-left-color:#f59e0b; }
+.pf-card.rag-red    { border-left-color:#ef4444; }
+
+.pf-card-header { display:flex; align-items:flex-start; gap:14px; flex-wrap:wrap; }
+.pf-title { font-size:16px; font-weight:700; color:#1e293b; text-decoration:none; }
+.pf-title:hover { color:#6366f1; }
+.pf-meta  { font-size:12px; color:#94a3b8; margin-top:2px; }
+
+/* RAG dot */
+.rag-dot {
+  width:14px; height:14px; border-radius:50%; flex-shrink:0; margin-top:3px;
+}
+.dot-green  { background:#10b981; box-shadow:0 0 0 3px rgba(16,185,129,.2); }
+.dot-yellow { background:#f59e0b; box-shadow:0 0 0 3px rgba(245,158,11,.2); }
+.dot-red    { background:#ef4444; box-shadow:0 0 0 3px rgba(239,68,68,.2); }
+
+/* Status badge */
+.st-badge {
+  display:inline-flex; align-items:center; gap:4px;
+  padding:2px 9px; border-radius:99px; font-size:11px; font-weight:600;
+}
+.st-ACTIVE    { background:#d1fae5; color:#065f46; }
+.st-PLANNING  { background:#e0e7ff; color:#3730a3; }
+.st-COMPLETED { background:#dbeafe; color:#1e40af; }
+.st-ARCHIVED  { background:#f1f5f9; color:#64748b; }
+
+/* Mini bars */
+.mini-bar-track { height:6px; background:#f1f5f9; border-radius:99px; overflow:hidden; min-width:80px; }
+.mini-bar-fill  { height:100%; border-radius:99px; }
+.fill-task    { background:#6366f1; }
+.fill-ok      { background:#10b981; }
+.fill-warn    { background:#f59e0b; }
+.fill-danger  { background:#ef4444; }
+
+/* Stats row */
+.pf-stats { display:flex; gap:20px; flex-wrap:wrap; margin-top:14px; padding-top:14px; border-top:1px solid #f1f5f9; }
+.pf-stat  { display:flex; flex-direction:column; min-width:80px; }
+.pf-stat .sv { font-size:15px; font-weight:700; color:#1e293b; }
+.pf-stat .sl { font-size:10px; color:#94a3b8; text-transform:uppercase; letter-spacing:.4px; }
+
+/* Quick actions */
+.pf-actions { display:flex; gap:6px; flex-wrap:wrap; margin-top:14px; }
+
+/* Donut chart container */
+.donut-wrap { background:#fff; border-radius:12px; box-shadow:0 2px 8px rgba(0,0,0,.06); padding:20px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="pf-header">
+  <h1><i class="fa-solid fa-layer-group me-2 text-primary"></i>Dashboard de Portfolio</h1>
+
+  <form method="get" class="d-flex gap-2 flex-wrap align-items-center">
+    <input type="hidden" name="rag" value="{{ rag_filter }}">
+    <select name="status" class="form-select form-select-sm" style="min-width:150px" onchange="this.form.submit()">
+      <option value="">Todos los estados</option>
+      <option value="ACTIVE"    {% if status_filter=='ACTIVE'    %}selected{% endif %}>Activos</option>
+      <option value="PLANNING"  {% if status_filter=='PLANNING'  %}selected{% endif %}>Planificación</option>
+      <option value="COMPLETED" {% if status_filter=='COMPLETED' %}selected{% endif %}>Completados</option>
+    </select>
+    <select name="manager_id" class="form-select form-select-sm" style="min-width:160px" onchange="this.form.submit()">
+      <option value="">Todos los managers</option>
+      {% for m in managers %}
+      <option value="{{ m.id }}" {% if manager_filter==m.id %}selected{% endif %}>{{ m.name }}</option>
+      {% endfor %}
+    </select>
+  </form>
+</div>
+
+<!-- KPI strip -->
+<div class="kpi-strip">
+  <div class="kpi-box">
+    <div class="kv">{{ kpis.total }}</div>
+    <div class="kl">Proyectos totales</div>
+  </div>
+  <div class="kpi-box">
+    <div class="kv">{{ kpis.active }}</div>
+    <div class="kl">Activos</div>
+  </div>
+  <div class="kpi-box">
+    <div class="kv">{{ kpis.planning }}</div>
+    <div class="kl">En planificación</div>
+  </div>
+  <div class="kpi-box">
+    <div class="kv">{{ kpis.completed }}</div>
+    <div class="kl">Completados</div>
+  </div>
+  <div class="kpi-box kpi-green">
+    <div class="kv">{{ rag_counts.green }}</div>
+    <div class="kl">En buen estado</div>
+  </div>
+  <div class="kpi-box kpi-yellow">
+    <div class="kv">{{ rag_counts.yellow }}</div>
+    <div class="kl">En atención</div>
+  </div>
+  <div class="kpi-box kpi-red">
+    <div class="kv" style="color:{% if rag_counts.red > 0 %}#ef4444{% endif %}">{{ rag_counts.red }}</div>
+    <div class="kl">En riesgo crítico</div>
+  </div>
+</div>
+
+<!-- RAG filter pills -->
+<div class="rag-pills">
+  <a href="?status={{ status_filter }}&manager_id={{ manager_filter or '' }}&rag="
+     class="rag-pill all {% if not rag_filter %}active{% endif %}">
+    Todos ({{ portfolio_rows|length if not rag_filter else (rag_counts.green + rag_counts.yellow + rag_counts.red) }})
+  </a>
+  <a href="?status={{ status_filter }}&manager_id={{ manager_filter or '' }}&rag=green"
+     class="rag-pill green {% if rag_filter=='green' %}active{% endif %}">
+    <span class="rag-dot dot-green" style="width:10px;height:10px"></span>Verde — Ok ({{ rag_counts.green }})
+  </a>
+  <a href="?status={{ status_filter }}&manager_id={{ manager_filter or '' }}&rag=yellow"
+     class="rag-pill yellow {% if rag_filter=='yellow' %}active{% endif %}">
+    <span class="rag-dot dot-yellow" style="width:10px;height:10px"></span>Amarillo — Atención ({{ rag_counts.yellow }})
+  </a>
+  <a href="?status={{ status_filter }}&manager_id={{ manager_filter or '' }}&rag=red"
+     class="rag-pill red {% if rag_filter=='red' %}active{% endif %}">
+    <span class="rag-dot dot-red" style="width:10px;height:10px"></span>Rojo — Crítico ({{ rag_counts.red }})
+  </a>
+</div>
+
+<!-- Project cards -->
+{% if portfolio_rows %}
+{% for row in portfolio_rows %}
+{% set p = row.project %}
+{% set bpct = row.budget_pct %}
+{% set bfill = 'fill-danger' if bpct and bpct >= danger_threshold else ('fill-warn' if bpct and bpct >= warn_threshold else 'fill-ok') %}
+
+<div class="pf-card rag-{{ row.rag }}">
+  <div class="pf-card-header">
+    <!-- RAG dot -->
+    <span class="rag-dot dot-{{ row.rag }}" title="Estado {{ {'green':'Verde','yellow':'Amarillo','red':'Rojo'}.get(row.rag,'') }}"></span>
+
+    <!-- Title + meta -->
+    <div style="flex:1;min-width:180px">
+      <a href="{{ url_for('main.project_detail', project_id=p.id) }}" class="pf-title">{{ p.name }}</a>
+      <div class="pf-meta">
+        {% if p.manager %}<i class="fa-solid fa-user me-1"></i>{{ p.manager.name }}{% endif %}
+        {% if p.end_date %}
+          &nbsp;·&nbsp;
+          {% if row.is_overdue %}
+            <span class="text-danger"><i class="fa-solid fa-triangle-exclamation me-1"></i>Vencido hace {{ (-row.days_remaining) }} días</span>
+          {% elif row.days_remaining is not none %}
+            <i class="fa-regular fa-calendar me-1"></i>{{ row.days_remaining }} días restantes
+          {% endif %}
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Status badge -->
+    <span class="st-badge st-{{ p.status }}">
+      {{ {'ACTIVE':'Activo','PLANNING':'Planificación','COMPLETED':'Completado','ARCHIVED':'Archivado'}.get(p.status, p.status) }}
+    </span>
+
+    <!-- RAG label -->
+    <span class="fw-600" style="font-size:12px;color:{{ '#10b981' if row.rag=='green' else ('#f59e0b' if row.rag=='yellow' else '#ef4444') }}">
+      {% if row.rag == 'green' %}<i class="fa-solid fa-circle-check me-1"></i>En buen estado
+      {% elif row.rag == 'yellow' %}<i class="fa-solid fa-triangle-exclamation me-1"></i>Requiere atención
+      {% else %}<i class="fa-solid fa-circle-exclamation me-1"></i>Estado crítico
+      {% endif %}
+    </span>
+  </div>
+
+  <!-- Progress bars -->
+  <div class="row g-3 mt-1">
+    <div class="col-md-6">
+      <div class="d-flex justify-content-between mb-1" style="font-size:12px">
+        <span class="text-muted">Avance de tareas</span>
+        <span class="fw-600">{{ row.task_pct }}% <span class="text-muted fw-normal">({{ row.done_tasks }}/{{ row.total_tasks }})</span></span>
+      </div>
+      <div class="mini-bar-track">
+        <div class="mini-bar-fill fill-task" style="width:{{ row.task_pct }}%"></div>
+      </div>
+    </div>
+    <div class="col-md-6">
+      <div class="d-flex justify-content-between mb-1" style="font-size:12px">
+        <span class="text-muted">Consumo de presupuesto</span>
+        {% if bpct is not none %}
+        <span class="fw-600 {{ 'text-danger' if bpct >= danger_threshold else ('text-warning' if bpct >= warn_threshold else '') }}">
+          {{ bpct }}% <span class="text-muted fw-normal">({{ row.logged_h }}h / {{ row.budget_h }}h)</span>
+        </span>
+        {% else %}
+        <span class="text-muted">{{ row.logged_h }}h registradas</span>
+        {% endif %}
+      </div>
+      <div class="mini-bar-track">
+        {% if bpct is not none %}
+        <div class="mini-bar-fill {{ bfill }}" style="width:{{ [bpct,100]|min }}%"></div>
+        {% else %}
+        <div class="mini-bar-fill fill-ok" style="width:0%"></div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Stats row -->
+  <div class="pf-stats">
+    <div class="pf-stat">
+      <span class="sv">{{ row.team_size }}</span>
+      <span class="sl">Miembros</span>
+    </div>
+    <div class="pf-stat">
+      <span class="sv">{{ row.logged_h }}h</span>
+      <span class="sl">Horas registradas</span>
+    </div>
+    {% if default_rate and row.logged_cost %}
+    <div class="pf-stat">
+      <span class="sv">{{ currency }} {{ '{:,.0f}'.format(row.logged_cost) }}</span>
+      <span class="sl">Costo real</span>
+    </div>
+    {% endif %}
+    {% if risks_enabled %}
+    <div class="pf-stat">
+      <span class="sv {{ 'text-danger' if row.critical_risks > 0 else ('text-warning' if row.open_risks > 0 else '') }}">
+        {{ row.open_risks }}
+        {% if row.critical_risks > 0 %}<i class="fa-solid fa-circle-exclamation" style="font-size:12px"></i>{% endif %}
+      </span>
+      <span class="sl">Riesgos abiertos</span>
+    </div>
+    {% endif %}
+    {% if p.client %}
+    <div class="pf-stat">
+      <span class="sv" style="font-size:13px">{{ p.client.name if p.client else '—' }}</span>
+      <span class="sl">Cliente</span>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- Quick actions -->
+  <div class="pf-actions">
+    <a href="{{ url_for('main.project_detail', project_id=p.id) }}" class="btn btn-sm btn-outline-primary">
+      <i class="fa-solid fa-table-cells-large me-1"></i>Tablero
+    </a>
+    <a href="{{ url_for('main.budget_tracking') }}?project_id={{ p.id }}" class="btn btn-sm btn-outline-secondary">
+      <i class="fa-solid fa-chart-pie me-1"></i>Presupuesto
+    </a>
+    {% if risks_enabled %}
+    <a href="{{ url_for('main.project_risks', project_id=p.id) }}" class="btn btn-sm btn-outline-secondary">
+      <i class="fa-solid fa-shield-halved me-1"></i>Riesgos
+      {% if row.open_risks > 0 %}
+      <span class="badge {{ 'bg-danger' if row.critical_risks > 0 else 'bg-warning text-dark' }} ms-1" style="font-size:10px">{{ row.open_risks }}</span>
+      {% endif %}
+    </a>
+    {% endif %}
+    <a href="{{ url_for('main.workload') }}?project_id={{ p.id }}" class="btn btn-sm btn-outline-secondary">
+      <i class="fa-solid fa-gauge-high me-1"></i>Carga de trabajo
+    </a>
+  </div>
+</div>
+{% endfor %}
+
+{% else %}
+<div class="text-center text-muted py-5">
+  <i class="fa-solid fa-layer-group mb-3" style="font-size:2.5rem;opacity:.3;display:block"></i>
+  <p class="mb-0">No hay proyectos con los filtros seleccionados.</p>
+</div>
+{% endif %}
+
+{% endblock %}

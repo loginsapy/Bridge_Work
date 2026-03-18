@@ -607,6 +607,49 @@ class SystemNotification(db.Model):
     user = db.relationship('User', backref='notifications')
 
 
+class ProjectTemplate(db.Model):
+    """Plantilla reutilizable de proyecto"""
+    __tablename__ = 'project_templates'
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    name = db.Column(db.String(255), nullable=False)
+    description = db.Column(db.Text, nullable=True)
+    project_type = db.Column(db.String(32), default='APP_DEVELOPMENT')
+    created_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.now)
+    updated_at = db.Column(db.DateTime, default=datetime.now, onupdate=datetime.now)
+
+    created_by = db.relationship('User', backref='project_templates')
+    tasks = db.relationship('ProjectTemplateTask', backref='template',
+                            cascade='all, delete-orphan',
+                            order_by='ProjectTemplateTask.position')
+
+    @property
+    def task_count(self):
+        return len(self.tasks)
+
+
+class ProjectTemplateTask(db.Model):
+    """Tarea dentro de una plantilla de proyecto"""
+    __tablename__ = 'project_template_tasks'
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    template_id = db.Column(db.Integer, db.ForeignKey('project_templates.id'), nullable=False)
+    # Clave temporal usada al guardar para reconstruir la jerarquía
+    source_task_id = db.Column(db.Integer, nullable=True)
+    parent_source_id = db.Column(db.Integer, nullable=True)  # source_task_id del padre
+    title = db.Column(db.String(255), nullable=False)
+    description = db.Column(db.Text, nullable=True)
+    priority = db.Column(db.String(16), default='MEDIUM')
+    estimated_hours = db.Column(db.Numeric(8, 2), nullable=True)
+    # Offset en días desde el inicio del proyecto
+    relative_start_days = db.Column(db.Integer, nullable=True)
+    relative_due_days = db.Column(db.Integer, nullable=True)
+    position = db.Column(db.Integer, default=0)
+    is_external_visible = db.Column(db.Boolean, default=False)
+    requires_approval = db.Column(db.Boolean, default=True)
+
+
 class SystemSettings(db.Model):
     """Configuraciones globales del sistema"""
     __tablename__ = 'system_settings'
@@ -669,6 +712,72 @@ class SystemSettings(db.Model):
             setting.description = description
         
         return setting
+
+
+class ProjectRisk(db.Model):
+    """Registro de riesgos e issues por proyecto"""
+    __tablename__ = 'project_risks'
+
+    id          = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    project_id  = db.Column(db.Integer, db.ForeignKey('projects.id', ondelete='CASCADE'), nullable=False, index=True)
+    # RISK = riesgo potencial, ISSUE = problema activo
+    type        = db.Column(db.String(16), nullable=False, default='RISK')
+    title       = db.Column(db.String(255), nullable=False)
+    description = db.Column(db.Text, nullable=True)
+    # LOW / MEDIUM / HIGH / CRITICAL
+    severity    = db.Column(db.String(16), nullable=False, default='MEDIUM')
+    # LOW / MEDIUM / HIGH  (solo aplicable a RISK)
+    probability = db.Column(db.String(16), nullable=True, default='MEDIUM')
+    # OPEN / MITIGATED / ACCEPTED / CLOSED
+    status      = db.Column(db.String(16), nullable=False, default='OPEN')
+    mitigation_plan = db.Column(db.Text, nullable=True)
+    owner_id    = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    created_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    created_at  = db.Column(db.DateTime, default=datetime.now)
+    updated_at  = db.Column(db.DateTime, default=datetime.now, onupdate=datetime.now)
+
+    project    = db.relationship('Project', backref=db.backref('risks', lazy='dynamic'))
+    owner      = db.relationship('User', foreign_keys=[owner_id], backref='owned_risks')
+    created_by = db.relationship('User', foreign_keys=[created_by_id])
+
+    @property
+    def impact_score(self):
+        """Producto severidad × probabilidad para ordenar (1=bajo, 9=crítico)"""
+        s = {'LOW': 1, 'MEDIUM': 2, 'HIGH': 3, 'CRITICAL': 4}.get(self.severity, 1)
+        p = {'LOW': 1, 'MEDIUM': 2, 'HIGH': 3}.get(self.probability, 1)
+        return s * p
+
+
+class WebhookDelivery(db.Model):
+    """Registro histórico de cada intento de entrega de un webhook."""
+    __tablename__ = 'webhook_deliveries'
+
+    id           = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    webhook_id   = db.Column(db.String(36), nullable=False, index=True)   # UUID del webhook
+    webhook_name = db.Column(db.String(200), nullable=True)
+    event        = db.Column(db.String(80), nullable=False)
+    url          = db.Column(db.String(500), nullable=False)
+    success      = db.Column(db.Boolean, nullable=False, default=False)
+    status_code  = db.Column(db.Integer, nullable=True)                   # HTTP status, null si no hubo respuesta
+    error_message= db.Column(db.Text, nullable=True)
+    duration_ms  = db.Column(db.Integer, nullable=True)                   # tiempo de respuesta en ms
+    is_test      = db.Column(db.Boolean, default=False)
+    created_at   = db.Column(db.DateTime, default=datetime.now, index=True)
+
+    def to_dict(self):
+        return {
+            'id':            self.id,
+            'webhook_id':    self.webhook_id,
+            'webhook_name':  self.webhook_name,
+            'event':         self.event,
+            'url':           self.url,
+            'success':       self.success,
+            'status_code':   self.status_code,
+            'error_message': self.error_message,
+            'duration_ms':   self.duration_ms,
+            'is_test':       self.is_test,
+            'created_at':    self.created_at.isoformat() if self.created_at else None,
+        }
 
 
 class HourlyRate(db.Model):

@@ -4,6 +4,15 @@
 
 {% block head %}
 <style>
+.mention-chip {
+  display: inline-block;
+  background: #ede9fe;
+  color: #6d28d9;
+  border-radius: 4px;
+  padding: 0 4px;
+  font-weight: 600;
+  font-size: 0.9em;
+}
 /* Usamos las variables CSS definidas en base.html */
 .task-header {
   background: white;
@@ -775,7 +784,10 @@
 
         {% if current_user.is_authenticated and can_comment_upload %}
         <div>
-          <textarea id="commentBody" class="form-control mb-2" rows="3" placeholder="Escribe un comentario..."></textarea>
+          <div class="position-relative mb-2">
+            <textarea id="commentBody" class="form-control" rows="3" placeholder="Escribe un comentario… usa @ para mencionar usuarios"></textarea>
+            <ul id="mentionDropdown" class="list-group position-absolute shadow-sm" style="display:none;z-index:1050;min-width:220px;max-height:180px;overflow-y:auto;top:100%;left:0;margin-top:2px"></ul>
+          </div>
           <div class="d-flex justify-content-end">
             <button id="postCommentBtn" class="btn btn-primary">Comentar</button>
           </div>
@@ -810,6 +822,115 @@ document.addEventListener('DOMContentLoaded', function(){
       .replace(/'/g, '&#39;');
   }
 
+  // Render @[Name] mentions as styled chips
+  function renderMentions(html){
+    return html.replace(/@\[([^\]]+)\]/g, (_, name) =>
+      `<span class="mention-chip">@${name}</span>`
+    );
+  }
+
+  // ── @mention autocomplete ──────────────────────────────────────────────
+  let _mentionQuery = '';
+  let _mentionStart = -1;
+  let _activeIndex = -1;
+  let _mentionUsers = [];
+
+  function setupMentionAutocomplete(textarea, dropdown) {
+    if (!textarea || !dropdown) return;
+
+    textarea.addEventListener('keydown', function(e) {
+      if (dropdown.style.display === 'none') return;
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        _activeIndex = Math.min(_activeIndex + 1, _mentionUsers.length - 1);
+        highlightItem(dropdown);
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        _activeIndex = Math.max(_activeIndex - 1, 0);
+        highlightItem(dropdown);
+      } else if (e.key === 'Enter' || e.key === 'Tab') {
+        if (_activeIndex >= 0 && _mentionUsers[_activeIndex]) {
+          e.preventDefault();
+          insertMention(textarea, _mentionUsers[_activeIndex]);
+          closeDropdown(dropdown);
+        }
+      } else if (e.key === 'Escape') {
+        closeDropdown(dropdown);
+      }
+    });
+
+    textarea.addEventListener('input', function() {
+      const val = textarea.value;
+      const pos = textarea.selectionStart;
+      // Find @ before cursor on the same word
+      const textBefore = val.slice(0, pos);
+      const match = textBefore.match(/@([^@\n\[\]]*)$/);
+      if (match) {
+        _mentionQuery = match[1];
+        _mentionStart = pos - match[0].length;
+        fetchMentionUsers(_mentionQuery, dropdown, textarea);
+      } else {
+        closeDropdown(dropdown);
+      }
+    });
+
+    document.addEventListener('click', function(e) {
+      if (!dropdown.contains(e.target) && e.target !== textarea) closeDropdown(dropdown);
+    });
+  }
+
+  function fetchMentionUsers(q, dropdown, textarea) {
+    fetch(`/api/mention-users?q=${encodeURIComponent(q)}`)
+      .then(r => r.json())
+      .then(users => {
+        _mentionUsers = users;
+        _activeIndex = users.length > 0 ? 0 : -1;
+        dropdown.innerHTML = '';
+        if (!users.length) { closeDropdown(dropdown); return; }
+        users.forEach((u, i) => {
+          const li = document.createElement('li');
+          li.className = 'list-group-item list-group-item-action py-1 px-2' + (i === 0 ? ' active' : '');
+          li.style.cursor = 'pointer';
+          li.innerHTML = `<i class="fa-solid fa-user me-2 small"></i>${escapeHtml(u.name)}`;
+          li.addEventListener('mousedown', function(e) {
+            e.preventDefault();
+            insertMention(textarea, u);
+            closeDropdown(dropdown);
+          });
+          dropdown.appendChild(li);
+        });
+        dropdown.style.display = 'block';
+      }).catch(() => closeDropdown(dropdown));
+  }
+
+  function highlightItem(dropdown) {
+    dropdown.querySelectorAll('.list-group-item').forEach((li, i) => {
+      li.classList.toggle('active', i === _activeIndex);
+    });
+  }
+
+  function insertMention(textarea, user) {
+    const val = textarea.value;
+    const before = val.slice(0, _mentionStart);
+    const after = val.slice(textarea.selectionStart);
+    textarea.value = before + `@[${user.name}]` + after;
+    const newPos = _mentionStart + user.name.length + 3; // @[Name]
+    textarea.setSelectionRange(newPos, newPos);
+  }
+
+  function closeDropdown(dropdown) {
+    dropdown.style.display = 'none';
+    _mentionUsers = [];
+    _activeIndex = -1;
+  }
+
+  // Init autocomplete on main comment box
+  setupMentionAutocomplete(
+    document.getElementById('commentBody'),
+    document.getElementById('mentionDropdown')
+  );
+  // ── end @mention autocomplete ──────────────────────────────────────────
+
   function renderComment(c){
     const el = document.createElement('div');
     el.className = 'mb-3 p-3 rounded comment-item';
@@ -830,10 +951,13 @@ document.addEventListener('DOMContentLoaded', function(){
           ${replyActionHtml}
         </div>
       </div>
-      <div class="mt-2" style="white-space: pre-wrap;">${escapeHtml(c.body)}</div>
+      <div class="mt-2" style="white-space: pre-wrap;">${renderMentions(escapeHtml(c.body))}</div>
       <div class="reply-form mt-2" style="display:none;">
-        <textarea class="form-control reply-body" rows="2" placeholder="Escribe tu respuesta..."></textarea>
-        <div class="d-flex justify-content-end mt-2">
+        <div class="position-relative mb-2">
+          <textarea class="form-control reply-body" rows="2" placeholder="Escribe tu respuesta… usa @ para mencionar"></textarea>
+          <ul class="reply-mention-dropdown list-group position-absolute shadow-sm" style="display:none;z-index:1050;min-width:220px;max-height:180px;overflow-y:auto;top:100%;left:0;margin-top:2px"></ul>
+        </div>
+        <div class="d-flex justify-content-end">
           <button class="btn btn-sm btn-secondary cancel-reply">Cancelar</button>
           <button class="btn btn-sm btn-primary ms-2 post-reply">Responder</button>
         </div>
@@ -923,7 +1047,17 @@ document.addEventListener('DOMContentLoaded', function(){
       btn.addEventListener('click', function(){
         const root = btn.closest('.comment-item');
         const form = root.querySelector('.reply-form');
-        form.style.display = form.style.display === 'none' ? 'block' : 'none';
+        const isOpening = form.style.display === 'none';
+        form.style.display = isOpening ? 'block' : 'none';
+        if (isOpening) {
+          const ta = form.querySelector('.reply-body');
+          const dd = form.querySelector('.reply-mention-dropdown');
+          if (ta && dd && !ta._mentionBound) {
+            ta._mentionBound = true;
+            setupMentionAutocomplete(ta, dd);
+          }
+          ta && ta.focus();
+        }
       });
     });
 

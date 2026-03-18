@@ -60,6 +60,7 @@ class NotificationService:
         'task_approval_requested': 'notifications/task_approval_requested.html',
         'task_approved': 'notifications/task_approved.html',
         'task_rejected': 'notifications/task_rejected.html',
+        'task_comment': 'notifications/general.html',
         'task_due_soon': 'notifications/task_due_soon.html',
         'project_created': 'notifications/project_created.html',
         'general': 'notifications/general.html',

@@ -98,6 +98,14 @@
       <span>{{ _('dashboard') }}</span>
     </a>
 
+    <!-- Portfolio -->
+    {% if sys_portfolio_enabled and current_user.is_internal and current_user.role and current_user.role.name in ['PMP', 'Admin'] %}
+    <a href="{{ url_for('main.portfolio') }}" class="sidebar-link {% if request.endpoint == 'main.portfolio' %}active{% endif %}">
+      <i class="fa-solid fa-layer-group"></i>
+      <span>Portfolio</span>
+    </a>
+    {% endif %}
+
     <!-- Projects -->
     <a href="{{ url_for('main.projects') }}" class="sidebar-link {% if request.endpoint in ['main.projects', 'main.project_detail'] %}active{% endif %}">
       <i class="fa-solid fa-table-cells-large"></i>
@@ -110,6 +118,12 @@
       <span>{{ _('tasks') }}</span>
     </a>
     
+    <!-- Calendar -->
+    <a href="{{ url_for('main.calendar_view') }}" class="sidebar-link {% if request.endpoint == 'main.calendar_view' %}active{% endif %}">
+      <i class="fa-regular fa-calendar-days"></i>
+      <span>Calendario</span>
+    </a>
+
     <!-- Time Entries -->
     <a href="{{ url_for('main.time_entries') }}" class="sidebar-link {% if request.endpoint in ['main.time_entries', 'main.create_time_entry'] %}active{% endif %}">
       <i class="fa-regular fa-clock"></i>
@@ -123,10 +137,26 @@
       <i class="fa-solid fa-user-group"></i>
       <span>{{ _('team') }}</span>
     </a>
+    <a href="{{ url_for('main.workload') }}" class="sidebar-link {% if request.endpoint == 'main.workload' %}active{% endif %}">
+      <i class="fa-solid fa-gauge-high"></i>
+      <span>Carga de Trabajo</span>
+    </a>
     <a href="{{ url_for('main.clients') }}" class="sidebar-link {% if request.endpoint == 'main.clients' %}active{% endif %}">
       <i class="fa-solid fa-building"></i>
       <span>{{ _('clients') }}</span>
     </a>
+    {% if sys_budget_tracking_enabled %}
+    <a href="{{ url_for('main.budget_tracking') }}" class="sidebar-link {% if request.endpoint == 'main.budget_tracking' %}active{% endif %}">
+      <i class="fa-solid fa-chart-pie"></i>
+      <span>Presupuesto</span>
+    </a>
+    {% endif %}
+    {% if sys_risks_enabled %}
+    <a href="{{ url_for('main.risks_global') }}" class="sidebar-link {% if request.endpoint in ['main.risks_global','main.project_risks'] %}active{% endif %}">
+      <i class="fa-solid fa-shield-halved"></i>
+      <span>Riesgos</span>
+    </a>
+    {% endif %}
     <a href="{{ url_for('main.reports') }}" class="sidebar-link {% if request.endpoint == 'main.reports' %}active{% endif %}">
       <i class="fa-solid fa-chart-simple"></i>
       <span>{{ _('reports') }}</span>

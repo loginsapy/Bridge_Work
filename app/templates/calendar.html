@@ -1,0 +1,261 @@
+{% extends 'base.html' %}
+
+{% block title %}Calendario — {{ sys_app_name }}{% endblock %}
+
+{% block head %}
+<link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.css" rel="stylesheet">
+<style>
+.calendar-wrapper {
+  background: #fff;
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+}
+.calendar-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.calendar-header h1 {
+  font-size: 22px;
+  font-weight: 700;
+  margin: 0;
+  color: #1e293b;
+}
+.calendar-filters {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+/* FullCalendar overrides */
+.fc .fc-toolbar-title { font-size: 18px; font-weight: 600; }
+.fc .fc-button { font-size: 13px; }
+.fc .fc-button-primary {
+  background: #6366f1;
+  border-color: #6366f1;
+}
+.fc .fc-button-primary:hover,
+.fc .fc-button-primary:not(:disabled):active,
+.fc .fc-button-primary:not(:disabled).fc-button-active {
+  background: #4f46e5;
+  border-color: #4f46e5;
+}
+.fc-event { cursor: pointer; border-radius: 4px; font-size: 12px; }
+.fc-event-title { font-weight: 500; }
+.fc-daygrid-event-dot { display: none; }
+/* Legend */
+.legend { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; margin-top: 12px; }
+.legend-item { display: flex; align-items: center; gap-5px; font-size: 12px; color: #64748b; gap: 5px; }
+.legend-dot { width: 12px; height: 12px; border-radius: 3px; flex-shrink: 0; }
+/* Tooltip */
+#calTooltip {
+  position: fixed;
+  z-index: 9999;
+  background: #1e293b;
+  color: #fff;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  pointer-events: none;
+  max-width: 220px;
+  display: none;
+  line-height: 1.5;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="calendar-header">
+  <h1><i class="fa-regular fa-calendar-days me-2 text-primary"></i>Calendario de Tareas</h1>
+  <div class="calendar-filters">
+    <select id="filterProject" class="form-select form-select-sm" style="min-width:180px">
+      <option value="">Todos los proyectos</option>
+      {% for p in projects %}
+      <option value="{{ p.id }}">{{ p.name }}</option>
+      {% endfor %}
+    </select>
+    <select id="filterStatus" class="form-select form-select-sm" style="min-width:150px">
+      <option value="">Todos los estados</option>
+      <option value="BACKLOG">Backlog</option>
+      <option value="TODO">Por hacer</option>
+      <option value="IN_PROGRESS">En progreso</option>
+      <option value="IN_REVIEW">En revisión</option>
+      <option value="COMPLETED">Completado</option>
+    </select>
+  </div>
+</div>
+
+<div class="calendar-wrapper">
+  <div id="calendar"></div>
+  <div class="legend">
+    <span class="legend-item"><span class="legend-dot" style="background:#94a3b8"></span>Backlog</span>
+    <span class="legend-item"><span class="legend-dot" style="background:#3b82f6"></span>Por hacer</span>
+    <span class="legend-item"><span class="legend-dot" style="background:#f59e0b"></span>En progreso</span>
+    <span class="legend-item"><span class="legend-dot" style="background:#8b5cf6"></span>En revisión</span>
+    <span class="legend-item"><span class="legend-dot" style="background:#10b981"></span>Completado</span>
+    <span class="ms-3 text-muted" style="font-size:12px"><i class="fa-solid fa-grip-lines-vertical me-1"></i>Borde = prioridad</span>
+  </div>
+</div>
+
+<div id="calTooltip"></div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  const filterProject = document.getElementById('filterProject');
+  const filterStatus  = document.getElementById('filterStatus');
+  const tooltip       = document.getElementById('calTooltip');
+
+  let allEvents = [];
+  let calendar;
+
+  const STATUS_LABEL = {
+    BACKLOG: 'Backlog', TODO: 'Por hacer', IN_PROGRESS: 'En progreso',
+    IN_REVIEW: 'En revisión', COMPLETED: 'Completado', DONE: 'Completado', ACCEPTED: 'Aceptado'
+  };
+  const PRIORITY_LABEL = { LOW: 'Baja', MEDIUM: 'Media', HIGH: 'Alta', CRITICAL: 'Crítica' };
+
+  function applyFilters() {
+    const proj   = filterProject.value;
+    const status = filterStatus.value;
+    const filtered = allEvents.filter(e => {
+      const ep = e.extendedProps;
+      if (proj   && String(ep.project_id) !== proj)   return false;
+      if (status && ep.status !== status)              return false;
+      return true;
+    });
+    calendar.removeAllEvents();
+    calendar.addEventSource(filtered);
+  }
+
+  function loadEvents(info, successCallback, failureCallback) {
+    const params = new URLSearchParams({
+      start: info.startStr,
+      end:   info.endStr,
+    });
+    fetch('/api/calendar-events?' + params)
+      .then(r => r.json())
+      .then(events => {
+        allEvents = events;
+        const proj   = filterProject.value;
+        const status = filterStatus.value;
+        const filtered = events.filter(e => {
+          if (proj   && String(e.extendedProps.project_id) !== proj)   return false;
+          if (status && e.extendedProps.status !== status)              return false;
+          return true;
+        });
+        successCallback(filtered);
+      })
+      .catch(failureCallback);
+  }
+
+  calendar = new FullCalendar.Calendar(document.getElementById('calendar'), {
+    locale: 'es',
+    initialView: 'dayGridMonth',
+    headerToolbar: {
+      left:   'prev,next today',
+      center: 'title',
+      right:  'dayGridMonth,timeGridWeek,listMonth'
+    },
+    buttonText: {
+      today:       'Hoy',
+      month:       'Mes',
+      week:        'Semana',
+      list:        'Lista',
+    },
+    height: 'auto',
+    editable: true,
+    eventStartEditable: true,
+    eventDurationEditable: true,
+    events: loadEvents,
+
+    // Tooltip on hover
+    eventMouseEnter: function(info) {
+      const ep = info.event.extendedProps;
+      tooltip.innerHTML = `
+        <strong>${info.event.title}</strong><br>
+        <span style="opacity:.8">Proyecto: ${ep.project || '—'}</span><br>
+        Estado: ${STATUS_LABEL[ep.status] || ep.status}<br>
+        Prioridad: ${PRIORITY_LABEL[ep.priority] || ep.priority}
+      `;
+      tooltip.style.display = 'block';
+    },
+    eventMouseLeave: function() {
+      tooltip.style.display = 'none';
+    },
+
+    // Move tooltip with mouse
+    eventDidMount: function(info) {
+      info.el.addEventListener('mousemove', function(e) {
+        tooltip.style.left = (e.clientX + 14) + 'px';
+        tooltip.style.top  = (e.clientY - 10) + 'px';
+      });
+    },
+
+    // Click → go to task detail
+    eventClick: function(info) {
+      info.jsEvent.preventDefault();
+      if (info.event.url) window.location.href = info.event.url;
+    },
+
+    // Drag & drop → update dates
+    eventDrop: function(info) {
+      const event = info.event;
+      const ep    = info.event.extendedProps;
+      if (!ep.editable) { info.revert(); return; }
+
+      const payload = {};
+      if (event.start) payload.start_date = event.start.toISOString();
+      // For all-day events, end is exclusive — subtract 1 day to get real due_date
+      if (event.end) {
+        const d = new Date(event.end);
+        d.setDate(d.getDate() - 1);
+        payload.due_date = d.toISOString();
+      } else if (event.start) {
+        payload.due_date = event.start.toISOString();
+      }
+
+      fetch(`/api/tasks/${event.id}/dates`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      }).then(r => {
+        if (!r.ok) { info.revert(); r.json().then(d => alert(d.error || 'Error')); }
+      }).catch(() => info.revert());
+    },
+
+    // Resize (duration change) → update due_date
+    eventResize: function(info) {
+      const event = info.event;
+      const ep    = info.event.extendedProps;
+      if (!ep.editable) { info.revert(); return; }
+
+      const d = new Date(event.end);
+      d.setDate(d.getDate() - 1);
+      fetch(`/api/tasks/${event.id}/dates`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ due_date: d.toISOString() }),
+      }).then(r => {
+        if (!r.ok) { info.revert(); }
+      }).catch(() => info.revert());
+    },
+  });
+
+  calendar.render();
+
+  // Re-apply filters when selects change (refetch for project, local filter for status)
+  filterProject.addEventListener('change', function() {
+    calendar.refetchEvents();
+  });
+  filterStatus.addEventListener('change', applyFilters);
+});
+</script>
+{% endblock %}

@@ -17,7 +17,10 @@
       "Bash(python -m pytest tests/test_wip_limits.py tests/test_client_dashboard.py tests/test_webhooks.py -v)",
       "Bash(taskkill /F /IM python.exe)",
       "Bash(taskkill /F /IM flask.exe)",
-      "Bash(xargs grep:*)"
+      "Bash(xargs grep:*)",
+      "Bash(flask db:*)",
+      "Bash(python -m flask db upgrade)",
+      "Bash(python -m flask db heads)"
     ]
   }
 }

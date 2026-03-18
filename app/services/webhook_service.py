@@ -25,6 +25,7 @@ import hmac
 import json
 import logging
 import threading
+import time
 import uuid
 from datetime import datetime
 from typing import Any, Dict, List, Optional
@@ -195,34 +196,91 @@ def _build_generic_payload(event: str, data: Dict) -> Dict:
     }
 
 
-def _send_one(webhook: Dict, event: str, data: Dict) -> None:
-    """Envía el payload a un webhook específico (ejecutado en hilo separado)."""
+def _save_delivery(webhook: Dict, event: str, success: bool,
+                   status_code: Optional[int], error: Optional[str],
+                   duration_ms: int, is_test: bool = False) -> None:
+    """Persiste el resultado de un intento de entrega en la BD."""
+    try:
+        from app import db
+        from app.models import WebhookDelivery
+        record = WebhookDelivery(
+            webhook_id=webhook.get('id', ''),
+            webhook_name=webhook.get('name', ''),
+            event=event,
+            url=webhook.get('url', ''),
+            success=success,
+            status_code=status_code,
+            error_message=error,
+            duration_ms=duration_ms,
+            is_test=is_test,
+            created_at=datetime.now(),
+        )
+        db.session.add(record)
+        db.session.commit()
+    except Exception as exc:
+        logger.error('Error saving webhook delivery record: %s', exc)
+
+
+def _send_one(webhook: Dict, event: str, data: Dict, is_test: bool = False,
+              max_retries: int = 2) -> None:
+    """Envía el payload a un webhook específico (ejecutado en hilo separado).
+    Reintenta hasta max_retries veces ante errores de red (no ante 4xx/5xx del receptor).
+    """
     url = webhook.get('url', '')
     secret = webhook.get('secret', '')
 
-    try:
-        if _is_slack_url(url):
-            payload = _build_slack_payload(event, data)
-        elif _is_teams_url(url):
-            payload = _build_teams_payload(event, data)
-        else:
-            payload = _build_generic_payload(event, data)
+    if _is_slack_url(url):
+        payload = _build_slack_payload(event, data)
+    elif _is_teams_url(url):
+        payload = _build_teams_payload(event, data)
+    else:
+        payload = _build_generic_payload(event, data)
+        if is_test:
+            payload['_test'] = True
 
-        body = json.dumps(payload, ensure_ascii=False).encode('utf-8')
-        headers = {'Content-Type': 'application/json', 'User-Agent': 'BridgeWork-Webhooks/1.0'}
-        if secret:
-            headers['X-BridgeWork-Signature'] = _build_signature(body, secret)
+    body = json.dumps(payload, ensure_ascii=False).encode('utf-8')
+    headers = {'Content-Type': 'application/json', 'User-Agent': 'BridgeWork-Webhooks/1.0'}
+    if secret:
+        headers['X-BridgeWork-Signature'] = _build_signature(body, secret)
 
-        resp = http_requests.post(url, data=body, headers=headers, timeout=10)
-        if resp.status_code >= 400:
+    last_error: Optional[str] = None
+    last_status: Optional[int] = None
+    attempt = 0
+
+    while attempt <= max_retries:
+        t0 = time.monotonic()
+        try:
+            resp = http_requests.post(url, data=body, headers=headers, timeout=10)
+            duration_ms = int((time.monotonic() - t0) * 1000)
+            last_status = resp.status_code
+
+            if resp.status_code < 400:
+                logger.debug('Webhook %s dispatched event %s → HTTP %s (%dms)',
+                             webhook.get('name'), event, resp.status_code, duration_ms)
+                _save_delivery(webhook, event, True, resp.status_code, None, duration_ms, is_test)
+                return
+
+            # 4xx/5xx — receptor rechazó, no reintentar
+            last_error = resp.text[:300]
             logger.warning('Webhook %s (%s) returned HTTP %s: %s',
-                           webhook.get('name'), url, resp.status_code, resp.text[:200])
-        else:
-            logger.debug('Webhook %s dispatched event %s → %s',
-                         webhook.get('name'), event, resp.status_code)
-    except Exception as e:
-        logger.error('Webhook %s (%s) failed for event %s: %s',
-                     webhook.get('name'), url, event, e)
+                           webhook.get('name'), url, resp.status_code, last_error)
+            _save_delivery(webhook, event, False, resp.status_code, last_error, duration_ms, is_test)
+            return
+
+        except Exception as exc:
+            duration_ms = int((time.monotonic() - t0) * 1000)
+            last_error = str(exc)
+            logger.warning('Webhook %s attempt %d/%d failed: %s',
+                           webhook.get('name'), attempt + 1, max_retries + 1, exc)
+            if attempt < max_retries:
+                time.sleep(2 ** attempt)   # backoff: 1s, 2s
+            attempt += 1
+
+    # Todos los intentos fallaron
+    logger.error('Webhook %s (%s) failed after %d attempts for event %s: %s',
+                 webhook.get('name'), url, max_retries + 1, event, last_error)
+    _save_delivery(webhook, event, False, last_status, last_error,
+                   int((time.monotonic()) * 1000), is_test)
 
 
 def dispatch(event: str, data: Dict) -> None:
@@ -274,11 +332,18 @@ def test_webhook(webhook_id: str) -> Dict:
         if secret:
             headers['X-BridgeWork-Signature'] = _build_signature(body, secret)
 
+        t0 = time.monotonic()
         resp = http_requests.post(url, data=body, headers=headers, timeout=10)
+        duration_ms = int((time.monotonic() - t0) * 1000)
+        success = resp.status_code < 400
+        _save_delivery(wh, 'task.completed', success, resp.status_code,
+                       None if success else resp.text[:300], duration_ms, is_test=True)
         return {
-            'success': resp.status_code < 400,
+            'success': success,
             'status_code': resp.status_code,
             'response': resp.text[:300],
+            'duration_ms': duration_ms,
         }
     except Exception as e:
+        _save_delivery(wh, 'task.completed', False, None, str(e), 0, is_test=True)
         return {'success': False, 'error': str(e)}

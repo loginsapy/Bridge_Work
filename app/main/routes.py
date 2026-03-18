@@ -12,7 +12,7 @@ from werkzeug.utils import secure_filename
 
 from . import main_bp
 from .. import db
-from ..models import Project, Task, TimeEntry, User, Role, TaskAttachment, AuditLog, SystemNotification, SystemSettings, HourlyRate, project_clients
+from ..models import Project, Task, TimeEntry, User, Role, TaskAttachment, AuditLog, SystemNotification, SystemSettings, HourlyRate, project_clients, ProjectTemplate, ProjectTemplateTask, ProjectRisk
 from ..metrics import calculate_project_metrics
 from ..services import NotificationService
 from ..auth.decorators import internal_required
@@ -175,13 +175,14 @@ def dashboard():
 
     avg_budget_usage = (total_budget_usage_percent / total_projects_with_budget) if total_projects_with_budget > 0 else 0
 
-    # Calcular progreso de proyectos recientes
+    # Calcular progreso de proyectos recientes (tareas completadas / total tareas)
     for p in recent_projects:
-        if p.budget_hours and p.budget_hours > 0:
-            total_hours_spent = db.session.query(func.sum(TimeEntry.hours)).join(Task).filter(Task.project_id == p.id).scalar() or 0
-            p.progress = (total_hours_spent / p.budget_hours) * 100
-        else:
-            p.progress = 0
+        total_tasks = db.session.query(func.count(Task.id)).filter(Task.project_id == p.id).scalar() or 0
+        completed_tasks = db.session.query(func.count(Task.id)).filter(
+            Task.project_id == p.id,
+            Task.status.in_(['COMPLETED', 'DONE', 'ACCEPTED'])
+        ).scalar() or 0
+        p.progress = (completed_tasks / total_tasks * 100) if total_tasks > 0 else 0
 
     # Project status distribution
     project_status_counts = db.session.query(Project.status, func.count(Project.id)).group_by(Project.status).all()
@@ -487,6 +488,184 @@ def delete_project(project_id):
         flash(f'Error al eliminar: {str(e)}', 'danger')
     
     return redirect(url_for('main.projects'))
+
+
+# ---------------------------------------------------------------------------
+# PROJECT TEMPLATES
+# ---------------------------------------------------------------------------
+
+@main_bp.route('/project-templates')
+@login_required
+def project_templates():
+    """List all project templates."""
+    templates = ProjectTemplate.query.order_by(ProjectTemplate.created_at.desc()).all()
+    return render_template('project_templates.html', templates=templates)
+
+
+@main_bp.route('/project/<int:project_id>/save-as-template', methods=['POST'])
+@login_required
+def save_project_as_template(project_id):
+    """Save an existing project (and its tasks) as a reusable template."""
+    project = Project.query.get_or_404(project_id)
+    user_role = current_user.role.name if current_user.role else None
+    if user_role not in ['PMP', 'Admin']:
+        flash('Solo usuarios PMP o Admin pueden crear plantillas.', 'danger')
+        return redirect(url_for('main.project_detail', project_id=project_id))
+
+    name = request.form.get('template_name', '').strip() or f'Plantilla: {project.name}'
+    description = request.form.get('template_description', '').strip()
+
+    try:
+        template = ProjectTemplate(
+            name=name,
+            description=description or project.description,
+            project_type=project.project_type,
+            created_by_id=current_user.id,
+        )
+        db.session.add(template)
+        db.session.flush()  # get template.id before bulk insert
+
+        # Only copy top-level and child tasks (skip tasks with missing titles)
+        tasks = Task.query.filter_by(project_id=project.id).order_by(Task.position).all()
+        proj_start = project.start_date or datetime.now().date()
+
+        for pos, task in enumerate(tasks):
+            def _days(dt):
+                if dt is None:
+                    return None
+                d = dt.date() if hasattr(dt, 'date') else dt
+                return (d - proj_start).days
+
+            tt = ProjectTemplateTask(
+                template_id=template.id,
+                source_task_id=task.id,
+                parent_source_id=task.parent_task_id,
+                title=task.title,
+                description=task.description,
+                priority=task.priority,
+                estimated_hours=task.estimated_hours,
+                relative_start_days=_days(task.start_date),
+                relative_due_days=_days(task.due_date),
+                position=pos,
+                is_external_visible=task.is_external_visible,
+                requires_approval=task.requires_approval,
+            )
+            db.session.add(tt)
+
+        db.session.commit()
+        flash(f"Plantilla '{template.name}' creada con {len(tasks)} tarea(s).", 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error al guardar la plantilla: {str(e)}', 'danger')
+
+    return redirect(url_for('main.project_templates'))
+
+
+@main_bp.route('/project-templates/<int:template_id>/create-project', methods=['POST'])
+@login_required
+def create_project_from_template(template_id):
+    """Create a new project (with tasks) from a template."""
+    template = ProjectTemplate.query.get_or_404(template_id)
+    user_role = current_user.role.name if current_user.role else None
+    if user_role not in ['PMP', 'Admin']:
+        flash('Solo usuarios PMP o Admin pueden crear proyectos.', 'danger')
+        return redirect(url_for('main.project_templates'))
+
+    name = request.form.get('name', '').strip()
+    if not name:
+        flash('El nombre del proyecto es obligatorio.', 'danger')
+        return redirect(url_for('main.project_templates'))
+
+    description = request.form.get('description', '').strip()
+    start_date_str = request.form.get('start_date', '').strip()
+    try:
+        start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date() if start_date_str else datetime.now().date()
+    except ValueError:
+        start_date = datetime.now().date()
+
+    try:
+        project = Project(
+            name=name,
+            description=description or template.description,
+            project_type=template.project_type,
+            manager_id=current_user.id,
+            status='PLANNING',
+            start_date=start_date,
+        )
+        db.session.add(project)
+        db.session.flush()  # get project.id
+
+        # Map source_task_id → new Task so we can re-link parents
+        source_to_new = {}
+
+        for tt in sorted(template.tasks, key=lambda t: t.position):
+            def _abs_date(offset):
+                if offset is None:
+                    return None
+                return datetime.combine(start_date + timedelta(days=offset), datetime.min.time())
+
+            task = Task(
+                project_id=project.id,
+                title=tt.title,
+                description=tt.description,
+                priority=tt.priority,
+                estimated_hours=tt.estimated_hours,
+                start_date=_abs_date(tt.relative_start_days),
+                due_date=_abs_date(tt.relative_due_days),
+                status='BACKLOG',
+                position=tt.position,
+                is_external_visible=tt.is_external_visible,
+                requires_approval=tt.requires_approval,
+            )
+            db.session.add(task)
+            db.session.flush()
+            if tt.source_task_id:
+                source_to_new[tt.source_task_id] = task
+
+        # Re-link parent relationships using the source→new map
+        for tt in template.tasks:
+            if tt.parent_source_id and tt.source_task_id:
+                child = source_to_new.get(tt.source_task_id)
+                parent = source_to_new.get(tt.parent_source_id)
+                if child and parent:
+                    child.parent_task_id = parent.id
+
+        db.session.add(AuditLog(
+            entity_type='Project',
+            entity_id=project.id,
+            action='CREATE',
+            user_id=current_user.id,
+            changes={'name': project.name, 'from_template': template.name},
+        ))
+        db.session.commit()
+        flash(f"Proyecto '{project.name}' creado desde la plantilla '{template.name}'.", 'success')
+        return redirect(url_for('main.project_detail', project_id=project.id))
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error al crear el proyecto: {str(e)}', 'danger')
+        return redirect(url_for('main.project_templates'))
+
+
+@main_bp.route('/project-templates/<int:template_id>/delete', methods=['POST'])
+@login_required
+def delete_project_template(template_id):
+    """Delete a project template."""
+    template = ProjectTemplate.query.get_or_404(template_id)
+    user_role = current_user.role.name if current_user.role else None
+    if user_role not in ['PMP', 'Admin']:
+        flash('Solo usuarios PMP o Admin pueden eliminar plantillas.', 'danger')
+        return redirect(url_for('main.project_templates'))
+
+    try:
+        name = template.name
+        db.session.delete(template)
+        db.session.commit()
+        flash(f"Plantilla '{name}' eliminada.", 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error al eliminar: {str(e)}', 'danger')
+
+    return redirect(url_for('main.project_templates'))
 
 
 @main_bp.route('/api/kpi/velocity')
@@ -2481,6 +2660,149 @@ def create_project():
     
     return redirect(url_for('main.projects'))
 
+@main_bp.route('/calendar')
+@login_required
+def calendar_view():
+    """Calendar view — tasks with dates rendered via FullCalendar."""
+    user_role = current_user.role.name if current_user.role else None
+    projects = Project.query.order_by(Project.name).all()
+    return render_template('calendar.html',
+                           projects=projects,
+                           current_user_role_name=user_role,
+                           now=datetime.now())
+
+
+@main_bp.route('/api/calendar-events')
+@login_required
+def calendar_events():
+    """Return tasks as FullCalendar-compatible JSON events."""
+    user_role = current_user.role.name if current_user.role else None
+
+    # Optional filters from query string
+    project_id = request.args.get('project_id', type=int)
+    start_range = request.args.get('start')  # ISO date string from FullCalendar
+    end_range = request.args.get('end')
+
+    q = Task.query.filter(
+        (Task.due_date != None) | (Task.start_date != None)
+    )
+
+    # Role-based visibility
+    if user_role in ['PMP', 'Admin']:
+        pass  # see all tasks
+    elif user_role == 'Participante':
+        q = q.filter(
+            (Task.assigned_to_id == current_user.id) |
+            Task.assignees.any(id=current_user.id)
+        )
+    else:
+        # Client: only tasks visible externally on their projects
+        client_project_ids = [p.id for p in Project.query.filter(
+            Project.clients.any(id=current_user.id)
+        ).all()]
+        q = q.filter(Task.project_id.in_(client_project_ids), Task.is_external_visible == True)
+
+    if project_id:
+        q = q.filter(Task.project_id == project_id)
+
+    if start_range:
+        try:
+            q = q.filter(Task.due_date >= datetime.fromisoformat(start_range.replace('Z', '')))
+        except Exception:
+            pass
+    if end_range:
+        try:
+            q = q.filter(Task.due_date <= datetime.fromisoformat(end_range.replace('Z', '')))
+        except Exception:
+            pass
+
+    STATUS_COLORS = {
+        'BACKLOG':     '#94a3b8',
+        'TODO':        '#3b82f6',
+        'IN_PROGRESS': '#f59e0b',
+        'IN_REVIEW':   '#8b5cf6',
+        'COMPLETED':   '#10b981',
+        'DONE':        '#10b981',
+        'ACCEPTED':    '#10b981',
+    }
+    PRIORITY_BORDER = {
+        'LOW':      '#94a3b8',
+        'MEDIUM':   '#3b82f6',
+        'HIGH':     '#f59e0b',
+        'CRITICAL': '#ef4444',
+    }
+
+    events = []
+    for t in q.all():
+        start = None
+        end = None
+        if t.start_date:
+            start = t.start_date.date().isoformat()
+        if t.due_date:
+            # FullCalendar end is exclusive — add 1 day for all-day events
+            from datetime import date as _date
+            end_date = t.due_date.date()
+            if start and end_date.isoformat() == start:
+                from datetime import timedelta as _td
+                end_date = end_date + _td(days=1)
+            end = end_date.isoformat()
+
+        if not start and not end:
+            continue
+
+        color = STATUS_COLORS.get(t.status, '#94a3b8')
+        border = PRIORITY_BORDER.get(t.priority, '#64748b')
+        project_name = t.project.name if t.project else ''
+
+        events.append({
+            'id': t.id,
+            'title': t.title,
+            'start': start or end,
+            'end': end,
+            'color': color,
+            'borderColor': border,
+            'url': url_for('main.task_detail', task_id=t.id),
+            'extendedProps': {
+                'status': t.status,
+                'priority': t.priority or 'MEDIUM',
+                'project': project_name,
+                'project_id': t.project_id,
+                'editable': user_role in ['PMP', 'Admin'] or t.assigned_to_id == current_user.id,
+            }
+        })
+
+    return jsonify(events)
+
+
+@main_bp.route('/api/tasks/<int:task_id>/dates', methods=['PATCH'])
+@login_required
+def update_task_dates(task_id):
+    """Update task start_date and due_date from calendar drag & drop."""
+    task = Task.query.get_or_404(task_id)
+    user_role = current_user.role.name if current_user.role else None
+
+    # Only assignee, PMP or Admin can reschedule
+    can_edit = (
+        user_role in ['PMP', 'Admin'] or
+        task.assigned_to_id == current_user.id or
+        current_user in task.assignees
+    )
+    if not can_edit:
+        return jsonify({'error': 'Sin permisos para modificar esta tarea'}), 403
+
+    data = request.get_json(force=True, silent=True) or {}
+    try:
+        if 'start_date' in data and data['start_date']:
+            task.start_date = datetime.fromisoformat(data['start_date'].replace('Z', ''))
+        if 'due_date' in data and data['due_date']:
+            task.due_date = datetime.fromisoformat(data['due_date'].replace('Z', ''))
+        db.session.commit()
+        return jsonify({'ok': True})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+
 @main_bp.route('/tasks')
 @login_required
 def tasks():
@@ -2678,6 +3000,628 @@ def team():
         ).scalar() or 0
     
     return render_template('team.html', internal_users=internal_users)
+
+
+@main_bp.route('/workload')
+@login_required
+def workload():
+    if not _ensure_pmp():
+        return redirect(url_for('main.index'))
+
+    from datetime import date as _date, timedelta as _td
+
+    # Filters
+    project_id = request.args.get('project_id', type=int)
+    capacity = request.args.get('capacity', default=40, type=int)  # weekly hours capacity
+
+    # Date ranges
+    today = _date.today()
+    week_start = today - _td(days=today.weekday())   # Monday
+    week_end   = week_start + _td(days=6)
+    month_start = today.replace(day=1)
+
+    # All active projects for filter dropdown
+    projects = Project.query.filter(Project.status != 'ARCHIVED').order_by(Project.name).all()
+
+    # Internal active users
+    members = User.query.filter_by(is_internal=True, is_active=True).order_by(User.first_name).all()
+
+    ACTIVE_STATUSES = ('BACKLOG', 'IN_PROGRESS', 'IN_REVIEW')
+    DONE_STATUSES   = ('COMPLETED', 'DONE', 'ACCEPTED')
+
+    workload_data = []
+    for u in members:
+        # Base query for tasks assigned to this user (via many-to-many OR legacy field)
+        from sqlalchemy import or_, and_
+        from ..models import task_assignees as _ta
+
+        task_q = Task.query.filter(
+            or_(
+                Task.assigned_to_id == u.id,
+                Task.id.in_(
+                    db.session.query(_ta.c.task_id).filter(_ta.c.user_id == u.id)
+                )
+            )
+        )
+        if project_id:
+            task_q = task_q.filter(Task.project_id == project_id)
+
+        all_tasks = task_q.all()
+
+        active_tasks = [t for t in all_tasks if t.status in ACTIVE_STATUSES]
+        done_tasks   = [t for t in all_tasks if t.status in DONE_STATUSES]
+
+        # Estimated hours pending (active tasks only)
+        est_hours = sum(float(t.estimated_hours or 0) for t in active_tasks)
+
+        # Hours logged this week
+        hours_week_q = db.session.query(func.sum(TimeEntry.hours)).filter(
+            TimeEntry.user_id == u.id,
+            TimeEntry.date >= week_start,
+            TimeEntry.date <= week_end,
+        )
+        if project_id:
+            hours_week_q = hours_week_q.join(Task).filter(Task.project_id == project_id)
+        hours_week = float(hours_week_q.scalar() or 0)
+
+        # Hours logged this month
+        hours_month_q = db.session.query(func.sum(TimeEntry.hours)).filter(
+            TimeEntry.user_id == u.id,
+            TimeEntry.date >= month_start,
+        )
+        if project_id:
+            hours_month_q = hours_month_q.join(Task).filter(Task.project_id == project_id)
+        hours_month = float(hours_month_q.scalar() or 0)
+
+        # Status breakdown (active)
+        status_counts = {}
+        for s in ACTIVE_STATUSES:
+            status_counts[s] = sum(1 for t in active_tasks if t.status == s)
+
+        # Workload % relative to capacity
+        workload_pct = min(round(est_hours / capacity * 100), 150) if capacity > 0 else 0
+
+        # Overdue tasks
+        overdue = [t for t in active_tasks if t.due_date and t.due_date.date() < today]
+
+        # Sort active tasks: overdue first, then by due_date
+        active_tasks_sorted = sorted(
+            active_tasks,
+            key=lambda t: (t.due_date is None, t.due_date or today)
+        )
+
+        workload_data.append({
+            'user': u,
+            'active_tasks': active_tasks_sorted,
+            'active_count': len(active_tasks),
+            'done_count': len(done_tasks),
+            'est_hours': round(est_hours, 1),
+            'hours_week': round(hours_week, 1),
+            'hours_month': round(hours_month, 1),
+            'status_counts': status_counts,
+            'workload_pct': workload_pct,
+            'overdue_count': len(overdue),
+            'is_overloaded': est_hours > capacity,
+        })
+
+    # Sort: overloaded first, then by est_hours desc
+    workload_data.sort(key=lambda x: (-x['is_overloaded'], -x['est_hours']))
+
+    return render_template(
+        'workload.html',
+        workload_data=workload_data,
+        projects=projects,
+        selected_project_id=project_id,
+        capacity=capacity,
+        week_start=week_start,
+        week_end=week_end,
+        today=today,
+    )
+
+
+@main_bp.route('/budget')
+@login_required
+def budget_tracking():
+    if not _ensure_pmp():
+        return redirect(url_for('main.index'))
+
+    enabled = SystemSettings.get('budget_tracking_enabled', 'true')
+    if isinstance(enabled, str) and enabled.lower() in ('false', '0', 'no'):
+        abort(404)
+
+    from datetime import date as _date
+
+    # Settings-based thresholds
+    warn_threshold   = int(SystemSettings.get('budget_warn_threshold',   80))
+    danger_threshold = int(SystemSettings.get('budget_danger_threshold', 100))
+    currency         = SystemSettings.get('budget_currency', 'USD')
+
+    # Default hourly rate
+    default_rate_obj = HourlyRate.get_default()
+    default_rate     = float(default_rate_obj.rate) if default_rate_obj else None
+
+    # Filters
+    status_filter  = request.args.get('status', '')
+    manager_filter = request.args.get('manager_id', type=int)
+
+    q = Project.query
+    if status_filter:
+        q = q.filter(Project.status == status_filter)
+    else:
+        q = q.filter(Project.status != 'ARCHIVED')
+    if manager_filter:
+        q = q.filter(Project.manager_id == manager_filter)
+    projects = q.order_by(Project.name).all()
+
+    # Managers for filter dropdown
+    managers = User.query.filter_by(is_internal=True, is_active=True).order_by(User.first_name).all()
+
+    today = _date.today()
+
+    budget_rows = []
+    totals = {'budget_h': 0.0, 'logged_h': 0.0, 'est_cost': 0.0, 'logged_cost': 0.0, 'projects_over': 0}
+
+    for p in projects:
+        budget_h = float(p.budget_hours) if p.budget_hours else None
+
+        logged_h = float(
+            db.session.query(func.sum(TimeEntry.hours))
+            .join(Task)
+            .filter(Task.project_id == p.id)
+            .scalar() or 0
+        )
+
+        est_h = float(
+            db.session.query(func.sum(Task.estimated_hours))
+            .filter(Task.project_id == p.id)
+            .scalar() or 0
+        )
+
+        total_tasks     = db.session.query(func.count(Task.id)).filter(Task.project_id == p.id).scalar() or 0
+        completed_tasks = db.session.query(func.count(Task.id)).filter(
+            Task.project_id == p.id,
+            Task.status.in_(['COMPLETED', 'DONE', 'ACCEPTED'])
+        ).scalar() or 0
+        task_pct = round(completed_tasks / total_tasks * 100) if total_tasks > 0 else 0
+
+        if budget_h and budget_h > 0:
+            pct = round(logged_h / budget_h * 100, 1)
+        elif est_h > 0:
+            pct = round(logged_h / est_h * 100, 1)
+        else:
+            pct = None
+
+        if pct is None:
+            budget_status = 'nodata'
+        elif pct >= danger_threshold:
+            budget_status = 'danger'
+        elif pct >= warn_threshold:
+            budget_status = 'warning'
+        else:
+            budget_status = 'ok'
+
+        est_cost    = round(budget_h    * default_rate, 2) if budget_h    and default_rate else None
+        logged_cost = round(logged_h    * default_rate, 2) if default_rate else None
+        remaining_h = round((budget_h - logged_h), 1)      if budget_h    else None
+
+        if budget_h:
+            totals['budget_h']  += budget_h
+        totals['logged_h']      += logged_h
+        if est_cost:
+            totals['est_cost']  += est_cost
+        if logged_cost:
+            totals['logged_cost'] += logged_cost
+        if budget_status == 'danger':
+            totals['projects_over'] += 1
+
+        budget_rows.append({
+            'project':       p,
+            'budget_h':      budget_h,
+            'logged_h':      round(logged_h, 1),
+            'est_h':         round(est_h, 1),
+            'pct':           pct,
+            'remaining_h':   remaining_h,
+            'est_cost':      est_cost,
+            'logged_cost':   round(logged_cost, 2) if logged_cost is not None else None,
+            'budget_status': budget_status,
+            'task_pct':      task_pct,
+            'total_tasks':   total_tasks,
+            'completed_tasks': completed_tasks,
+        })
+
+    # Sort: danger first, then warning, then ok, then nodata
+    order = {'danger': 0, 'warning': 1, 'ok': 2, 'nodata': 3}
+    budget_rows.sort(key=lambda r: (order.get(r['budget_status'], 4), r['project'].name))
+
+    totals['budget_h']   = round(totals['budget_h'], 1)
+    totals['logged_h']   = round(totals['logged_h'], 1)
+    totals['est_cost']   = round(totals['est_cost'], 2)
+    totals['logged_cost']= round(totals['logged_cost'], 2)
+
+    return render_template(
+        'budget_tracking.html',
+        budget_rows=budget_rows,
+        totals=totals,
+        warn_threshold=warn_threshold,
+        danger_threshold=danger_threshold,
+        currency=currency,
+        default_rate=default_rate,
+        managers=managers,
+        status_filter=status_filter,
+        manager_filter=manager_filter,
+    )
+
+
+# ── Portfolio Dashboard ────────────────────────────────────────────────────────
+
+@main_bp.route('/portfolio')
+@login_required
+def portfolio():
+    if not _ensure_pmp():
+        return redirect(url_for('main.index'))
+    _v = SystemSettings.get('portfolio_enabled', 'true')
+    if isinstance(_v, str) and _v.lower() in ('false', '0', 'no'):
+        abort(404)
+
+    from datetime import date as _date
+
+    today = _date.today()
+
+    # Thresholds from settings
+    warn_threshold   = int(SystemSettings.get('budget_warn_threshold',   80))
+    danger_threshold = int(SystemSettings.get('budget_danger_threshold', 100))
+    currency         = SystemSettings.get('budget_currency', 'USD')
+    default_rate_obj = HourlyRate.get_default()
+    default_rate     = float(default_rate_obj.rate) if default_rate_obj else None
+    risks_enabled    = SystemSettings.get('risks_enabled', 'true')
+    risks_enabled    = not (isinstance(risks_enabled, str) and risks_enabled.lower() in ('false','0','no'))
+
+    # Filters
+    status_filter  = request.args.get('status', 'ACTIVE')
+    manager_filter = request.args.get('manager_id', type=int)
+    rag_filter     = request.args.get('rag', '')
+
+    q = Project.query
+    if status_filter:
+        q = q.filter(Project.status == status_filter)
+    else:
+        q = q.filter(Project.status != 'ARCHIVED')
+    if manager_filter:
+        q = q.filter(Project.manager_id == manager_filter)
+    projects = q.order_by(Project.name).all()
+
+    managers = User.query.filter_by(is_internal=True, is_active=True).order_by(User.first_name).all()
+
+    portfolio_rows = []
+    rag_counts = {'green': 0, 'yellow': 0, 'red': 0}
+
+    for p in projects:
+        # Task progress
+        total_tasks = db.session.query(func.count(Task.id)).filter(Task.project_id == p.id).scalar() or 0
+        done_tasks  = db.session.query(func.count(Task.id)).filter(
+            Task.project_id == p.id,
+            Task.status.in_(['COMPLETED', 'DONE', 'ACCEPTED'])
+        ).scalar() or 0
+        task_pct = round(done_tasks / total_tasks * 100) if total_tasks > 0 else 0
+
+        # Budget
+        logged_h = float(db.session.query(func.sum(TimeEntry.hours)).join(Task).filter(Task.project_id == p.id).scalar() or 0)
+        budget_h = float(p.budget_hours) if p.budget_hours else None
+        budget_pct = round(logged_h / budget_h * 100, 1) if budget_h and budget_h > 0 else None
+        logged_cost = round(logged_h * default_rate, 2) if default_rate else None
+
+        # Risks
+        open_risks     = p.risks.filter_by(status='OPEN').count() if risks_enabled else 0
+        critical_risks = p.risks.filter(ProjectRisk.status == 'OPEN', ProjectRisk.severity == 'CRITICAL').count() if risks_enabled else 0
+        high_risks     = p.risks.filter(ProjectRisk.status == 'OPEN', ProjectRisk.severity == 'HIGH').count() if risks_enabled else 0
+
+        # Team size (unique assignees across tasks)
+        from sqlalchemy import distinct
+        from ..models import task_assignees as _ta
+        team_size = db.session.query(func.count(distinct(_ta.c.user_id))).join(
+            Task, Task.id == _ta.c.task_id
+        ).filter(Task.project_id == p.id).scalar() or 0
+
+        # Days remaining / overdue
+        days_remaining = None
+        is_overdue = False
+        if p.end_date:
+            delta = (p.end_date.date() if hasattr(p.end_date, 'date') else p.end_date) - today
+            days_remaining = delta.days
+            is_overdue = days_remaining < 0 and p.status not in ('COMPLETED', 'ARCHIVED')
+
+        # RAG calculation
+        if (critical_risks > 0
+                or (budget_pct is not None and budget_pct >= danger_threshold)
+                or is_overdue):
+            rag = 'red'
+        elif (high_risks > 0
+                or (budget_pct is not None and budget_pct >= warn_threshold)
+                or (days_remaining is not None and 0 <= days_remaining <= 7)
+                or (total_tasks > 0 and task_pct < 30 and p.status == 'ACTIVE' and days_remaining is not None and days_remaining < 30)):
+            rag = 'yellow'
+        else:
+            rag = 'green'
+
+        rag_counts[rag] += 1
+
+        portfolio_rows.append({
+            'project':        p,
+            'task_pct':       task_pct,
+            'total_tasks':    total_tasks,
+            'done_tasks':     done_tasks,
+            'logged_h':       round(logged_h, 1),
+            'budget_h':       budget_h,
+            'budget_pct':     budget_pct,
+            'logged_cost':    logged_cost,
+            'open_risks':     open_risks,
+            'critical_risks': critical_risks,
+            'days_remaining': days_remaining,
+            'is_overdue':     is_overdue,
+            'team_size':      team_size,
+            'rag':            rag,
+        })
+
+    # Apply RAG filter after calculation
+    if rag_filter:
+        portfolio_rows = [r for r in portfolio_rows if r['rag'] == rag_filter]
+
+    # Sort: red → yellow → green, then by name
+    rag_order = {'red': 0, 'yellow': 1, 'green': 2}
+    portfolio_rows.sort(key=lambda r: (rag_order[r['rag']], r['project'].name))
+
+    # Global KPIs
+    all_projects = Project.query.filter(Project.status != 'ARCHIVED').all()
+    kpis = {
+        'total':     len(all_projects),
+        'active':    sum(1 for p in all_projects if p.status == 'ACTIVE'),
+        'completed': sum(1 for p in all_projects if p.status == 'COMPLETED'),
+        'planning':  sum(1 for p in all_projects if p.status == 'PLANNING'),
+    }
+
+    return render_template(
+        'portfolio.html',
+        portfolio_rows=portfolio_rows,
+        managers=managers,
+        status_filter=status_filter,
+        manager_filter=manager_filter,
+        rag_filter=rag_filter,
+        rag_counts=rag_counts,
+        kpis=kpis,
+        currency=currency,
+        default_rate=default_rate,
+        risks_enabled=risks_enabled,
+        warn_threshold=warn_threshold,
+        danger_threshold=danger_threshold,
+        today=today,
+    )
+
+# ── Risk / Issue Register ─────────────────────────────────────────────────────
+
+@main_bp.route('/risks')
+@login_required
+def risks_global():
+    """Vista global de riesgos e issues de todos los proyectos."""
+    if not _ensure_pmp():
+        return redirect(url_for('main.index'))
+    _v = SystemSettings.get('risks_enabled', 'true')
+    if isinstance(_v, str) and _v.lower() in ('false', '0', 'no'):
+        abort(404)
+
+    type_filter     = request.args.get('type', '')
+    status_filter   = request.args.get('status', '')
+    severity_filter = request.args.get('severity', '')
+    project_filter  = request.args.get('project_id', type=int)
+
+    q = ProjectRisk.query.join(Project)
+    if type_filter:
+        q = q.filter(ProjectRisk.type == type_filter)
+    if status_filter:
+        q = q.filter(ProjectRisk.status == status_filter)
+    if severity_filter:
+        q = q.filter(ProjectRisk.severity == severity_filter)
+    if project_filter:
+        q = q.filter(ProjectRisk.project_id == project_filter)
+
+    risks = q.order_by(ProjectRisk.status, ProjectRisk.updated_at.desc()).all()
+
+    projects  = Project.query.filter(Project.status != 'ARCHIVED').order_by(Project.name).all()
+    members   = User.query.filter_by(is_internal=True, is_active=True).order_by(User.first_name).all()
+
+    counts = {
+        'open':     sum(1 for r in risks if r.status == 'OPEN'),
+        'risk':     sum(1 for r in risks if r.type == 'RISK'),
+        'issue':    sum(1 for r in risks if r.type == 'ISSUE'),
+        'critical': sum(1 for r in risks if r.severity == 'CRITICAL' and r.status == 'OPEN'),
+    }
+
+    return render_template('risks.html',
+        risks=risks,
+        projects=projects,
+        members=members,
+        counts=counts,
+        type_filter=type_filter,
+        status_filter=status_filter,
+        severity_filter=severity_filter,
+        project_filter=project_filter,
+        project=None,
+    )
+
+
+@main_bp.route('/project/<int:project_id>/risks')
+@login_required
+def project_risks(project_id):
+    """Vista de riesgos e issues de un proyecto específico."""
+    _v = SystemSettings.get('risks_enabled', 'true')
+    if isinstance(_v, str) and _v.lower() in ('false', '0', 'no'):
+        abort(404)
+    p = Project.query.get_or_404(project_id)
+
+    type_filter     = request.args.get('type', '')
+    status_filter   = request.args.get('status', '')
+
+    q = ProjectRisk.query.filter_by(project_id=project_id)
+    if type_filter:
+        q = q.filter(ProjectRisk.type == type_filter)
+    if status_filter:
+        q = q.filter(ProjectRisk.status == status_filter)
+
+    risks   = q.order_by(ProjectRisk.status, ProjectRisk.updated_at.desc()).all()
+    members = User.query.filter_by(is_internal=True, is_active=True).order_by(User.first_name).all()
+
+    counts = {
+        'open':     sum(1 for r in risks if r.status == 'OPEN'),
+        'risk':     sum(1 for r in risks if r.type == 'RISK'),
+        'issue':    sum(1 for r in risks if r.type == 'ISSUE'),
+        'critical': sum(1 for r in risks if r.severity == 'CRITICAL' and r.status == 'OPEN'),
+    }
+
+    return render_template('risks.html',
+        risks=risks,
+        projects=[],
+        members=members,
+        counts=counts,
+        type_filter=type_filter,
+        status_filter=status_filter,
+        severity_filter='',
+        project_filter=project_id,
+        project=p,
+    )
+
+
+# ── Risk API ───────────────────────────────────────────────────────────────────
+
+@main_bp.route('/api/projects/<int:project_id>/risks', methods=['POST'])
+@login_required
+def create_risk(project_id):
+    Project.query.get_or_404(project_id)
+    data = request.get_json(force=True, silent=True) or {}
+
+    if not data.get('title', '').strip():
+        return jsonify({'error': 'El título es requerido'}), 400
+
+    risk = ProjectRisk(
+        project_id      = project_id,
+        type            = data.get('type', 'RISK'),
+        title           = data['title'].strip(),
+        description     = data.get('description', ''),
+        severity        = data.get('severity', 'MEDIUM'),
+        probability     = data.get('probability', 'MEDIUM'),
+        status          = data.get('status', 'OPEN'),
+        mitigation_plan = data.get('mitigation_plan', ''),
+        owner_id        = data.get('owner_id') or None,
+        created_by_id   = current_user.id,
+    )
+    db.session.add(risk)
+    db.session.commit()
+
+    # Notificar al responsable asignado
+    if risk.owner_id and risk.owner_id != current_user.id:
+        try:
+            from app.services.notifications import NotificationService
+            type_label = 'Riesgo' if risk.type == 'RISK' else 'Issue'
+            sev_label  = {'LOW':'Baja','MEDIUM':'Media','HIGH':'Alta','CRITICAL':'Crítica'}.get(risk.severity, risk.severity)
+            risks_url  = url_for('main.project_risks', project_id=project_id, _external=True)
+            NotificationService.notify(
+                user_id=risk.owner_id,
+                title=f'Se te asignó un {type_label}: {risk.title}',
+                message=f'{current_user.name} te asignó el {type_label.lower()} "{risk.title}" '
+                        f'(Severidad: {sev_label}) en el proyecto {risk.project.name}.',
+                notification_type='general',
+                related_entity_type='ProjectRisk',
+                related_entity_id=risk.id,
+                send_email=True,
+                email_context={
+                    'title':       f'Se te asignó un {type_label}',
+                    'message':     f'{current_user.name} te asignó el {type_label.lower()} "{risk.title}" '
+                                   f'(Severidad: {sev_label}) en el proyecto {risk.project.name}.',
+                    'task_url':    risks_url,
+                    'dashboard_url': risks_url,
+                },
+            )
+        except Exception as e:
+            current_app.logger.warning('Error enviando notificación de riesgo: %s', e)
+
+    return jsonify(_risk_to_dict(risk)), 201
+
+
+@main_bp.route('/api/projects/<int:project_id>/risks/<int:risk_id>', methods=['PATCH'])
+@login_required
+def update_risk(project_id, risk_id):
+    risk = ProjectRisk.query.filter_by(id=risk_id, project_id=project_id).first_or_404()
+    data = request.get_json(force=True, silent=True) or {}
+
+    prev_owner_id = risk.owner_id
+    for field in ('type', 'title', 'description', 'severity', 'probability',
+                  'status', 'mitigation_plan'):
+        if field in data:
+            setattr(risk, field, data[field])
+    if 'owner_id' in data:
+        risk.owner_id = data['owner_id'] or None
+
+    db.session.commit()
+
+    # Notificar si el responsable cambió y es distinto al editor
+    new_owner_id = risk.owner_id
+    if new_owner_id and new_owner_id != prev_owner_id and new_owner_id != current_user.id:
+        try:
+            from app.services.notifications import NotificationService
+            type_label = 'Riesgo' if risk.type == 'RISK' else 'Issue'
+            sev_label  = {'LOW':'Baja','MEDIUM':'Media','HIGH':'Alta','CRITICAL':'Crítica'}.get(risk.severity, risk.severity)
+            risks_url  = url_for('main.project_risks', project_id=project_id, _external=True)
+            NotificationService.notify(
+                user_id=new_owner_id,
+                title=f'Se te asignó un {type_label}: {risk.title}',
+                message=f'{current_user.name} te asignó el {type_label.lower()} "{risk.title}" '
+                        f'(Severidad: {sev_label}) en el proyecto {risk.project.name}.',
+                notification_type='general',
+                related_entity_type='ProjectRisk',
+                related_entity_id=risk.id,
+                send_email=True,
+                email_context={
+                    'title':       f'Se te asignó un {type_label}',
+                    'message':     f'{current_user.name} te asignó el {type_label.lower()} "{risk.title}" '
+                                   f'(Severidad: {sev_label}) en el proyecto {risk.project.name}.',
+                    'task_url':    risks_url,
+                    'dashboard_url': risks_url,
+                },
+            )
+        except Exception as e:
+            current_app.logger.warning('Error enviando notificación de riesgo: %s', e)
+
+    return jsonify(_risk_to_dict(risk))
+
+
+@main_bp.route('/api/projects/<int:project_id>/risks/<int:risk_id>', methods=['DELETE'])
+@login_required
+def delete_risk(project_id, risk_id):
+    user_role = current_user.role.name if current_user.role else ''
+    if not (current_user.is_internal and user_role in ('PMP', 'Admin')):
+        return jsonify({'error': 'Sin permisos'}), 403
+    risk = ProjectRisk.query.filter_by(id=risk_id, project_id=project_id).first_or_404()
+    db.session.delete(risk)
+    db.session.commit()
+    return jsonify({'deleted': risk_id})
+
+
+def _risk_to_dict(r):
+    return {
+        'id':              r.id,
+        'project_id':      r.project_id,
+        'type':            r.type,
+        'title':           r.title,
+        'description':     r.description,
+        'severity':        r.severity,
+        'probability':     r.probability,
+        'status':          r.status,
+        'mitigation_plan': r.mitigation_plan,
+        'owner_id':        r.owner_id,
+        'owner_name':      r.owner.name if r.owner else None,
+        'created_at':      r.created_at.isoformat() if r.created_at else None,
+        'updated_at':      r.updated_at.isoformat() if r.updated_at else None,
+    }
+
+# ──────────────────────────────────────────────────────────────────────────────
 
 
 @main_bp.route('/clients')
@@ -3335,6 +4279,15 @@ def update_task_status(task_id):
                     'error': error_msg,
                     **(blockers or {})
                 }), 400
+            # Also check incomplete predecessors when marking COMPLETED (strict sequential enforcement)
+            if new_status in ('COMPLETED', 'DONE'):
+                incomplete_preds = task.incomplete_predecessors()
+                if incomplete_preds:
+                    pred_titles = ', '.join([p.title for p in incomplete_preds[:3]])
+                    return jsonify({
+                        'error': f'No se puede completar la tarea: tiene predecesoras incompletas ({pred_titles})',
+                        'incomplete_predecessors': [{'id': p.id, 'title': p.title, 'status': p.status} for p in incomplete_preds]
+                    }), 400
 
         task.set_status(new_status)
         db.session.commit()
@@ -3545,7 +4498,9 @@ def task_comments(task_id):
         # Send notifications: if this is a reply, notify the parent author (unless it's the same user).
         # Otherwise, notify assignees of the task (assigned_to_id and any internal assignees).
         try:
+            import re as _re
             from app.services.notifications import NotificationService
+
             recipients = set()
             # If reply to a comment, notify that comment's author
             if parent and parent.user_id and parent.user_id != current_user.id:
@@ -3560,16 +4515,33 @@ def task_comments(task_id):
                         if getattr(u, 'id', None) and u.id != current_user.id:
                             recipients.add(u.id)
 
+            # Parse @[Name] mentions and notify those users directly
+            mention_names = _re.findall(r'@\[([^\]]+)\]', comment.body)
+            mention_recipients = set()
+            if mention_names:
+                all_active = User.query.filter_by(is_active=True).all()
+                name_to_id = {u.name.lower(): u.id for u in all_active}
+                for mname in mention_names:
+                    uid_m = name_to_id.get(mname.lower())
+                    if uid_m and uid_m != current_user.id:
+                        mention_recipients.add(uid_m)
+
             # Remove the commenter from recipients if present
-            if current_user and getattr(current_user, 'id', None) in recipients:
-                recipients.discard(current_user.id)
+            recipients.discard(current_user.id)
+            mention_recipients.discard(current_user.id)
 
-            # Build notification content
-            title = 'Nuevo comentario en tarea'
             snippet = (comment.body[:120] + '...') if len(comment.body) > 120 else comment.body
-            message = f"{current_user.name or current_user.email} comentó en la tarea '{task.title}': {snippet}"
 
-            for uid in recipients:
+            # Build task URL using the actual request host (no hardcoded domain)
+            try:
+                _task_url = url_for('main.task_detail', task_id=task.id, _external=True)
+            except Exception:
+                _task_url = f"/task/{task.id}"
+
+            # Notify regular recipients (comment on task)
+            title = 'Nuevo comentario en tarea'
+            message = f"{current_user.name or current_user.email} comentó en la tarea '{task.title}': {snippet}"
+            for uid in recipients - mention_recipients:
                 try:
                     NotificationService.notify(
                         user_id=uid,
@@ -3579,10 +4551,28 @@ def task_comments(task_id):
                         related_entity_type='task',
                         related_entity_id=task.id,
                         send_email=True,
-                        email_context={'task': task, 'comment': comment, 'message': message, 'title': title}
+                        email_context={'task': task, 'comment': comment, 'message': message, 'title': title, 'task_url': _task_url}
                     )
                 except Exception:
                     current_app.logger.exception(f'Failed to notify user {uid} about comment {comment.id}')
+
+            # Notify mentioned users with a specific message
+            mention_title = f'{current_user.name or current_user.email} te mencionó en un comentario'
+            mention_msg = f"Te mencionaron en la tarea '{task.title}': {snippet}"
+            for uid in mention_recipients:
+                try:
+                    NotificationService.notify(
+                        user_id=uid,
+                        title=mention_title,
+                        message=mention_msg,
+                        notification_type=NotificationService.TASK_COMMENT,
+                        related_entity_type='task',
+                        related_entity_id=task.id,
+                        send_email=True,
+                        email_context={'task': task, 'comment': comment, 'message': mention_msg, 'title': mention_title, 'task_url': _task_url}
+                    )
+                except Exception:
+                    current_app.logger.exception(f'Failed to notify mentioned user {uid}')
         except Exception:
             current_app.logger.exception('Failed to dispatch comment notifications')
 
@@ -3596,6 +4586,21 @@ def task_comments(task_id):
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
+
+
+@main_bp.route('/api/mention-users')
+@login_required
+def mention_users():
+    """Return active users matching a name query, for @mention autocomplete."""
+    q = request.args.get('q', '').strip().lower()
+    users = User.query.filter_by(is_active=True).all()
+    results = []
+    for u in users:
+        full_name = u.name  # computed property: first_name + last_name or email
+        if not q or q in full_name.lower():
+            results.append({'id': u.id, 'name': full_name})
+    results.sort(key=lambda x: x['name'])
+    return jsonify(results[:10])
 
 
 @main_bp.route('/task/<int:task_id>/upload', methods=['POST'])
@@ -3963,6 +4968,12 @@ def edit_task(task_id):
                 can_advance, error_msg, blockers = task.can_advance_status(status_from_form)
                 if not can_advance:
                     raise ValueError(error_msg)
+                # Also check incomplete predecessors when marking COMPLETED (strict sequential enforcement)
+                if status_from_form in ('COMPLETED', 'DONE'):
+                    incomplete_preds = task.incomplete_predecessors()
+                    if incomplete_preds:
+                        pred_titles = ', '.join([p.title for p in incomplete_preds[:3]])
+                        raise ValueError(f'No se puede completar la tarea: tiene predecesoras incompletas ({pred_titles})')
                 task.set_status(status_from_form)
             # If no status provided, keep existing task.status unchanged
 
@@ -4549,6 +5560,12 @@ def admin_settings_page():
     
     # Ensure sensible defaults: notifications ON by default
     defaults = {
+        'portfolio_enabled':        'true',
+        'budget_tracking_enabled': 'true',
+        'risks_enabled':           'true',
+        'budget_warn_threshold':   '80',
+        'budget_danger_threshold': '100',
+        'budget_currency':         'USD',
         'notify_task_assigned': 'true',
         'notify_task_completed': 'true',
         'notify_task_approved': 'true',
@@ -4571,6 +5588,9 @@ def admin_settings_page():
         'notify_task_rejected', 'notify_task_comment', 'notify_due_date_reminder',
         'show_notification_center', 'enable_push_notifications',
         'enable_azure_auth', 'enable_local_auth',
+        'portfolio_enabled',
+        'budget_tracking_enabled',
+        'risks_enabled',
     ]
     # Treat global alert enabled as boolean for templates
     notify_keys.append('global_alert_enabled')
@@ -4655,6 +5675,11 @@ def admin_settings():
         'general': [
             'allow_projects_without_manager', 'require_task_estimation',
             'block_parent_until_children_complete'
+        ],
+        'projects': [
+            'portfolio_enabled',
+            'budget_tracking_enabled',
+            'risks_enabled',
         ],
         'global_alert': [
             'global_alert_enabled'
@@ -4910,80 +5935,142 @@ def admin_send_test_notification():
 @main_bp.route('/search')
 @login_required
 def global_search():
-    """Global search endpoint for projects, tasks, and users."""
+    """Global search endpoint for projects, tasks, users and comments."""
+    from ..models import TaskComment
+    from sqlalchemy import or_, func
+
     query = request.args.get('q', '').strip()
+    type_filter = request.args.get('type', '')   # projects|tasks|users|comments|clients
+    LIMIT = 8
+
     if not query or len(query) < 2:
-        return jsonify({'projects': [], 'tasks': [], 'users': [], 'query': query})
-    
-    # Search Projects
-    # Filter based on user role
+        return jsonify({'projects': [], 'tasks': [], 'users': [], 'comments': [], 'clients': [], 'query': query})
+
     from ..auth.decorators import _get_user_from_session
     user = _get_user_from_session()
     user_role = user.role.name if (user and user.role) else None
-    
-    projects_q = Project.query.filter(Project.name.ilike(f'%{query}%'))
-    
-    if user_role in ['PMP', 'Admin']:
-        pass
-    elif user_role == 'Participante':
-        project_ids = db.session.query(Task.project_id).filter(
-            Task.assigned_to_id == current_user.id
-        ).distinct().scalar_subquery()
-        projects_q = projects_q.filter(
-            (Project.id.in_(project_ids)) | (Project.members.contains(current_user))
+    if not user_role:
+        return jsonify({'error': 'No tienes permisos para buscar'}), 403
+    is_pmp_admin = user_role in ('PMP', 'Admin')
+
+    # ── Projects ──────────────────────────────────────────────────────────────
+    projects = []
+    if not type_filter or type_filter == 'projects':
+        pq = Project.query.filter(
+            or_(Project.name.ilike(f'%{query}%'), Project.description.ilike(f'%{query}%'))
         )
-    elif user_role == 'Cliente' or not current_user.is_internal:
-        projects_q = projects_q.filter(Project.clients.contains(current_user))
-    else:
-        projects_q = projects_q.filter(Project.id == -1)
-        
-    projects = projects_q.limit(5).all()
-    
-    # Search Tasks
-    tasks_q = Task.query.filter(Task.title.ilike(f'%{query}%'))
-    
-    if user_role in ['PMP', 'Admin']:
-        pass
-    elif user_role == 'Participante':
-        tasks_q = tasks_q.filter(
-            (Task.assigned_to_id == current_user.id) | (Task.assignees.any(User.id == current_user.id))
+        if not is_pmp_admin:
+            if user_role == 'Participante':
+                pq = pq.filter(Project.members.contains(current_user))
+            elif not current_user.is_internal:
+                pq = pq.filter(Project.clients.contains(current_user))
+            else:
+                pq = pq.filter(Project.id == -1)
+        projects = pq.limit(LIMIT).all()
+
+    # ── Tasks ─────────────────────────────────────────────────────────────────
+    tasks = []
+    if not type_filter or type_filter == 'tasks':
+        tq = Task.query.filter(
+            or_(Task.title.ilike(f'%{query}%'), Task.description.ilike(f'%{query}%'))
         )
-    elif user_role == 'Cliente' or not current_user.is_internal:
-        tasks_q = tasks_q.filter(Task.assigned_client_id == current_user.id)
-    else:
-        tasks_q = tasks_q.filter(Task.id == -1)
-        
-    tasks = tasks_q.limit(5).all()
-    
-    # Search Users (Only for internal users)
+        if not is_pmp_admin:
+            if user_role == 'Participante':
+                tq = tq.filter(
+                    or_(Task.assigned_to_id == current_user.id,
+                        Task.assignees.any(User.id == current_user.id))
+                )
+            elif not current_user.is_internal:
+                # Client sees tasks in their linked projects (external visible) OR directly assigned
+                client_project_ids = [p.id for p in Project.query.filter(Project.clients.contains(current_user)).all()]
+                tq = tq.filter(
+                    or_(Task.assigned_client_id == current_user.id,
+                        Task.project_id.in_(client_project_ids) if client_project_ids else False)
+                )
+            else:
+                tq = tq.filter(Task.id == -1)
+        tasks = tq.limit(LIMIT).all()
+
+    # ── Comments ──────────────────────────────────────────────────────────────
+    comments = []
+    if not type_filter or type_filter == 'comments':
+        cq = TaskComment.query.filter(TaskComment.body.ilike(f'%{query}%'))
+        if not is_pmp_admin:
+            if user_role == 'Participante':
+                cq = cq.join(Task).filter(
+                    or_(Task.assigned_to_id == current_user.id,
+                        Task.assignees.any(User.id == current_user.id))
+                )
+            elif not current_user.is_internal:
+                cq = cq.join(Task).filter(Task.assigned_client_id == current_user.id)
+            else:
+                cq = cq.filter(TaskComment.id == -1)
+        comments = cq.limit(LIMIT).all()
+
+    # ── Users (internal) ─────────────────────────────────────────────────────
     users = []
-    if current_user.is_internal:
+    if current_user.is_internal and (not type_filter or type_filter == 'users'):
+        full_name = func.concat(User.first_name, ' ', User.last_name)
         users = User.query.filter(
-            (User.first_name.ilike(f'%{query}%')) | 
-            (User.last_name.ilike(f'%{query}%')) | 
-            (User.email.ilike(f'%{query}%'))
-        ).limit(5).all()
-        
+            User.is_internal == True,
+            or_(User.first_name.ilike(f'%{query}%'),
+                User.last_name.ilike(f'%{query}%'),
+                full_name.ilike(f'%{query}%'),
+                User.email.ilike(f'%{query}%'))
+        ).limit(LIMIT).all()
+
+    # ── Clients ───────────────────────────────────────────────────────────────
+    clients_res = []
+    if is_pmp_admin and (not type_filter or type_filter == 'clients'):
+        full_name_c = func.concat(User.first_name, ' ', User.last_name)
+        clients_res = User.query.filter(
+            User.is_internal == False,
+            or_(User.first_name.ilike(f'%{query}%'),
+                User.last_name.ilike(f'%{query}%'),
+                full_name_c.ilike(f'%{query}%'),
+                User.email.ilike(f'%{query}%'),
+                User.company.ilike(f'%{query}%'))
+        ).limit(LIMIT).all()
+
     return jsonify({
         'query': query,
         'projects': [{
-            'name': p.name,
-            'status': p.status,
-            'description': p.description,
-            'url': url_for('main.project_detail', project_id=p.id)
+            'name':        p.name,
+            'status':      p.status,
+            'description': (p.description or '')[:80],
+            'manager':     p.manager.name if p.manager else '',
+            'url':         url_for('main.project_detail', project_id=p.id),
         } for p in projects],
         'tasks': [{
-            'title': t.title,
-            'status': t.status,
+            'title':        t.title,
+            'status':       t.status,
+            'priority':     t.priority,
             'project_name': t.project.name if t.project else '',
-            'url': url_for('main.task_detail', task_id=t.id)
+            'description':  (t.description or '')[:80],
+            'due_date':     t.due_date.strftime('%d/%m/%Y') if t.due_date else None,
+            'is_overdue':   bool(t.due_date and (t.due_date.date() if hasattr(t.due_date, 'date') else t.due_date) < datetime.now().date() and t.status not in ('COMPLETED', 'DONE', 'ACCEPTED')),
+            'assignee':     t.assignees[0].name if t.assignees else (t.assigned_to.name if t.assigned_to else ''),
+            'url':          url_for('main.task_detail', task_id=t.id),
         } for t in tasks],
+        'comments': [{
+            'content':      (c.body or '')[:100],
+            'task_title':   c.task.title if c.task else '',
+            'author':       c.user.name if c.user else '',
+            'url':          url_for('main.task_detail', task_id=c.task_id) + '#comments',
+        } for c in comments],
         'users': [{
-            'name': f"{u.first_name or ''} {u.last_name or ''}".strip() or u.email,
-            'email': u.email,
-            'role': u.role.name if u.role else '',
-            'is_internal': u.is_internal
-        } for u in users]
+            'name':        f"{u.first_name or ''} {u.last_name or ''}".strip() or u.email,
+            'email':       u.email,
+            'role':        u.role.name if u.role else '',
+            'is_internal': u.is_internal,
+            'url':         url_for('main.team'),
+        } for u in users],
+        'clients': [{
+            'name':    f"{u.first_name or ''} {u.last_name or ''}".strip() or u.email,
+            'email':   u.email,
+            'company': u.company or '',
+            'url':     url_for('main.clients'),
+        } for u in clients_res],
     })
 
 

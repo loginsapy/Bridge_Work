@@ -7,8 +7,28 @@ app = create_app()
 from app.celery_app import make_celery
 celery = make_celery(app)
 
+
+# ── Flask CLI commands ────────────────────────────────────────────────────────
+import click
+
+@app.cli.command('send-reminders')
+@click.option('--days', default=None, type=int, help='Override cutoff days from settings')
+def send_reminders(days):
+    """Send due-date reminder emails for tasks due soon.
+
+    Can be run directly (no Celery needed) via:
+        flask send-reminders
+        flask send-reminders --days 3
+
+    Ideal for scheduling with cron or Windows Task Scheduler.
+    """
+    from app.tasks.alerts import generate_alerts
+    result = generate_alerts(cutoff_days=days)
+    sent = len(result.get('created', []))
+    click.echo(f'Reminders sent: {sent} notification(s) for {len(result.get("groups", {}))} recipient(s).')
+
+
 if __name__ == '__main__':
-    # Usar puerto 8000 por defecto para coincidir con docker-compose y evitar errores de redirección
     port = int(os.environ.get('PORT', 5000))
-    print(f"🚀 Iniciando servidor en el puerto {port}...")
+    print(f"Starting server on port {port}...")
     app.run(host='0.0.0.0', port=port)

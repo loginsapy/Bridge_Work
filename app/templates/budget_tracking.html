@@ -1,0 +1,316 @@
+{% extends 'base.html' %}
+
+{% block title %}Presupuesto vs. Real — {{ sys_app_name }}{% endblock %}
+
+{% block head %}
+<style>
+.budget-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+.budget-header h1 {
+  font-size: 22px;
+  font-weight: 700;
+  margin: 0;
+  color: #1e293b;
+}
+
+/* KPI summary cards */
+.kpi-row { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 24px; }
+.kpi-card {
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+  padding: 18px 24px;
+  flex: 1;
+  min-width: 160px;
+}
+.kpi-card .kpi-val { font-size: 26px; font-weight: 700; color: #1e293b; }
+.kpi-card .kpi-lbl { font-size: 12px; color: #94a3b8; text-transform: uppercase; letter-spacing: .4px; margin-top: 2px; }
+.kpi-card.danger .kpi-val { color: #ef4444; }
+
+/* Main table card */
+.budget-table-card {
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+  overflow: hidden;
+}
+.budget-table-card table th {
+  background: #f8fafc;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  color: #64748b;
+  border-bottom: 2px solid #e2e8f0;
+  white-space: nowrap;
+}
+.budget-table-card table td { vertical-align: middle; font-size: 13px; }
+
+/* Budget bar */
+.bud-bar-track {
+  height: 7px;
+  background: #f1f5f9;
+  border-radius: 99px;
+  overflow: hidden;
+  min-width: 80px;
+}
+.bud-bar-fill {
+  height: 100%;
+  border-radius: 99px;
+}
+.bud-bar-fill.ok      { background: #10b981; }
+.bud-bar-fill.warning { background: #f59e0b; }
+.bud-bar-fill.danger  { background: #ef4444; }
+.bud-bar-fill.nodata  { background: #cbd5e1; }
+
+/* Status badges */
+.bud-badge {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 3px 9px; border-radius: 99px; font-size: 11px; font-weight: 600; white-space: nowrap;
+}
+.bud-badge.ok      { background: #d1fae5; color: #065f46; }
+.bud-badge.warning { background: #fef3c7; color: #92400e; }
+.bud-badge.danger  { background: #fee2e2; color: #991b1b; }
+.bud-badge.nodata  { background: #f1f5f9; color: #64748b; }
+
+/* Task progress mini */
+.task-mini-bar {
+  height: 5px; background: #e2e8f0; border-radius: 99px; overflow: hidden; min-width: 60px;
+}
+.task-mini-bar div { height: 100%; background: #6366f1; border-radius: 99px; }
+
+/* Legend */
+.bud-legend {
+  display: flex; gap: 14px; flex-wrap: wrap; align-items: center;
+  font-size: 12px; color: #64748b; margin-bottom: 16px;
+}
+.bud-legend span { display: flex; align-items: center; gap: 5px; }
+.leg-dot { width: 10px; height: 10px; border-radius: 50%; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="budget-header">
+  <h1><i class="fa-solid fa-chart-pie me-2 text-primary"></i>Presupuesto vs. Real</h1>
+  <div class="d-flex gap-2 flex-wrap align-items-center">
+    <form method="get" class="d-flex gap-2 flex-wrap align-items-center">
+      <select name="status" class="form-select form-select-sm" style="min-width:150px" onchange="this.form.submit()">
+        <option value="">Todos los estados</option>
+        <option value="PLANNING"  {% if status_filter == 'PLANNING'  %}selected{% endif %}>Planificación</option>
+        <option value="ACTIVE"    {% if status_filter == 'ACTIVE'    %}selected{% endif %}>Activo</option>
+        <option value="COMPLETED" {% if status_filter == 'COMPLETED' %}selected{% endif %}>Completado</option>
+        <option value="ARCHIVED"  {% if status_filter == 'ARCHIVED'  %}selected{% endif %}>Archivado</option>
+      </select>
+      <select name="manager_id" class="form-select form-select-sm" style="min-width:160px" onchange="this.form.submit()">
+        <option value="">Todos los managers</option>
+        {% for m in managers %}
+        <option value="{{ m.id }}" {% if manager_filter == m.id %}selected{% endif %}>{{ m.name }}</option>
+        {% endfor %}
+      </select>
+    </form>
+    <a href="{{ url_for('main.admin_settings_page') }}#projects" class="btn btn-sm btn-outline-secondary">
+      <i class="fa-solid fa-gear me-1"></i>Configurar umbrales
+    </a>
+  </div>
+</div>
+
+<!-- KPI Summary -->
+<div class="kpi-row">
+  <div class="kpi-card">
+    <div class="kpi-val">{{ budget_rows|length }}</div>
+    <div class="kpi-lbl">Proyectos</div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-val">{{ totals.budget_h }}h</div>
+    <div class="kpi-lbl">Horas Presupuestadas</div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-val">{{ totals.logged_h }}h</div>
+    <div class="kpi-lbl">Horas Registradas</div>
+  </div>
+  {% if default_rate %}
+  <div class="kpi-card">
+    <div class="kpi-val">{{ currency }} {{ '{:,.0f}'.format(totals.logged_cost) }}</div>
+    <div class="kpi-lbl">Costo Real Total</div>
+  </div>
+  {% endif %}
+  <div class="kpi-card {% if totals.projects_over > 0 %}danger{% endif %}">
+    <div class="kpi-val">{{ totals.projects_over }}</div>
+    <div class="kpi-lbl">Proyectos Excedidos</div>
+  </div>
+</div>
+
+<!-- Legend -->
+<div class="bud-legend">
+  <strong class="text-dark me-1">Estado presupuesto:</strong>
+  <span><span class="leg-dot" style="background:#10b981"></span>Normal (&lt; {{ warn_threshold }}%)</span>
+  <span><span class="leg-dot" style="background:#f59e0b"></span>Advertencia ({{ warn_threshold }}–{{ danger_threshold }}%)</span>
+  <span><span class="leg-dot" style="background:#ef4444"></span>Excedido (&gt;= {{ danger_threshold }}%)</span>
+  <span><span class="leg-dot" style="background:#cbd5e1"></span>Sin datos</span>
+  {% if not default_rate %}
+  <span class="ms-3 text-warning"><i class="fa-solid fa-triangle-exclamation me-1"></i>Sin tarifa por defecto — configure una en <a href="{{ url_for('main.admin_settings_page') }}#projects">Administración</a> para ver costos.</span>
+  {% endif %}
+</div>
+
+<!-- Table -->
+<div class="budget-table-card">
+  <div class="table-responsive">
+    <table class="table table-hover mb-0">
+      <thead>
+        <tr>
+          <th class="ps-4">Proyecto</th>
+          <th>Estado</th>
+          <th>Manager</th>
+          <th>Horas presup.</th>
+          <th>Horas registradas</th>
+          <th style="min-width:130px">Consumo</th>
+          <th>Restante</th>
+          {% if default_rate %}
+          <th>Costo est.</th>
+          <th>Costo real</th>
+          {% endif %}
+          <th style="min-width:110px">Avance tareas</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in budget_rows %}
+        {% set p = row.project %}
+        <tr>
+          <td class="ps-4">
+            <a href="{{ url_for('main.project_detail', project_id=p.id) }}" class="fw-600 text-decoration-none text-dark">
+              {{ p.name }}
+            </a>
+          </td>
+          <td>
+            {% if p.status == 'ACTIVE' %}
+              <span class="badge bg-success">Activo</span>
+            {% elif p.status == 'PLANNING' %}
+              <span class="badge bg-secondary">Planificación</span>
+            {% elif p.status == 'COMPLETED' %}
+              <span class="badge bg-primary">Completado</span>
+            {% elif p.status == 'ARCHIVED' %}
+              <span class="badge bg-light text-dark">Archivado</span>
+            {% else %}
+              <span class="badge bg-light text-dark">{{ p.status }}</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if p.manager %}
+              {{ p.manager.name }}
+            {% else %}
+              <span class="text-muted">—</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if row.budget_h %}
+              {{ row.budget_h }}h
+            {% elif row.est_h %}
+              <span class="text-muted" title="Sin presupuesto — usando horas estimadas">~{{ row.est_h }}h</span>
+            {% else %}
+              <span class="text-muted">—</span>
+            {% endif %}
+          </td>
+          <td class="fw-600">{{ row.logged_h }}h</td>
+          <td>
+            {% if row.pct is not none %}
+            <div class="d-flex align-items-center gap-2">
+              <div class="bud-bar-track">
+                <div class="bud-bar-fill {{ row.budget_status }}" style="width:{{ [row.pct, 100]|min }}%"></div>
+              </div>
+              <span class="bud-badge {{ row.budget_status }}">
+                {% if row.budget_status == 'ok' %}<i class="fa-solid fa-check"></i>
+                {% elif row.budget_status == 'warning' %}<i class="fa-solid fa-triangle-exclamation"></i>
+                {% elif row.budget_status == 'danger' %}<i class="fa-solid fa-circle-exclamation"></i>
+                {% endif %}
+                {{ row.pct }}%
+              </span>
+            </div>
+            {% else %}
+              <span class="bud-badge nodata">Sin datos</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if row.remaining_h is not none %}
+              {% if row.remaining_h < 0 %}
+                <span class="text-danger fw-600">{{ row.remaining_h }}h</span>
+              {% else %}
+                <span class="text-muted">{{ row.remaining_h }}h</span>
+              {% endif %}
+            {% else %}
+              <span class="text-muted">—</span>
+            {% endif %}
+          </td>
+          {% if default_rate %}
+          <td>
+            {% if row.est_cost is not none %}
+              {{ currency }} {{ '{:,.0f}'.format(row.est_cost) }}
+            {% else %}
+              <span class="text-muted">—</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if row.logged_cost is not none %}
+              <span class="{{ 'text-danger fw-600' if row.budget_status == 'danger' else '' }}">
+                {{ currency }} {{ '{:,.0f}'.format(row.logged_cost) }}
+              </span>
+            {% else %}
+              <span class="text-muted">—</span>
+            {% endif %}
+          </td>
+          {% endif %}
+          <td>
+            <div class="d-flex align-items-center gap-2">
+              <div class="task-mini-bar">
+                <div style="width:{{ row.task_pct }}%"></div>
+              </div>
+              <span style="font-size:11px;color:#64748b;white-space:nowrap">
+                {{ row.completed_tasks }}/{{ row.total_tasks }}
+              </span>
+            </div>
+          </td>
+          <td>
+            <a href="{{ url_for('main.project_detail', project_id=p.id) }}" class="btn btn-xs btn-outline-secondary" style="font-size:11px;padding:2px 8px">
+              Ver
+            </a>
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="12" class="text-center text-muted py-5">
+            <i class="fa-solid fa-folder-open mb-2" style="font-size:2rem;opacity:.3;display:block"></i>
+            No hay proyectos con los filtros seleccionados.
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+      {% if budget_rows %}
+      <tfoot style="border-top:2px solid #e2e8f0">
+        <tr class="fw-600" style="background:#f8fafc">
+          <td class="ps-4" colspan="3">Totales</td>
+          <td>{{ totals.budget_h }}h</td>
+          <td>{{ totals.logged_h }}h</td>
+          <td></td>
+          <td>
+            {% set remaining = totals.budget_h - totals.logged_h %}
+            {% if totals.budget_h > 0 %}
+              <span class="{{ 'text-danger' if remaining < 0 else 'text-muted' }}">{{ remaining|round(1) }}h</span>
+            {% endif %}
+          </td>
+          {% if default_rate %}
+          <td>{{ currency }} {{ '{:,.0f}'.format(totals.est_cost) }}</td>
+          <td>{{ currency }} {{ '{:,.0f}'.format(totals.logged_cost) }}</td>
+          {% endif %}
+          <td colspan="2"></td>
+        </tr>
+      </tfoot>
+      {% endif %}
+    </table>
+  </div>
+</div>
+{% endblock %}

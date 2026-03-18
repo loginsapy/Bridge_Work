@@ -10,6 +10,8 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
   padding: 12px 16px;
   background: white;
   border-radius: 8px;
@@ -38,7 +40,7 @@
 }
 .toolbar-btn:hover { background: var(--monday-light-grey, #f5f6f8); border-color: var(--monday-blue, #0073ea); color: var(--monday-blue, #0073ea); }
 .toolbar-btn.active { background: var(--monday-blue, #0073ea); color: white; border-color: var(--monday-blue, #0073ea); }
-.toolbar-right { display: flex; align-items: center; gap: 8px; }
+.toolbar-right { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .view-mode-btns { display: flex; gap: 4px; }
 .view-mode-btn {
   padding: 6px 12px;
@@ -188,6 +190,29 @@
   .gantt-toolbar { flex-direction: column; gap: 12px; }
   .toolbar-right { flex-wrap: wrap; justify-content: center; }
 }
+
+/* Critical path highlight */
+.gantt .bar-wrapper.critical-path .bar { stroke: #dc3545 !important; stroke-width: 2.5 !important; }
+.gantt .bar-wrapper.critical-path .bar-progress { fill: rgba(220,53,69,0.25) !important; }
+
+/* Dependency manager modal */
+.dep-task-list { max-height: 320px; overflow-y: auto; border: 1px solid #e9ecef; border-radius: 6px; }
+.dep-task-item { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; border-bottom: 1px solid #f0f0f0; font-size: 13px; }
+.dep-task-item:last-child { border-bottom: none; }
+.dep-task-item:hover { background: #f8f9fa; }
+.dep-task-item .task-sel { cursor: pointer; flex: 1; }
+.dep-task-item .task-sel.selected { font-weight: 600; color: #0073ea; }
+.dep-preds { margin-top: 10px; }
+.dep-pred-chip { display: inline-flex; align-items: center; gap: 4px; background: #e9f0ff; color: #0052cc; border-radius: 99px; padding: 3px 10px; font-size: 12px; margin: 3px; }
+.dep-pred-chip .rm-dep { cursor: pointer; color: #6c757d; border: none; background: none; padding: 0; font-size: 11px; }
+.dep-pred-chip .rm-dep:hover { color: #dc3545; }
+
+/* Blocked tasks panel */
+.blocked-panel { background: #fff5f5; border: 1px solid #fecaca; border-radius: 8px; padding: 12px; margin-top: 12px; }
+.blocked-panel .panel-title { font-size: 12px; font-weight: 700; color: #dc3545; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+.blocked-item { font-size: 12px; padding: 4px 0; border-bottom: 1px dashed #fecaca; }
+.blocked-item:last-child { border-bottom: none; }
+.blocked-item .blocker { color: #dc3545; font-size: 11px; }
 </style>
 {% endblock %}
 
@@ -272,6 +297,15 @@
       <i class="fa-regular fa-calendar-check"></i> Hoy
     </button>
     <div style="width:1px;height:24px;background:#e0e0e0;margin:0 4px;"></div>
+    <button class="toolbar-btn" id="btn-critical-path" title="Mostrar ruta crítica">
+      <i class="fa-solid fa-route"></i> Ruta crítica
+    </button>
+    {% if current_user.is_internal and current_user.role and current_user.role.name in ['PMP', 'Admin'] %}
+    <button class="toolbar-btn" id="btn-deps" title="Gestionar dependencias entre tareas" data-bs-toggle="modal" data-bs-target="#depsModal">
+      <i class="fa-solid fa-diagram-project"></i> Dependencias
+    </button>
+    {% endif %}
+    <div style="width:1px;height:24px;background:#e0e0e0;margin:0 4px;"></div>
     <div class="dropdown">
       <button class="toolbar-btn dropdown-toggle" id="btn-export" data-bs-toggle="dropdown" aria-expanded="false" title="Exportar Gantt">
         <i class="fa-solid fa-download"></i> Exportar
@@ -311,8 +345,8 @@
     </div>
   </div>
 
-  {% if tasks_without_dates %}
-  <div class="gantt-sidebar">
+  <div class="gantt-sidebar" id="ganttSidebar" style="{% if not tasks_without_dates %}display:none{% endif %}">
+    {% if tasks_without_dates %}
     <div class="no-dates-panel">
       <div class="panel-header">
         <i class="fa-regular fa-calendar-xmark text-muted"></i>
@@ -340,9 +374,43 @@
         {% endfor %}
       </div>
     </div>
+    {% endif %}
+
+    <!-- Blocked tasks panel (rendered by JS) -->
+    <div id="blockedPanel"></div>
   </div>
-  {% endif %}
 </div>
+
+<!-- Dependency Manager Modal -->
+{% if current_user.is_internal and current_user.role and current_user.role.name in ['PMP', 'Admin'] %}
+<div class="modal fade" id="depsModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title fw-bold"><i class="fa-solid fa-diagram-project me-2 text-primary"></i>Gestionar Dependencias</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="row g-3">
+          <div class="col-md-5">
+            <label class="form-label fw-semibold" style="font-size:13px">Selecciona una tarea</label>
+            <div id="depTaskList" class="dep-task-list"></div>
+          </div>
+          <div class="col-md-7">
+            <div id="depDetailPanel">
+              <p class="text-muted" style="font-size:13px"><i class="fa-solid fa-arrow-left me-1"></i>Selecciona una tarea para ver y editar sus predecesoras.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cerrar</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
 {% endblock %}
 
 {% block scripts %}
@@ -727,6 +795,251 @@ if (exportBtn) exportBtn.addEventListener('click', () => runExport('png'));
 
 const exportPdfBtn = document.getElementById('export-pdf');
 if (exportPdfBtn) exportPdfBtn.addEventListener('click', () => runExport('pdf'));
+
+// ── Critical Path ─────────────────────────────────────────────────────────────
+// Calculates the longest path (by duration in days) considering task predecessors.
+let criticalPathActive = false;
+const criticalPathIds = new Set();
+
+function computeCriticalPath() {
+  // Build duration map (days between start and end)
+  const dur = {};
+  const earlyFinish = {};
+  ganttData.forEach(t => {
+    const s = new Date(t.start), e = new Date(t.end);
+    dur[t.id] = Math.max(1, Math.round((e - s) / 86400000));
+  });
+
+  // Build predecessor map from comma-separated dependencies
+  const preds = {};
+  ganttData.forEach(t => {
+    preds[t.id] = t.dependencies ? t.dependencies.split(',').filter(Boolean).map(Number) : [];
+  });
+
+  // Forward pass: compute earliest finish for each task
+  function ef(id) {
+    if (earlyFinish[id] !== undefined) return earlyFinish[id];
+    const p = preds[id] || [];
+    const maxPredEF = p.length > 0 ? Math.max(...p.map(pid => ef(pid))) : 0;
+    earlyFinish[id] = maxPredEF + dur[id];
+    return earlyFinish[id];
+  }
+  ganttData.forEach(t => ef(t.id));
+
+  // Find project end = max EF across all tasks
+  const projectEnd = Math.max(...Object.values(earlyFinish));
+
+  // Backward pass: late finish
+  const lateFinish = {};
+  ganttData.forEach(t => { lateFinish[t.id] = projectEnd; });
+
+  // Tasks that are successors of each task
+  const succs = {};
+  ganttData.forEach(t => { succs[t.id] = []; });
+  ganttData.forEach(t => {
+    (preds[t.id] || []).forEach(pid => { if (succs[pid]) succs[pid].push(t.id); });
+  });
+
+  function lf(id) {
+    const s = succs[id] || [];
+    if (s.length === 0) return projectEnd;
+    return Math.min(...s.map(sid => lf(sid) - dur[sid]));
+  }
+  ganttData.forEach(t => { lateFinish[t.id] = lf(t.id) + dur[t.id]; });
+
+  // Critical: tasks where EF == LF (zero float)
+  criticalPathIds.clear();
+  ganttData.forEach(t => {
+    if (earlyFinish[t.id] === lateFinish[t.id]) criticalPathIds.add(String(t.id));
+  });
+}
+
+function applyCriticalPathStyles(on) {
+  document.querySelectorAll('.gantt .bar-wrapper').forEach(wrapper => {
+    const taskId = wrapper.getAttribute('data-id') ||
+                   wrapper.closest('[data-id]')?.getAttribute('data-id');
+    if (on && criticalPathIds.has(String(taskId))) {
+      wrapper.classList.add('critical-path');
+    } else {
+      wrapper.classList.remove('critical-path');
+    }
+  });
+}
+
+const btnCritical = document.getElementById('btn-critical-path');
+if (btnCritical) {
+  computeCriticalPath();
+  btnCritical.addEventListener('click', function() {
+    criticalPathActive = !criticalPathActive;
+    this.classList.toggle('active', criticalPathActive);
+    applyCriticalPathStyles(criticalPathActive);
+  });
+}
+
+// ── Blocked tasks panel ───────────────────────────────────────────────────────
+function renderBlockedPanel() {
+  const blocked = ganttData.filter(t => t.is_blocked);
+  const panel = document.getElementById('blockedPanel');
+  const sidebar = document.getElementById('ganttSidebar');
+  if (!panel) return;
+  if (blocked.length === 0) {
+    panel.innerHTML = '';
+    // Hide sidebar only if also no tasks-without-dates panel
+    if (sidebar && !sidebar.querySelector('.no-dates-panel')) {
+      sidebar.style.display = 'none';
+    }
+    return;
+  }
+  const items = blocked.map(t => {
+    const preds = t.dependencies ? t.dependencies.split(',').filter(Boolean).map(pid => {
+      const pt = ganttData.find(x => String(x.id) === pid);
+      return pt ? pt.name : `#${pid}`;
+    }) : [];
+    return `<div class="blocked-item">
+      <div class="fw-semibold" style="font-size:12px">${t.name}</div>
+      <div class="blocker"><i class="fa-solid fa-lock me-1"></i>Bloqueada por: ${preds.join(', ') || 'predecesora'}</div>
+    </div>`;
+  }).join('');
+  panel.innerHTML = `<div class="blocked-panel mt-3">
+    <div class="panel-title"><i class="fa-solid fa-lock"></i> Bloqueadas (${blocked.length})</div>
+    ${items}
+  </div>`;
+  if (sidebar) sidebar.style.display = '';
+}
+renderBlockedPanel();
+
+// ── Dependency Manager Modal ──────────────────────────────────────────────────
+{% if current_user.is_internal and current_user.role and current_user.role.name in ['PMP', 'Admin'] %}
+const allTasksForDeps = {{ gantt_tasks | tojson | safe }};
+let depSelectedTask = null;
+
+function buildDepTaskList() {
+  const container = document.getElementById('depTaskList');
+  if (!container) return;
+  container.innerHTML = allTasksForDeps.map(t => `
+    <div class="dep-task-item">
+      <span class="task-sel ${depSelectedTask && depSelectedTask.id === t.id ? 'selected' : ''}"
+            onclick="selectDepTask('${t.id}')">
+        ${t.name}
+      </span>
+    </div>`).join('');
+}
+
+async function selectDepTask(taskId) {
+  const task = allTasksForDeps.find(t => String(t.id) === String(taskId));
+  if (!task) return;
+  depSelectedTask = task;
+  buildDepTaskList();
+
+  const panel = document.getElementById('depDetailPanel');
+  panel.innerHTML = `<div class="text-center py-3"><i class="fa-solid fa-spinner fa-spin text-muted"></i></div>`;
+
+  const resp = await fetch(`/api/tasks/${taskId}/predecessors`);
+  const data = await resp.json();
+  renderDepDetail(task, data.predecessors || []);
+}
+
+function renderDepDetail(task, predecessors) {
+  const panel = document.getElementById('depDetailPanel');
+  // Eligible predecessors: all tasks except the task itself and its successors (cycle guard)
+  const eligible = allTasksForDeps.filter(t => String(t.id) !== String(task.id) &&
+    !predecessors.find(p => String(p.id) === String(t.id)));
+
+  const predsHtml = predecessors.length > 0
+    ? predecessors.map(p => `
+        <span class="dep-pred-chip">
+          ${p.title || p.name}
+          <button class="rm-dep" onclick="removeDep(${task.id}, ${p.id})" title="Quitar dependencia">×</button>
+        </span>`).join('')
+    : '<span class="text-muted" style="font-size:12px">Sin predecesoras</span>';
+
+  panel.innerHTML = `
+    <div class="fw-semibold mb-2" style="font-size:13px">${task.name}</div>
+    <label class="form-label fw-semibold" style="font-size:12px">Predecesoras actuales</label>
+    <div class="dep-preds mb-3">${predsHtml}</div>
+    <label class="form-label fw-semibold" style="font-size:12px">Agregar predecesora</label>
+    <div class="input-group input-group-sm">
+      <select id="newDepSelect" class="form-select form-select-sm">
+        <option value="">— Seleccionar tarea —</option>
+        ${eligible.map(t => `<option value="${t.id}">${t.name}</option>`).join('')}
+      </select>
+      <button class="btn btn-primary btn-sm" onclick="addDep(${task.id})">
+        <i class="fa-solid fa-plus"></i> Agregar
+      </button>
+    </div>
+    <div id="depFeedback" class="mt-2" style="font-size:12px"></div>`;
+}
+
+async function addDep(taskId) {
+  const sel = document.getElementById('newDepSelect');
+  const predId = sel?.value;
+  if (!predId) return;
+  const fb = document.getElementById('depFeedback');
+  fb.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-1"></i>Guardando…';
+  const resp = await fetch(`/api/tasks/${taskId}/predecessors`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ predecessor_id: parseInt(predId) })
+  });
+  const data = await resp.json();
+  if (!resp.ok) {
+    fb.innerHTML = `<span class="text-danger"><i class="fa-solid fa-triangle-exclamation me-1"></i>${data.error}</span>`;
+    return;
+  }
+  fb.innerHTML = `<span class="text-success"><i class="fa-solid fa-check me-1"></i>Dependencia agregada</span>`;
+  refreshGanttDeps(taskId, predId, 'add');
+  await selectDepTask(taskId);
+}
+
+async function removeDep(taskId, predId) {
+  const resp = await fetch(`/api/tasks/${taskId}/predecessors/${predId}`, { method: 'DELETE' });
+  if (resp.ok) {
+    refreshGanttDeps(taskId, predId, 'remove');
+    await selectDepTask(taskId);
+  }
+}
+
+function refreshGanttDeps(taskId, predId, action) {
+  // Update local ganttData and re-render gantt arrows
+  const task = ganttData.find(t => String(t.id) === String(taskId));
+  if (!task) return;
+  const deps = task.dependencies ? task.dependencies.split(',').filter(Boolean) : [];
+  if (action === 'add' && !deps.includes(String(predId))) {
+    deps.push(String(predId));
+  } else if (action === 'remove') {
+    const idx = deps.indexOf(String(predId));
+    if (idx > -1) deps.splice(idx, 1);
+  }
+  task.dependencies = deps.join(',');
+
+  // Rebuild tasks array and refresh gantt
+  const refreshed = ganttData.map(t => {
+    let cls = `status-${t.status} priority-${t.priority}`;
+    if (t.is_blocked) cls += ' blocked';
+    return { id: t.id, name: t.name, start: t.start, end: t.end,
+             progress: t.progress, dependencies: t.dependencies, custom_class: cls };
+  });
+  if (gantt) {
+    gantt.refresh(refreshed);
+    // Reapply critical path if active
+    computeCriticalPath();
+    if (criticalPathActive) setTimeout(() => applyCriticalPathStyles(true), 100);
+  }
+  renderBlockedPanel();
+}
+
+// Initialize dep modal on open
+document.getElementById('depsModal')?.addEventListener('show.bs.modal', function() {
+  depSelectedTask = null;
+  buildDepTaskList();
+  document.getElementById('depDetailPanel').innerHTML =
+    '<p class="text-muted" style="font-size:13px"><i class="fa-solid fa-arrow-left me-1"></i>Selecciona una tarea para ver y editar sus predecesoras.</p>';
+});
+
+window.selectDepTask = selectDepTask;
+window.addDep = addDep;
+window.removeDep = removeDep;
+{% endif %}
 </script>
 {% endif %}
 {% endblock %}

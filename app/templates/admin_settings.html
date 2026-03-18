@@ -858,6 +858,143 @@
         </div>
       </div>
 
+      <div class="settings-section mt-4">
+        <div class="settings-section-header">
+          <i class="fa-solid fa-layer-group"></i>
+          <h5>Dashboard de Portfolio</h5>
+        </div>
+        <div class="settings-section-body">
+          <div class="setting-row">
+            <div class="setting-info">
+              <div class="setting-label">Habilitar Portfolio</div>
+              <div class="setting-description">Muestra una vista ejecutiva con estado RAG (rojo/amarillo/verde) de todos los proyectos, integrando presupuesto, riesgos y progreso en un solo lugar. A diferencia del Dashboard principal (que es personal y operativo), el Portfolio es una vista gerencial de alto nivel para PMP y Admin.</div>
+            </div>
+            <div class="setting-control">
+              <div class="form-check form-switch">
+                <input type="checkbox" name="portfolio_enabled" class="form-check-input"
+                  {% if settings.portfolio_enabled %}checked{% endif %}>
+              </div>
+            </div>
+          </div>
+          <div class="setting-row">
+            <div class="setting-info">
+              <div class="setting-label">Ver Portfolio</div>
+              <div class="setting-description">Ir al dashboard de portfolio</div>
+            </div>
+            <div class="setting-control">
+              <a href="{{ url_for('main.portfolio') }}" class="btn btn-outline-primary btn-sm">
+                <i class="fa-solid fa-layer-group me-1"></i>Abrir vista
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="settings-section mt-4">
+        <div class="settings-section-header">
+          <i class="fa-solid fa-chart-pie"></i>
+          <h5>Presupuesto &amp; Costos</h5>
+        </div>
+        <div class="settings-section-body">
+
+          <div class="setting-row">
+            <div class="setting-info">
+              <div class="setting-label">Habilitar Seguimiento de Presupuesto</div>
+              <div class="setting-description">Muestra la vista y el enlace en el menú lateral para controlar horas y costos por proyecto</div>
+            </div>
+            <div class="setting-control">
+              <div class="form-check form-switch">
+                <input type="checkbox" name="budget_tracking_enabled" class="form-check-input"
+                  {% if settings.budget_tracking_enabled %}checked{% endif %}>
+              </div>
+            </div>
+          </div>
+
+          <div class="setting-row">
+            <div class="setting-info">
+              <div class="setting-label">Umbral de Alerta (Advertencia)</div>
+              <div class="setting-description">% de horas consumidas a partir del cual se muestra advertencia en color amarillo (ej: 80)</div>
+            </div>
+            <div class="setting-control">
+              <div class="input-group" style="max-width:140px">
+                <input type="number" name="budget_warn_threshold" class="form-control"
+                  value="{{ settings.budget_warn_threshold or 80 }}" min="1" max="200">
+                <span class="input-group-text">%</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="setting-row">
+            <div class="setting-info">
+              <div class="setting-label">Umbral de Peligro (Excedido)</div>
+              <div class="setting-description">% de horas consumidas a partir del cual se muestra en rojo (ej: 100)</div>
+            </div>
+            <div class="setting-control">
+              <div class="input-group" style="max-width:140px">
+                <input type="number" name="budget_danger_threshold" class="form-control"
+                  value="{{ settings.budget_danger_threshold or 100 }}" min="1" max="200">
+                <span class="input-group-text">%</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="setting-row">
+            <div class="setting-info">
+              <div class="setting-label">Moneda</div>
+              <div class="setting-description">Código ISO de moneda para mostrar costos (ej: USD, PYG, ARS)</div>
+            </div>
+            <div class="setting-control">
+              <input type="text" name="budget_currency" class="form-control"
+                value="{{ settings.budget_currency or 'USD' }}" maxlength="5" style="max-width:100px">
+            </div>
+          </div>
+
+          <div class="setting-row">
+            <div class="setting-info">
+              <div class="setting-label">Ver Reporte de Presupuesto</div>
+              <div class="setting-description">Ir a la vista de seguimiento presupuestario por proyecto</div>
+            </div>
+            <div class="setting-control">
+              <a href="{{ url_for('main.budget_tracking') }}" class="btn btn-outline-primary btn-sm">
+                <i class="fa-solid fa-chart-pie me-1"></i>Abrir vista
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="settings-section mt-4">
+        <div class="settings-section-header">
+          <i class="fa-solid fa-shield-halved"></i>
+          <h5>Registro de Riesgos e Issues</h5>
+        </div>
+        <div class="settings-section-body">
+          <div class="setting-row">
+            <div class="setting-info">
+              <div class="setting-label">Habilitar Registro de Riesgos</div>
+              <div class="setting-description">Muestra la sección de riesgos e issues en el menú lateral y en el tablero de cada proyecto</div>
+            </div>
+            <div class="setting-control">
+              <div class="form-check form-switch">
+                <input type="checkbox" name="risks_enabled" class="form-check-input"
+                  {% if settings.risks_enabled %}checked{% endif %}>
+              </div>
+            </div>
+          </div>
+          <div class="setting-row">
+            <div class="setting-info">
+              <div class="setting-label">Ver Registro Global</div>
+              <div class="setting-description">Ir a la vista de riesgos e issues de todos los proyectos</div>
+            </div>
+            <div class="setting-control">
+              <a href="{{ url_for('main.risks_global') }}" class="btn btn-outline-primary btn-sm">
+                <i class="fa-solid fa-shield-halved me-1"></i>Abrir vista
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div class="d-flex justify-content-end">
         <button type="submit" class="btn btn-primary">
           <i class="fa-solid fa-save me-2"></i>Guardar Cambios
@@ -944,9 +1081,9 @@
           
           <div class="setting-row">
             <div class="setting-info">
-              <div class="setting-label">Tareas Próximas a Vencer <span class="badge bg-secondary ms-2">Experimental</span></div>
-              <div class="setting-description">Enviar recordatorio de tareas con fecha límite próxima</div>
-              <small class="text-muted d-block">Experimental: la generación y envío de recordatorios existe como tarea, pero su ejecución no está ligada automáticamente a esta configuración en todos los despliegues.</small>
+              <div class="setting-label">Tareas Próximas a Vencer</div>
+              <div class="setting-description">Enviar recordatorio por email a los asignados cuando una tarea está próxima a vencer</div>
+              <small class="text-muted d-block">Se ejecuta automáticamente a las 08:00 vía Celery Beat, o manualmente con <code>flask send-reminders</code>.</small>
             </div>
             <div class="setting-control">
               <div class="form-check form-switch">
@@ -1418,6 +1555,26 @@
     </div>
   </div>
 
+  <!-- Webhook Delivery History Modal -->
+  <div class="modal fade" id="webhookHistoryModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title fw-bold" id="historyModalTitle">
+            <i class="fa-solid fa-clock-rotate-left me-2 text-primary"></i>Historial de Entregas
+          </h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body" id="historyBody">
+          <div class="text-center py-4"><span class="spinner-border spinner-border-sm"></span></div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cerrar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Webhook Modal -->
   <div class="modal fade" id="webhookModal" tabindex="-1">
     <div class="modal-dialog">
@@ -1479,37 +1636,43 @@
 
   <script>
   // ===== Webhooks admin UI =====
-  // Lazy-init: Bootstrap JS loads after the content block, so we can't instantiate at parse time
-  let _webhookModal = null;
+  let _webhookModal = null, _historyModal = null;
   function getWebhookModal() {
     if (!_webhookModal) _webhookModal = new bootstrap.Modal(document.getElementById('webhookModal'));
     return _webhookModal;
+  }
+  function getHistoryModal() {
+    if (!_historyModal) _historyModal = new bootstrap.Modal(document.getElementById('webhookHistoryModal'));
+    return _historyModal;
+  }
+
+  function escHtml(str) {
+    return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   }
 
   function renderWebhookList(webhooks) {
     const list = document.getElementById('webhookList');
     const empty = document.getElementById('webhookEmpty');
-    // Remove existing cards (keep empty message)
     list.querySelectorAll('.webhook-card').forEach(el => el.remove());
-    if (!webhooks.length) {
-      empty.style.display = '';
-      return;
-    }
+    if (!webhooks.length) { empty.style.display = ''; return; }
     empty.style.display = 'none';
     webhooks.forEach(wh => {
       const card = document.createElement('div');
       card.className = 'webhook-card d-flex align-items-center justify-content-between p-3 border rounded';
-      card.style.cssText = 'background:white;gap:12px';
+      card.style.cssText = 'background:white;gap:12px;flex-wrap:wrap';
       const statusDot = `<span style="width:8px;height:8px;border-radius:50%;background:${wh.active ? '#198754' : '#6c757d'};display:inline-block;flex-shrink:0"></span>`;
       const evBadges = (wh.events || []).map(e => `<span class="badge bg-secondary" style="font-size:10px">${e}</span>`).join(' ');
       card.innerHTML = `
         <div style="flex:1;min-width:0">
-          <div class="fw-600 d-flex align-items-center gap-2">${statusDot} ${escHtml(wh.name)}</div>
+          <div class="fw-semibold d-flex align-items-center gap-2">${statusDot} ${escHtml(wh.name)}</div>
           <div class="text-muted" style="font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escHtml(wh.url)}</div>
           <div style="margin-top:4px">${evBadges}</div>
         </div>
         <div class="d-flex gap-2 flex-shrink-0">
-          <button class="btn btn-outline-secondary btn-sm" onclick="testWebhook('${wh.id}')" title="Enviar prueba">
+          <button class="btn btn-outline-secondary btn-sm" onclick="showWebhookHistory('${wh.id}','${escHtml(wh.name)}')" title="Historial de entregas">
+            <i class="fa-solid fa-clock-rotate-left"></i>
+          </button>
+          <button class="btn btn-outline-secondary btn-sm" onclick="testWebhook('${wh.id}',event)" title="Enviar prueba">
             <i class="fa-solid fa-paper-plane"></i>
           </button>
           <button class="btn btn-outline-primary btn-sm" onclick="editWebhook(${JSON.stringify(wh).replace(/"/g,'&quot;')})" title="Editar">
@@ -1521,10 +1684,6 @@
         </div>`;
       list.appendChild(card);
     });
-  }
-
-  function escHtml(str) {
-    return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   }
 
   function loadWebhooks() {
@@ -1553,49 +1712,97 @@
     const secret = document.getElementById('webhookSecret').value.trim();
     const active = document.getElementById('webhookActive').checked;
     const events = [...document.querySelectorAll('#webhookEvents input:checked')].map(cb => cb.value);
-
-    if (!name || !url || !events.length) {
-      alert('Completa nombre, URL y al menos un evento');
-      return;
-    }
-
+    if (!name || !url || !events.length) { alert('Completa nombre, URL y al menos un evento'); return; }
     const method = id ? 'PATCH' : 'POST';
     const endpoint = id ? `/api/webhooks/${id}` : '/api/webhooks';
-    fetch(endpoint, {
-      method,
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({name, url, events, secret, active})
-    }).then(r => r.json()).then(d => {
-      if (d.error) { alert('Error: ' + d.error); return; }
-      getWebhookModal().hide();
-      loadWebhooks();
-    }).catch(e => alert('Error al guardar webhook'));
+    fetch(endpoint, { method, headers: {'Content-Type':'application/json'}, body: JSON.stringify({name,url,events,secret,active}) })
+      .then(r => r.json()).then(d => {
+        if (d.error) { alert('Error: ' + d.error); return; }
+        getWebhookModal().hide(); loadWebhooks();
+      }).catch(() => alert('Error al guardar webhook'));
   }
 
   function deleteWebhook(id, name) {
     if (!confirm(`¿Eliminar el webhook "${name}"?`)) return;
-    fetch(`/api/webhooks/${id}`, {method: 'DELETE'}).then(() => loadWebhooks());
+    fetch(`/api/webhooks/${id}`, {method:'DELETE'}).then(() => loadWebhooks());
   }
 
-  function testWebhook(id) {
-    const btn = event.currentTarget;
+  function testWebhook(id, evt) {
+    const btn = evt.currentTarget;
     btn.disabled = true;
     btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
-    fetch(`/api/webhooks/${id}/test`, {method: 'POST'}).then(r => r.json()).then(d => {
+    fetch(`/api/webhooks/${id}/test`, {method:'POST'}).then(r => r.json()).then(d => {
       btn.disabled = false;
       btn.innerHTML = '<i class="fa-solid fa-paper-plane"></i>';
-      if (d.success) alert(`✅ Webhook respondió con HTTP ${d.status_code}`);
+      if (d.success) alert(`✅ Webhook respondió con HTTP ${d.status_code} (${d.duration_ms ?? '?'}ms)`);
       else alert(`❌ Falló: ${d.error || ('HTTP ' + d.status_code)}`);
-    }).catch(e => {
-      btn.disabled = false;
-      btn.innerHTML = '<i class="fa-solid fa-paper-plane"></i>';
-      alert('Error de red');
-    });
+    }).catch(() => { btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-paper-plane"></i>'; alert('Error de red'); });
+  }
+
+  // ── Historial de entregas ─────────────────────────────────────────────────
+  function showWebhookHistory(webhookId, webhookName) {
+    document.getElementById('historyModalTitle').textContent = `Historial — ${webhookName}`;
+    document.getElementById('historyBody').innerHTML =
+      '<div class="text-center py-4"><span class="spinner-border spinner-border-sm"></span> Cargando…</div>';
+    getHistoryModal().show();
+
+    fetch(`/api/webhooks/${webhookId}/deliveries?limit=50`)
+      .then(r => r.json())
+      .then(data => renderHistory(data))
+      .catch(() => {
+        document.getElementById('historyBody').innerHTML =
+          '<div class="text-center text-danger py-3">Error al cargar el historial</div>';
+      });
+  }
+
+  function renderHistory(data) {
+    const body = document.getElementById('historyBody');
+    const { deliveries, total, success_count, failure_count, success_rate } = data;
+
+    // Stats bar
+    const statsHtml = `
+      <div class="d-flex gap-3 mb-3 flex-wrap">
+        <span class="badge bg-secondary">${total} entregas</span>
+        <span class="badge bg-success">${success_count} exitosas</span>
+        <span class="badge bg-danger">${failure_count} fallidas</span>
+        ${success_rate !== null ? `<span class="badge bg-primary">${success_rate}% éxito</span>` : ''}
+      </div>`;
+
+    if (!deliveries.length) {
+      body.innerHTML = statsHtml + '<p class="text-muted text-center py-3">Sin entregas registradas aún.</p>';
+      return;
+    }
+
+    const rows = deliveries.map(d => {
+      const ts = d.created_at ? new Date(d.created_at).toLocaleString('es-ES') : '—';
+      const statusBadge = d.success
+        ? `<span class="badge bg-success">✓ ${d.status_code || 'OK'}</span>`
+        : `<span class="badge bg-danger">✗ ${d.status_code || 'Error'}</span>`;
+      const durationBadge = d.duration_ms != null
+        ? `<span class="text-muted" style="font-size:11px">${d.duration_ms}ms</span>` : '';
+      const testBadge = d.is_test ? `<span class="badge bg-info text-dark" style="font-size:10px">TEST</span>` : '';
+      const errMsg = d.error_message
+        ? `<div class="text-danger" style="font-size:11px;margin-top:2px">${escHtml(d.error_message.slice(0,120))}</div>` : '';
+      return `<tr>
+        <td style="font-size:12px;white-space:nowrap">${ts}</td>
+        <td><span class="badge bg-secondary" style="font-size:10px">${escHtml(d.event)}</span> ${testBadge}</td>
+        <td>${statusBadge} ${durationBadge}${errMsg}</td>
+      </tr>`;
+    }).join('');
+
+    body.innerHTML = statsHtml + `
+      <div style="max-height:380px;overflow-y:auto">
+        <table class="table table-sm table-hover mb-0" style="font-size:13px">
+          <thead class="table-light sticky-top">
+            <tr><th>Fecha</th><th>Evento</th><th>Resultado</th></tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>`;
   }
 
   // Load on tab click
   document.getElementById('webhooks-tab').addEventListener('shown.bs.tab', loadWebhooks);
-  // Also load if tab is active on page load
   if (document.querySelector('#webhooks-tab.active')) loadWebhooks();
   </script>
 
