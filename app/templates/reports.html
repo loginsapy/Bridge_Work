@@ -339,7 +339,8 @@
     </select>
     <button class="btn btn-outline-primary btn-sm" type="submit">Mostrar</button>
     {% if selected_project %}
-      <a class="btn btn-primary btn-sm" href="{{ url_for('main.reports') }}?project_id={{ selected_project.id }}&export=xlsx">Exportar XLSX</a>
+      <a class="btn btn-outline-success btn-sm" href="{{ url_for('main.reports') }}?project_id={{ selected_project.id }}&export=csv"><i class="fa-solid fa-file-csv me-1"></i>CSV</a>
+      <a class="btn btn-primary btn-sm" href="{{ url_for('main.reports') }}?project_id={{ selected_project.id }}&export=xlsx"><i class="fa-solid fa-file-excel me-1"></i>XLSX</a>
     {% endif %}
   </form>
 </div>
@@ -466,7 +467,8 @@
     <h3><i class="fa-solid fa-folder-open"></i> Resumen por Proyecto: {{ selected_project.name }}</h3>
     <div>
       <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('main.reports') }}">Volver</a>
-      <a class="btn btn-primary btn-sm" href="{{ url_for('main.reports') }}?project_id={{ selected_project.id }}&export=xlsx">Exportar XLSX</a>
+      <a class="btn btn-outline-success btn-sm" href="{{ url_for('main.reports') }}?project_id={{ selected_project.id }}&export=csv"><i class="fa-solid fa-file-csv me-1"></i>CSV</a>
+      <a class="btn btn-primary btn-sm" href="{{ url_for('main.reports') }}?project_id={{ selected_project.id }}&export=xlsx"><i class="fa-solid fa-file-excel me-1"></i>XLSX</a>
     </div>
   </div>
   <div class="monday-report-body">

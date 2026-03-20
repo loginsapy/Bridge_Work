@@ -4115,6 +4115,32 @@ def reports():
             # If anything goes wrong, fall back to global values already computed
             pass
 
+        if request.args.get('export') == 'csv':
+            import csv, io
+            bio = BytesIO()
+            bio.write(b'\xef\xbb\xbf')  # UTF-8 BOM for Excel compatibility
+            text_wrapper = io.TextIOWrapper(bio, encoding='utf-8', newline='')
+            writer = csv.writer(text_wrapper)
+            writer.writerow(['Task ID', 'Título', 'Estado', 'Prioridad', 'Responsables', 'Cliente Externo', 'Fecha Inicio', 'Fecha Vencimiento', 'Completada', 'Atraso (días)', 'Horas Estimadas', 'Horas Registradas'])
+            for row in task_rows:
+                writer.writerow([
+                    row['id'],
+                    row['title'],
+                    row['status'],
+                    row['priority'],
+                    ', '.join(row['assignees']) if row['assignees'] else '',
+                    row.get('client', ''),
+                    row['start_date'].isoformat() if row['start_date'] else '',
+                    row['due_date'].isoformat() if row['due_date'] else '',
+                    row['completed_at'].isoformat() if row.get('completed_at') else '',
+                    row.get('days_overdue', 0),
+                    float(row['estimated_hours']) if row['estimated_hours'] is not None else '',
+                    row['hours_logged'],
+                ])
+            text_wrapper.detach()
+            bio.seek(0)
+            return send_file(bio, mimetype='text/csv; charset=utf-8', as_attachment=True, download_name=f"project_{project.id}_summary.csv")
+
         if request.args.get('export') == 'xlsx':
             try:
                 import openpyxl

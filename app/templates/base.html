@@ -136,25 +136,31 @@
 
     <main id="page-content-wrapper" class="w-100 p-4">
       <div class="container-fluid">
-        <!-- Flash Messages Container (only for authenticated users; guest templates render their own) -->
-        {% if current_user.is_authenticated %}
-        <div id="flash-messages" class="mb-4">
-          {% with messages = get_flashed_messages(with_categories=true) %}
-          {% if messages %}
-            {% for category, message in messages %}
-            <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
-              {{ message }}
-              <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-            </div>
-            {% endfor %}
-          {% endif %}
-          {% endwith %}
-        </div>
-        {% endif %}
-
         {% block content %}{% endblock %}
       </div>
     </main>
+  </div>
+
+  <!-- Toast Container — fixed top-right, above footer -->
+  <div id="toast-container" class="toast-container position-fixed top-0 end-0 p-3" style="z-index:11000;margin-top:64px">
+    {% if current_user.is_authenticated %}
+    {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      {% for category, message in messages %}
+      {% set _cat = 'danger' if category == 'error' else category %}
+      {% set _icon = 'circle-check' if _cat == 'success' else 'circle-exclamation' if _cat == 'danger' else 'triangle-exclamation' if _cat == 'warning' else 'circle-info' %}
+      <div class="toast align-items-center text-bg-{{ _cat }} border-0" role="alert" data-bs-autohide="true" data-bs-delay="5000">
+        <div class="d-flex">
+          <div class="toast-body fw-medium">
+            <i class="fa-solid fa-{{ _icon }} me-2"></i>{{ message }}
+          </div>
+          <button type="button" class="btn-close {{ '' if _cat == 'warning' else 'btn-close-white' }} me-2 m-auto" data-bs-dismiss="toast" aria-label="Cerrar"></button>
+        </div>
+      </div>
+      {% endfor %}
+    {% endif %}
+    {% endwith %}
+    {% endif %}
   </div>
 
   <!-- Footer -->
@@ -193,30 +199,55 @@
 
   {% block scripts %}{% endblock %}
   <script>
-    // Global script for loading overlay and flash messages auto-dismiss
-    document.addEventListener('DOMContentLoaded', function() {
-      // Hide loading overlay when page is fully loaded
-      const loadingOverlay = document.getElementById('loading-overlay');
-      if (loadingOverlay) {
-        loadingOverlay.style.display = 'none';
-      }
+    // ── Toast system ──────────────────────────────────────────────────────────
+    function showToast(message, type) {
+      type = type || 'info';
+      const bgMap = { success: 'text-bg-success', danger: 'text-bg-danger', error: 'text-bg-danger', warning: 'text-bg-warning', info: 'text-bg-info' };
+      const iconMap = { success: 'circle-check', danger: 'circle-exclamation', error: 'circle-exclamation', warning: 'triangle-exclamation', info: 'circle-info' };
+      const bgClass = bgMap[type] || 'text-bg-info';
+      const icon = iconMap[type] || 'circle-info';
+      const closeClass = type === 'warning' ? 'btn-close' : 'btn-close btn-close-white';
+      const el = document.createElement('div');
+      el.className = `toast align-items-center ${bgClass} border-0`;
+      el.setAttribute('role', 'alert');
+      el.setAttribute('data-bs-autohide', 'true');
+      el.setAttribute('data-bs-delay', '5000');
+      el.innerHTML = `<div class="d-flex"><div class="toast-body fw-medium"><i class="fa-solid fa-${icon} me-2"></i>${message}</div><button type="button" class="${closeClass} me-2 m-auto" data-bs-dismiss="toast" aria-label="Cerrar"></button></div>`;
+      document.getElementById('toast-container').appendChild(el);
+      new bootstrap.Toast(el).show();
+      el.addEventListener('hidden.bs.toast', () => el.remove());
+    }
 
-      // Auto-dismiss flash messages after 5 seconds
-      document.querySelectorAll('.alert-dismissible').forEach(alert => {
-        setTimeout(() => {
-          new bootstrap.Alert(alert).close();
-        }, 5000);
+    // ── Global init ───────────────────────────────────────────────────────────
+    document.addEventListener('DOMContentLoaded', function() {
+      // Hide loading overlay
+      const loadingOverlay = document.getElementById('loading-overlay');
+      if (loadingOverlay) loadingOverlay.style.display = 'none';
+
+      // Show server-rendered flash toasts
+      document.querySelectorAll('#toast-container .toast').forEach(el => {
+        new bootstrap.Toast(el).show();
+        el.addEventListener('hidden.bs.toast', () => el.remove());
+      });
+
+      // ── Global form submit loading state ────────────────────────────────────
+      // Applies to all POST forms that don't have data-no-loading attribute.
+      document.addEventListener('submit', function(e) {
+        if (e.defaultPrevented) return;
+        const form = e.target;
+        if ('noLoading' in form.dataset) return;
+        if ((form.method || '').toLowerCase() !== 'post') return;
+        const btn = form.querySelector('[type="submit"]:not([data-no-loading])');
+        if (!btn || btn.disabled) return;
+        btn.disabled = true;
+        btn.dataset.originalHtml = btn.innerHTML;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Guardando...';
       });
     });
 
-    // Simple functions to show/hide loading overlay manually
-    function showLoading() {
-      document.getElementById('loading-overlay').style.display = 'flex';
-    }
-
-    function hideLoading() {
-      document.getElementById('loading-overlay').style.display = 'none';
-    }
+    // ── Loading overlay helpers ───────────────────────────────────────────────
+    function showLoading() { document.getElementById('loading-overlay').style.display = 'flex'; }
+    function hideLoading() { document.getElementById('loading-overlay').style.display = 'none'; }
   </script>
 
   <!-- Modal: Incomplete Predecessors (global) -->

@@ -333,10 +333,11 @@ function calculatePercentage(value, total) {
   return ((value / total) * 100).toFixed(1);
 }
 
-// Show toast notification (for future use)
-function showToast(message, type = 'info') {
-  // Implementation for toast notifications
-  console.log(`Toast [${type}]: ${message}`);
+// Show toast notification — delegates to global showToast defined in base.html
+function showToast(message, type) {
+  if (typeof window.showToast === 'function' && window.showToast !== showToast) {
+    window.showToast(message, type || 'info');
+  }
 }
 
 // ============================================
