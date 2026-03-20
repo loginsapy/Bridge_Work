@@ -308,6 +308,7 @@ def callback():
         name = user_info.get('name', '')
         given_name = user_info.get('given_name', '')
         family_name = user_info.get('family_name', '')
+        azure_department = (user_info.get('department') or '').strip()  # Azure AD department claim
         
         current_app.logger.info(f'OAuth user_info: oid={azure_oid}, email={email}, name={name}')
         
@@ -346,7 +347,21 @@ def callback():
                 user.first_name = given_name
             if family_name:
                 user.last_name = family_name
-        
+
+        # Sync department from Entra ID claim if present
+        if azure_department:
+            try:
+                from app.models import Department
+                dept = Department.query.filter_by(name=azure_department).first()
+                if not dept:
+                    dept = Department(name=azure_department)
+                    db.session.add(dept)
+                    db.session.flush()
+                user.department_id = dept.id
+                current_app.logger.info(f'User department synced from Entra ID: {azure_department}')
+            except Exception as e:
+                current_app.logger.warning(f'Failed to sync department from Entra ID: {e}')
+
         try:
             db.session.commit()
             current_app.logger.info(f'User saved/updated: id={user.id}, email={user.email}')

@@ -1492,7 +1492,127 @@ def get_webhook_deliveries(webhook_id):
     })
 
 
-@api_bp.route("/license/validate", methods=["POST"])
+# ========== DEPARTMENT ENDPOINTS ==========
+
+@api_bp.route('/departments', methods=['GET'])
+@login_required
+def list_departments():
+    from app.models import Department
+    departments = Department.query.order_by(Department.name).all()
+    return jsonify([d.to_dict() for d in departments])
+
+
+@api_bp.route('/departments', methods=['POST'])
+@login_required
+def create_department():
+    _require_admin()
+    from app.models import Department
+    data = request.get_json() or {}
+    name = (data.get('name') or '').strip()
+    if not name:
+        return jsonify({'error': 'El nombre del departamento es requerido'}), 400
+    if Department.query.filter_by(name=name).first():
+        return jsonify({'error': 'Ya existe un departamento con ese nombre'}), 409
+    dept = Department(name=name, description=data.get('description', ''))
+    db.session.add(dept)
+    db.session.commit()
+    return jsonify(dept.to_dict()), 201
+
+
+@api_bp.route('/departments/<int:dept_id>', methods=['PUT'])
+@login_required
+def update_department(dept_id):
+    _require_admin()
+    from app.models import Department
+    dept = Department.query.get_or_404(dept_id)
+    data = request.get_json() or {}
+    name = (data.get('name') or '').strip()
+    if name and name != dept.name:
+        if Department.query.filter_by(name=name).first():
+            return jsonify({'error': 'Ya existe un departamento con ese nombre'}), 409
+        dept.name = name
+    if 'description' in data:
+        dept.description = data['description']
+    db.session.commit()
+    return jsonify(dept.to_dict())
+
+
+@api_bp.route('/departments/<int:dept_id>', methods=['DELETE'])
+@login_required
+def delete_department(dept_id):
+    _require_admin()
+    from app.models import Department, User, Project
+    dept = Department.query.get_or_404(dept_id)
+    user_count = User.query.filter_by(department_id=dept_id).count()
+    project_count = Project.query.filter_by(department_id=dept_id).count()
+    if user_count > 0 or project_count > 0:
+        return jsonify({
+            'error': f'No se puede eliminar: el departamento tiene {user_count} usuario(s) y {project_count} proyecto(s) asignados'
+        }), 409
+    db.session.delete(dept)
+    db.session.commit()
+    return jsonify({'success': True})
+
+
+# ========== SUPERVISOR / PROJECT MEMBER INVITE ==========
+
+@api_bp.route('/projects/<int:project_id>/members', methods=['POST'])
+@login_required
+def add_project_member(project_id):
+    """Allow PMP (manager), Admin, or Supervisor (member) to add Participante users to a project."""
+    from app.models import Project, User
+    project = Project.query.get_or_404(project_id)
+    user_role = current_user.role.name if current_user.role else None
+
+    # Permission: Admin, PMP manager, or Supervisor member
+    allowed = (
+        user_role == 'Admin' or
+        (user_role == 'PMP' and (project.manager_id == current_user.id or current_user in project.members)) or
+        (user_role == 'Supervisor' and current_user in project.members)
+    )
+    if not allowed:
+        return jsonify({'error': 'Sin permiso para invitar miembros a este proyecto'}), 403
+
+    data = request.get_json() or {}
+    user_id = data.get('user_id')
+    if not user_id:
+        return jsonify({'error': 'user_id requerido'}), 400
+
+    target_user = User.query.get_or_404(user_id)
+
+    # Supervisor can only invite Participantes; PMP/Admin can invite anyone internal
+    if user_role == 'Supervisor' and (not target_user.role or target_user.role.name != 'Participante'):
+        return jsonify({'error': 'Los Supervisores solo pueden invitar usuarios con rol Participante'}), 403
+
+    if target_user not in project.members:
+        project.members.append(target_user)
+        db.session.commit()
+    return jsonify({'success': True, 'user': {'id': target_user.id, 'name': target_user.name}})
+
+
+@api_bp.route('/projects/<int:project_id>/members/<int:user_id>', methods=['DELETE'])
+@login_required
+def remove_project_member(project_id, user_id):
+    """Remove a member from a project. Only PMP manager or Admin."""
+    from app.models import Project, User
+    project = Project.query.get_or_404(project_id)
+    user_role = current_user.role.name if current_user.role else None
+
+    allowed = (
+        user_role == 'Admin' or
+        (user_role == 'PMP' and (project.manager_id == current_user.id or current_user in project.members))
+    )
+    if not allowed:
+        return jsonify({'error': 'Sin permiso para eliminar miembros de este proyecto'}), 403
+
+    target_user = User.query.get_or_404(user_id)
+    if target_user in project.members:
+        project.members.remove(target_user)
+        db.session.commit()
+    return jsonify({'success': True})
+
+
+@api_bp.route('/license/validate', methods=["POST"])
 def validate_license():
     """Validate current license"""
     if not current_user.is_authenticated:

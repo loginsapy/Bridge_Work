@@ -6,6 +6,23 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from . import db
 
 
+class Department(db.Model):
+    __tablename__ = 'departments'
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    name = db.Column(db.String(128), unique=True, nullable=False)
+    description = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.now)
+
+    users = db.relationship('User', back_populates='department', lazy='dynamic')
+    projects = db.relationship('Project', back_populates='department', lazy='dynamic')
+
+    def to_dict(self):
+        return {'id': self.id, 'name': self.name, 'description': self.description}
+
+    def __repr__(self):
+        return f"<Department {self.name}>"
+
+
 class User(UserMixin, db.Model):
     __tablename__ = "users"
     __table_args__ = {'sqlite_autoincrement': True}
@@ -24,6 +41,9 @@ class User(UserMixin, db.Model):
     phone = db.Column(db.String(50), nullable=True)  # Contact phone
 
     created_at = db.Column(db.DateTime, default=datetime.now)
+
+    department_id = db.Column(db.Integer, db.ForeignKey('departments.id'), nullable=True)
+    department = db.relationship('Department', back_populates='users', foreign_keys=[department_id])
 
     # Foto recibida desde Entra ID (nullable)
     photo = db.Column(db.LargeBinary, nullable=True)
@@ -86,6 +106,12 @@ task_assignees = db.Table('task_assignees',
     db.Column('user_id', db.Integer, db.ForeignKey('users.id'), primary_key=True)
 )
 
+# Association table for Task clients (many-to-many: tasks <-> client users)
+task_clients = db.Table('task_clients',
+    db.Column('task_id', db.Integer, db.ForeignKey('tasks.id'), primary_key=True),
+    db.Column('user_id', db.Integer, db.ForeignKey('users.id'), primary_key=True)
+)
+
 
 # Core domain
 class Project(db.Model):
@@ -107,6 +133,9 @@ class Project(db.Model):
     end_date = db.Column(db.Date, nullable=True)
 
     manager = db.relationship('User', foreign_keys=[manager_id], backref='managed_projects')
+
+    department_id = db.Column(db.Integer, db.ForeignKey('departments.id'), nullable=True)
+    department = db.relationship('Department', back_populates='projects', foreign_keys=[department_id])
 
 
 class Task(db.Model):
@@ -145,6 +174,8 @@ class Task(db.Model):
     assigned_to = db.relationship('User', foreign_keys=[assigned_to_id], backref='tasks')
     # Multiple assigned internal users (many-to-many)
     assignees = db.relationship('User', secondary=task_assignees, backref='assigned_tasks', lazy='select')
+    # Multiple assigned clients (many-to-many); assigned_client_id kept as primary/legacy
+    assigned_clients = db.relationship('User', secondary=task_clients, backref='client_tasks', lazy='select')
     approved_by = db.relationship('User', foreign_keys=[approved_by_id], backref='approved_tasks')
 
     @property

@@ -509,38 +509,57 @@ class NotificationService:
         return notifications
     
     @classmethod
-    def notify_task_status_changed(cls, task: Task, old_status: str, 
+    def notify_task_status_changed(cls, task: Task, old_status: str,
                                    changed_by_user: User = None,
-                                   send_email: bool = False) -> SystemNotification:
-        """Notify assignee when task status changes (email disabled by default)."""
-        if not task.assigned_to_id:
-            return None
-        
-        # Don't notify if the assignee made the change
-        if changed_by_user and task.assigned_to_id == changed_by_user.id:
-            return None
-        
+                                   send_email: bool = False) -> list:
+        """Notify all assignees and the project manager when task status changes."""
+        changer_id = changed_by_user.id if changed_by_user else None
         title = "Estado de tarea actualizado"
         message = f"La tarea '{task.title}' cambió de '{old_status}' a '{task.status}'"
-        
-        return cls.notify(
-            user_id=task.assigned_to_id,
-            title=title,
-            message=message,
-            notification_type=cls.TASK_STATUS_CHANGED,
-            related_entity_type='task',
-            related_entity_id=task.id,
-            send_email=send_email,
-            email_context={
-                'task': task,
-                'old_status': old_status,
-                'new_status': task.status,
-                'changed_by': changed_by_user,
-                'message': message,
-                'title': title,
-                'task_url': cls._build_task_url(task),
-            }
-        )
+        if changed_by_user:
+            message += f" por {changed_by_user.name or changed_by_user.email}"
+        task_url = cls._build_task_url(task)
+        email_ctx = {
+            'task': task,
+            'old_status': old_status,
+            'new_status': task.status,
+            'changed_by': changed_by_user,
+            'message': message,
+            'title': title,
+            'task_url': task_url,
+        }
+
+        # Collect recipients: primary assignee + multi-assignees + project manager
+        recipients = set()
+        if task.assigned_to_id:
+            recipients.add(task.assigned_to_id)
+        if getattr(task, 'assignees', None):
+            for u in task.assignees:
+                if getattr(u, 'id', None):
+                    recipients.add(u.id)
+        if task.project and task.project.manager_id:
+            recipients.add(task.project.manager_id)
+        # Don't notify the person who made the change
+        recipients.discard(changer_id)
+
+        notifications = []
+        for uid in recipients:
+            try:
+                n = cls.notify(
+                    user_id=uid,
+                    title=title,
+                    message=message,
+                    notification_type=cls.TASK_STATUS_CHANGED,
+                    related_entity_type='task',
+                    related_entity_id=task.id,
+                    send_email=send_email,
+                    email_context=email_ctx,
+                )
+                if n:
+                    notifications.append(n)
+            except Exception:
+                pass
+        return notifications
     
     @classmethod
     def notify_task_approved(cls, task: Task, approved_by_user: User,

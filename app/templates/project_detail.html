@@ -15,15 +15,20 @@
     <h2 class="fw-bold text-primary mb-0">{{ project.name }}</h2>
   </div>
   <div>
-    {% if current_user.role and current_user.role.name in ['PMP', 'Admin'] %}
+    {% set _role = current_user.role.name if current_user.role else '' %}
+    {% if _role in ['PMP', 'Admin'] %}
       <button class="btn btn-outline-secondary me-2"
               data-bs-toggle="modal" data-bs-target="#saveAsTemplateModal"
               title="Guardar como plantilla">
         <i class="fa-solid fa-layer-group me-1"></i>Guardar como plantilla
       </button>
+      {# PMP can only edit their own projects #}
+      {% if _role == 'Admin' or (_role == 'PMP' and project.manager_id == current_user.id) %}
       <a href="{{ url_for('main.edit_project', project_id=project.id) }}" class="btn btn-outline-secondary me-2 text-dark"><i class="fa-solid fa-pen me-2"></i>Editar</a>
+      {% endif %}
     {% endif %}
-    {% if current_user.is_internal and not (current_user.role and current_user.role.name == 'Participante') %}
+    {# PMP, Admin, Supervisor can create tasks #}
+    {% if current_user.is_internal and _role in ['PMP', 'Admin', 'Supervisor'] %}
       <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createTaskModal"><i class="fa-solid fa-plus me-2"></i>Nueva Tarea</button>
     {% endif %}
   </div>
@@ -223,7 +228,7 @@
             </td>
             <td><small class="text-muted">{{ task.due_date|fecha_es('corto_año') if task.due_date else '-' }}</small></td>
             <td class="text-end pe-4">
-              {% if current_user.is_internal and current_user.role and current_user.role.name in ('PMP', 'Admin') %}
+              {% if current_user.is_internal and current_user.role and current_user.role.name in ('PMP', 'Admin', 'Supervisor') %}
                 <a href="{{ url_for('main.edit_task', task_id=task.id) }}" class="btn btn-sm btn-outline-secondary" title="Editar"><i class="fa-solid fa-pen"></i></a>
               {% endif %}
             </td>
@@ -330,10 +335,10 @@
             </div>
             <div class="col-md-6 mb-3">
               <label class="form-label">Vencimiento</label>
-              {% if current_user.is_authenticated and current_user.is_internal and current_user.role and current_user.role.name in ('PMP','Admin') %}
+              {% if current_user.is_authenticated and current_user.is_internal and current_user.role and current_user.role.name in ('PMP','Admin','Supervisor') %}
               <input type="datetime-local" class="form-control" name="due_date">
               {% else %}
-              <input type="datetime-local" class="form-control" name="due_date" disabled title="Solo PMP/Admin puede editar fechas">
+              <input type="datetime-local" class="form-control" name="due_date" disabled title="Solo PMP/Admin/Supervisor puede editar fechas">
               {% endif %}
             </div>
           </div>
@@ -387,7 +392,7 @@
 {% endif %}
 
 <!-- Modal: Guardar como plantilla -->
-{% if current_user.role and current_user.role.name in ['PMP', 'Admin'] %}
+{% if current_user.role and current_user.role.name in ['PMP', 'Admin', 'Supervisor'] %}
 <div class="modal fade" id="saveAsTemplateModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog">
     <div class="modal-content">

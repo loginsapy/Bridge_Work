@@ -111,6 +111,31 @@ def dashboard():
             'COMPLETED': Project.query.filter_by(status='COMPLETED').order_by(Project.end_date.desc()).all(),
             'ARCHIVED': Project.query.filter_by(status='ARCHIVED').order_by(Project.end_date.desc()).all()
         }
+    elif user_role == 'Supervisor':
+        # Supervisor ve proyectos donde es miembro
+        supervisor_project_ids = db.session.query(Project.id).filter(
+            Project.members.contains(current_user)
+        ).scalar_subquery()
+
+        active_projects_count = db.session.query(func.count(Project.id)).filter(
+            Project.status == 'ACTIVE',
+            Project.id.in_(supervisor_project_ids)
+        ).scalar()
+        tasks_completed_count = db.session.query(func.count(Task.id)).filter(
+            Task.status == 'COMPLETED',
+            Task.project_id.in_(supervisor_project_ids)
+        ).scalar()
+        recent_projects = Project.query.filter(Project.id.in_(supervisor_project_ids)).order_by(Project.start_date.desc()).limit(5).all()
+        recent_activity = Task.query.filter(
+            Task.status == 'COMPLETED',
+            Task.project_id.in_(supervisor_project_ids)
+        ).order_by(Task.due_date.desc()).limit(5).all()
+        projects_by_status = {
+            'PLANNING': Project.query.filter(Project.status == 'PLANNING', Project.id.in_(supervisor_project_ids)).order_by(Project.start_date.desc()).all(),
+            'ACTIVE': Project.query.filter(Project.status == 'ACTIVE', Project.id.in_(supervisor_project_ids)).order_by(Project.start_date.desc()).all(),
+            'COMPLETED': Project.query.filter(Project.status == 'COMPLETED', Project.id.in_(supervisor_project_ids)).order_by(Project.end_date.desc()).all(),
+            'ARCHIVED': Project.query.filter(Project.status == 'ARCHIVED', Project.id.in_(supervisor_project_ids)).order_by(Project.end_date.desc()).all()
+        }
     elif user_role == 'Participante':
         # Participante ve solo proyectos donde tiene tareas asignadas (incluyendo multi-asignados)
         user_project_ids = db.session.query(Task.project_id).filter(
@@ -358,13 +383,17 @@ def edit_project(project_id):
             new_clients = User.query.filter(User.id.in_(client_ids)).all() if client_ids else []
             project.clients = new_clients
 
-            # Actualizar miembros participantes
-            member_ids = request.form.getlist('member_ids')
-            # Ensure we include existing member ids so that if the user isn't in the 'Participante' role anymore
-            # they continue to appear in the project members list when editing
-            member_id_ints = [int(m) for m in member_ids] if member_ids else []
-            new_members = User.query.filter(User.id.in_(member_id_ints)).all() if member_id_ints else []
+            # Actualizar miembros (PMPs adicionales + Supervisores + Participantes)
+            pmp_ids = [int(x) for x in request.form.getlist('pmp_ids') if x.strip()]
+            supervisor_ids = [int(x) for x in request.form.getlist('supervisor_ids') if x.strip()]
+            member_ids = [int(x) for x in request.form.getlist('member_ids') if x.strip()]
+            all_member_ids = list(set(pmp_ids + supervisor_ids + member_ids))
+            new_members = User.query.filter(User.id.in_(all_member_ids)).all() if all_member_ids else []
             project.members = new_members
+
+            # Departamento (opcional)
+            dept_id_raw = request.form.get('department_id', '').strip()
+            project.department_id = int(dept_id_raw) if dept_id_raw else None
             
             # Registrar cambios en auditoría
             new_client_ids = [c.id for c in project.clients]
@@ -408,16 +437,36 @@ def edit_project(project_id):
     member_map = {u.id: u for u in internal_members}
     for m in project.members:
         member_map.setdefault(m.id, m)
-    # Keep a stable, human-friendly ordering by first_name + last_name
-    available_members = sorted(member_map.values(), key=lambda u: (u.first_name or '', u.last_name or ''))
+    all_members = sorted(member_map.values(), key=lambda u: (u.first_name or '', u.last_name or ''))
+
+    # Group members by role for clear display in the template
+    MEMBER_ROLE_GROUPS = ['PMP', 'Supervisor', 'Participante']
+    members_by_role = {r: [] for r in MEMBER_ROLE_GROUPS}
+    members_other = []
+    for u in all_members:
+        role_name = u.role.name if u.role else None
+        if role_name in members_by_role:
+            members_by_role[role_name].append(u)
+        else:
+            members_other.append(u)
 
     # IDs of currently assigned members (for checkbox checked state)
     project_member_ids = [m.id for m in project.members]
-    
-    # Obtener usuarios internos para selector de responsable
-    available_managers = User.query.filter_by(is_internal=True, is_active=True).order_by(User.first_name).all()
 
-    return render_template('project_edit.html', project=project, available_clients=available_clients, available_members=available_members, project_member_ids=project_member_ids, available_managers=available_managers)
+    # Responsable del proyecto: solo usuarios con rol PMP
+    _pmp_role = Role.query.filter_by(name='PMP').first()
+    available_managers = User.query.filter_by(is_internal=True, is_active=True, role_id=_pmp_role.id).order_by(User.first_name).all() if _pmp_role else []
+
+    # Áreas
+    from ..models import Department
+    available_departments = Department.query.order_by(Department.name).all()
+
+    return render_template('project_edit.html', project=project, available_clients=available_clients,
+                           members_by_role=members_by_role,
+                           members_other=members_other,
+                           project_member_ids=project_member_ids,
+                           available_managers=available_managers,
+                           available_departments=available_departments)
 
 
 @main_bp.route('/project/<int:project_id>/delete', methods=['POST'])
@@ -753,27 +802,40 @@ def client_dashboard():
 def projects():
     """
     Visibilidad de proyectos según rol:
-    - PMP/Admin: puede ver todos los proyectos
-    - Participante: solo proyectos donde tiene tareas asignadas
+    - Admin: puede ver todos los proyectos
+    - PMP: solo proyectos que gestiona (manager_id) o donde es miembro
+    - Supervisor: solo proyectos donde es miembro
+    - Participante: solo proyectos donde tiene tareas asignadas o es miembro
     - Cliente: solo proyectos donde es cliente
     - Sin Rol: no puede ver nada
     """
     from ..auth.decorators import _get_user_from_session
+    from ..models import Department
     user = _get_user_from_session()
     user_role = user.role.name if (user and user.role) else None
-    
+
     # Usuario sin rol: mostrar mensaje y lista vacía
     if not user_role:
         flash('No tienes un rol asignado. Contacta al administrador para obtener acceso.', 'warning')
         return render_template('projects.html', projects=[], no_role=True)
-    
+
     # Paginación: página actual desde querystring
     page = request.args.get('page', 1, type=int)
     per_page = 10
 
-    # PMP o Admin: puede ver todo
-    if user_role in ['PMP', 'Admin']:
+    # Admin: puede ver todo
+    if user_role == 'Admin':
         base_query = Project.query.order_by(Project.start_date.desc())
+    # PMP: solo proyectos que él gestiona o donde fue invitado como miembro
+    elif user_role == 'PMP':
+        base_query = Project.query.filter(
+            (Project.manager_id == current_user.id) | (Project.members.contains(current_user))
+        ).order_by(Project.start_date.desc())
+    # Supervisor: solo proyectos donde es miembro
+    elif user_role == 'Supervisor':
+        base_query = Project.query.filter(
+            Project.members.contains(current_user)
+        ).order_by(Project.start_date.desc())
     # Participante: solo proyectos donde tiene tareas asignadas
     elif user_role == 'Participante':
         project_ids = db.session.query(Task.project_id).filter(
@@ -787,6 +849,16 @@ def projects():
         base_query = Project.query.filter(Project.clients.contains(current_user)).order_by(Project.start_date.desc())
     else:
         base_query = Project.query.filter(False)
+
+    # Filtro por área
+    area_id = request.args.get('area_id', '', type=str).strip()
+    if area_id == 'none':
+        base_query = base_query.filter(Project.department_id == None)
+    elif area_id:
+        try:
+            base_query = base_query.filter(Project.department_id == int(area_id))
+        except ValueError:
+            area_id = ''
 
     # Evitar duplicados y problemas con JSON en Postgres.
     # Estrategia: contar project ids distintos, obtener los ids paginados mediante GROUP BY,
@@ -852,19 +924,56 @@ def projects():
     client_role = Role.query.filter_by(name='Cliente').first()
     available_clients = User.query.filter_by(role_id=client_role.id).order_by(User.first_name).all() if client_role else []
     
-    # Obtener usuarios internos para el modal de creación
-    available_members = User.query.filter_by(is_internal=True, is_active=True).order_by(User.first_name).all()
-    
+    # Obtener usuarios internos para el modal de creación, agrupados por rol
+    _all_members = User.query.filter_by(is_internal=True, is_active=True).order_by(User.first_name).all()
+    MEMBER_ROLE_GROUPS = ['PMP', 'Supervisor', 'Participante']
+    members_by_role = {r: [] for r in MEMBER_ROLE_GROUPS}
+    members_other = []
+    for _u in _all_members:
+        _rn = _u.role.name if _u.role else None
+        if _rn in members_by_role:
+            members_by_role[_rn].append(_u)
+        else:
+            members_other.append(_u)
+
+    # Áreas — respetar el toggle de admin settings para la vista lista
+    # Mantener el mismo default que Admin Settings (habilitado por defecto)
+    _dept_raw = SystemSettings.get('departments_enabled', True)
+    departments_enabled = (_dept_raw.lower() not in ('false', '0', 'no')) if isinstance(_dept_raw, str) else bool(_dept_raw)
+
+    from ..models import Department
+    available_departments = Department.query.order_by(Department.name).all() if departments_enabled else []
+    area_filter = next((d for d in available_departments if str(d.id) == area_id), None)
+
+    # Agrupar por área solo si el feature está activo y no hay filtro puntual aplicado
+    if departments_enabled and available_departments and not area_id:
+        groups = []
+        for dept in available_departments:
+            dept_projects = [p for p in projects if p.department_id == dept.id]
+            if dept_projects:
+                groups.append({'dept': dept, 'projects': dept_projects})
+        no_dept = [p for p in projects if not p.department_id]
+        if no_dept:
+            groups.append({'dept': None, 'projects': no_dept})
+        project_groups = groups
+    else:
+        project_groups = None
+
     # Provide current time context for templates that compare dates
-    return render_template('projects.html', 
-                           projects=projects, 
-                           no_role=False, 
+    return render_template('projects.html',
+                           projects=projects,
+                           no_role=False,
                            now=datetime.now(),
                            current_user_role_name=user_role,
                            available_clients=available_clients,
-                           available_members=available_members,
+                           members_by_role=members_by_role,
+                           members_other=members_other,
                            pagination=pagination,
-                           per_page=per_page)
+                           per_page=per_page,
+                           available_departments=available_departments,
+                           area_id=area_id,
+                           area_filter=area_filter,
+                           project_groups=project_groups)
 
 
 @main_bp.route('/project/<int:project_id>')
@@ -892,9 +1001,19 @@ def project_detail(project_id):
         return redirect(url_for('main.projects'))
 
     # Control de acceso según rol
-    if user_role in ['PMP', 'Admin']:
-        # PMP/Admin puede ver cualquier proyecto
+    if user_role == 'Admin':
+        # Admin puede ver cualquier proyecto
         pass
+    elif user_role == 'PMP':
+        # PMP solo puede ver proyectos que gestiona o donde es miembro
+        if project.manager_id != current_user.id and current_user not in project.members:
+            flash('No tienes permiso para ver este proyecto.', 'danger')
+            return redirect(url_for('main.projects'))
+    elif user_role == 'Supervisor':
+        # Supervisor solo puede ver proyectos donde es miembro
+        if current_user not in project.members:
+            flash('No tienes permiso para ver este proyecto.', 'danger')
+            return redirect(url_for('main.projects'))
     elif user_role == 'Participante':
         # Participante solo puede ver proyectos donde tiene tareas asignadas o es miembro
         has_tasks = Task.query.filter(Task.project_id == project_id).filter(
@@ -915,8 +1034,8 @@ def project_detail(project_id):
         return redirect(url_for('main.projects'))
 
     # Filtrar tareas según rol
-    if user_role in ['PMP', 'Admin']:
-        # PMP/Admin ve todas las tareas del proyecto
+    if user_role in ['PMP', 'Admin', 'Supervisor']:
+        # PMP/Admin/Supervisor ve todas las tareas del proyecto
         tasks = Task.query.filter_by(project_id=project_id).order_by(Task.status, Task.priority.desc()).all()
     elif user_role == 'Cliente' or not (user.is_internal if user else True):
         # Cliente ve solo tareas explícitamente visibles: marcadas como externas o asignadas al cliente
@@ -1124,6 +1243,10 @@ def project_kanban(project_id):
     # Control de acceso según rol
     if user_role in ['PMP', 'Admin']:
         pass
+    elif user_role == 'Supervisor':
+        if current_user not in project.members:
+            flash('No tienes permiso para ver este proyecto.', 'danger')
+            return redirect(url_for('main.projects'))
     elif user_role == 'Participante':
         has_tasks = Task.query.filter(Task.project_id == project_id).filter(
             (Task.assigned_to_id == current_user.id) | (Task.assignees.any(User.id == current_user.id))
@@ -1141,7 +1264,7 @@ def project_kanban(project_id):
         return redirect(url_for('main.projects'))
 
     # Filtrar tareas según rol
-    if user_role in ['PMP', 'Admin']:
+    if user_role in ['PMP', 'Admin', 'Supervisor']:
         tasks = Task.query.filter_by(project_id=project_id).all()
     elif user_role == 'Participante':
         tasks = Task.query.filter_by(project_id=project_id).all()
@@ -1192,6 +1315,10 @@ def project_gantt(project_id):
     # Control de acceso según rol
     if user_role in ['PMP', 'Admin']:
         pass
+    elif user_role == 'Supervisor':
+        if current_user not in project.members:
+            flash('No tienes permiso para ver este proyecto.', 'danger')
+            return redirect(url_for('main.projects'))
     elif user_role == 'Participante':
         has_tasks = Task.query.filter(Task.project_id == project_id).filter(
             (Task.assigned_to_id == current_user.id) | (Task.assignees.any(User.id == current_user.id))
@@ -1209,7 +1336,7 @@ def project_gantt(project_id):
         return redirect(url_for('main.projects'))
 
     # Filtrar tareas según rol
-    if user_role in ['PMP', 'Admin']:
+    if user_role in ['PMP', 'Admin', 'Supervisor']:
         tasks = Task.query.filter_by(project_id=project_id).order_by(Task.position, Task.id).all()
     elif user_role == 'Participante':
         tasks = Task.query.filter_by(project_id=project_id).order_by(Task.position, Task.id).all()
@@ -1398,10 +1525,12 @@ def create_task():
         if status == 'COMPLETED':
             task.completed_at = datetime.now()
 
-        # Assign to a client (customer) separately from internal assignee
-        assigned_client_id = request.form.get('assigned_client_id')
-        if assigned_client_id and assigned_client_id.strip():
-            task.assigned_client_id = int(assigned_client_id)
+        # Assign clients (multi-select); keep assigned_client_id as primary/legacy
+        client_ids = [int(x) for x in request.form.getlist('assigned_client_id') if x and x.strip()]
+        if client_ids:
+            client_users = User.query.filter(User.id.in_(client_ids)).all()
+            task.assigned_clients = client_users
+            task.assigned_client_id = client_ids[0]
 
         start_date_str = request.form.get('start_date')
         due_date_str = request.form.get('due_date')
@@ -1441,11 +1570,19 @@ def create_task():
             task.assignees = users
             # Keep compatibility with single assigned_to_id: use first selected if any
             task.assigned_to_id = users[0].id if users else None
+            # Auto-add assignees to project members if not already members
+            existing_member_ids = {m.id for m in project.members}
+            for u in users:
+                if u.id not in existing_member_ids:
+                    project.members.append(u)
         else:
             # Handle single assignee from assigned_to_id field (for backwards compatibility)
             assigned_to_id = request.form.get('assigned_to_id')
             if assigned_to_id and assigned_to_id.strip():
                 task.assigned_to_id = int(assigned_to_id)
+                u = User.query.get(int(assigned_to_id))
+                if u and u not in project.members:
+                    project.members.append(u)
 
         # Parent task (hierarchy)
         parent_task_id = request.form.get('parent_task_id')
@@ -1473,14 +1610,6 @@ def create_task():
             task.validate_predecessor_ids(predecessor_ids)
             preds = Task.query.filter(Task.id.in_(predecessor_ids)).all()
             task.predecessors = preds
-
-        # If assignees were provided via form, notify them (and persist)
-        assignee_ids = [int(x) for x in request.form.getlist('assignees') if x and x.strip()]
-        if assignee_ids:
-            users = User.query.filter(User.id.in_(assignee_ids)).all()
-            task.assignees = users
-            # Keep compat with single assigned_to_id
-            task.assigned_to_id = users[0].id if users else None
 
         # Registrar auditoría de creación
         audit = AuditLog(
@@ -2532,6 +2661,9 @@ def create_project():
     project_type = request.form.get('project_type', 'APP_DEVELOPMENT')
     client_ids = request.form.getlist('client_ids')
     member_ids = request.form.getlist('member_ids')
+    pmp_ids = request.form.getlist('pmp_ids')
+    supervisor_ids = request.form.getlist('supervisor_ids')
+    department_id_raw = request.form.get('department_id', '').strip()
     # Sanitize incoming id lists: remove empty strings and cast to int
     try:
         client_ids = [int(x) for x in client_ids if x and str(x).strip()]
@@ -2541,6 +2673,15 @@ def create_project():
         member_ids = [int(x) for x in member_ids if x and str(x).strip()]
     except ValueError:
         member_ids = []
+    try:
+        pmp_ids = [int(x) for x in pmp_ids if x and str(x).strip()]
+    except ValueError:
+        pmp_ids = []
+    try:
+        supervisor_ids = [int(x) for x in supervisor_ids if x and str(x).strip()]
+    except ValueError:
+        supervisor_ids = []
+    department_id = int(department_id_raw) if department_id_raw else None
     
     if not name:
         flash('El nombre del proyecto es un campo obligatorio.', 'danger')
@@ -2565,7 +2706,8 @@ def create_project():
             project_type=project_type,
             manager_id=current_user.id if current_user.is_internal else None,
             start_date=datetime.strptime(start_date_str, '%Y-%m-%d').date() if start_date_str else datetime.now().date(),
-            end_date=datetime.strptime(end_date_str, '%Y-%m-%d').date() if end_date_str else None
+            end_date=datetime.strptime(end_date_str, '%Y-%m-%d').date() if end_date_str else None,
+            department_id=department_id
         )
         db.session.add(new_project)
         db.session.flush()  # Get the project ID
@@ -2575,9 +2717,10 @@ def create_project():
             clients = User.query.filter(User.id.in_(client_ids)).all()
             new_project.clients = clients
             
-        # Associate members (Participants)
-        if member_ids:
-            members = User.query.filter(User.id.in_(member_ids)).all()
+        # Associate members (PMPs adicionales + Supervisores + Participantes)
+        all_member_ids = list(set(pmp_ids + supervisor_ids + member_ids))
+        if all_member_ids:
+            members = User.query.filter(User.id.in_(all_member_ids)).all()
             new_project.members = members
         
         # Registrar auditoría de creación
@@ -4257,10 +4400,12 @@ def update_task_status(task_id):
         )
     )
 
-    # PMP/Admin can change any task status. Participantes only their assigned tasks.
+    # PMP/Admin/Supervisor can change task status. Participantes only their assigned tasks.
     if not user or not user.is_internal:
         return jsonify({'error': 'Permission denied'}), 403
     if role_name in ('PMP', 'Admin'):
+        pass
+    elif role_name == 'Supervisor' and user in project.members:
         pass
     elif role_name == 'Participante' and is_assigned:
         pass
@@ -4290,7 +4435,28 @@ def update_task_status(task_id):
                     }), 400
 
         task.set_status(new_status)
+
+        # AuditLog del cambio de estado
+        if new_status and new_status != old_status:
+            from app.models import AuditLog as _AuditLog
+            audit = _AuditLog(
+                entity_type='Task',
+                entity_id=task.id,
+                action='STATUS_CHANGE',
+                user_id=current_user.id,
+                changes={'status': {'old': old_status, 'new': task.status}}
+            )
+            db.session.add(audit)
+
         db.session.commit()
+
+        # Notificaciones de cambio de estado
+        if new_status and new_status != old_status:
+            try:
+                from app.services.notifications import NotificationService
+                NotificationService.notify_task_status_changed(task, old_status, user)
+            except Exception:
+                current_app.logger.exception('Error notifying status change for task %s', task.id)
 
         # Dispatch webhooks (non-blocking)
         try:
@@ -4348,6 +4514,11 @@ def task_detail(task_id):
     if user_role in ['PMP', 'Admin']:
         can_view = True
         can_edit = True
+    elif user_role == 'Supervisor':
+        # Supervisor puede ver y editar tareas en proyectos donde es miembro
+        is_project_member = task.project and (user in task.project.members)
+        can_view = bool(is_project_member)
+        can_edit = bool(is_project_member)
     elif user_role == 'Participante':
         # Participante (internal) puede ver cualquier tarea; editar solo si esta asignado
         is_assigned = task.assigned_to_id == user_id or (
@@ -4368,18 +4539,29 @@ def task_detail(task_id):
         flash('No tienes permiso para ver esta tarea.', 'danger')
         return redirect(url_for('main.project_detail', project_id=task.project_id))
 
+    # can_edit_task_form: puede acceder al formulario de edición completo (PMP/Admin/Supervisor)
+    # Distinto de can_edit (que para Participante es True si está asignado, pero solo puede cambiar estado)
+    can_edit_task_form = user_role in ('PMP', 'Admin', 'Supervisor') and can_edit
+
     # Solo usuarios asignados pueden comentar o subir archivos.
     assigned_user_ids = set([u.id for u in task.assignees]) if getattr(task, 'assignees', None) else set()
     can_comment_upload = bool(
+        user_role in ('PMP', 'Admin') or
+        (user_role == 'Supervisor' and task.project and user in task.project.members) or
         task.assigned_to_id == user_id or
         user_id in assigned_user_ids or
         task.assigned_client_id == user_id
     )
-    
+    can_delete_task = user_role in ('PMP', 'Admin')
+
     time_entries = TimeEntry.query.filter_by(task_id=task_id).all()
     total_hours = db.session.query(func.sum(TimeEntry.hours)).filter_by(task_id=task_id).scalar() or 0
-    
-    return render_template('task_detail.html', task=task, time_entries=time_entries, total_hours=total_hours, now=datetime.now(), can_edit=can_edit, can_comment_upload=can_comment_upload)
+
+    return render_template('task_detail.html', task=task, time_entries=time_entries, total_hours=total_hours,
+                           now=datetime.now(), can_edit=can_edit,
+                           can_edit_task_form=can_edit_task_form,
+                           can_delete_task=can_delete_task,
+                           can_comment_upload=can_comment_upload)
 
 
 @main_bp.route('/task/<int:task_id>/comments', methods=['GET', 'POST'])
@@ -4396,6 +4578,8 @@ def task_comments(task_id):
     project = task.project
     if user_role in ['PMP', 'Admin']:
         can_view = True
+    elif user_role == 'Supervisor':
+        can_view = bool(project and current_user in project.members)
     elif user_role == 'Participante':
         is_assigned = task.assigned_to_id == current_user.id or (
             getattr(task, 'assignees', None) and any(u.id == current_user.id for u in task.assignees)
@@ -4413,6 +4597,8 @@ def task_comments(task_id):
 
     assigned_user_ids = set([u.id for u in task.assignees]) if getattr(task, 'assignees', None) else set()
     can_comment_upload = bool(
+        user_role in ('PMP', 'Admin') or
+        (user_role == 'Supervisor' and project and current_user in project.members) or
         task.assigned_to_id == current_user.id or
         current_user.id in assigned_user_ids or
         task.assigned_client_id == current_user.id
@@ -4493,6 +4679,18 @@ def task_comments(task_id):
 
         comment = TaskComment(task_id=task_id, user_id=current_user.id, body=body, parent_id=parent_id)
         db.session.add(comment)
+
+        # AuditLog del comentario
+        from app.models import AuditLog as _AuditLog
+        _snippet = body[:200] + ('...' if len(body) > 200 else '')
+        _audit_comment = _AuditLog(
+            entity_type='Task',
+            entity_id=task_id,
+            action='COMMENT',
+            user_id=current_user.id,
+            changes={'body_snippet': _snippet, 'is_reply': bool(parent_id)}
+        )
+        db.session.add(_audit_comment)
         db.session.commit()
 
         # Send notifications: if this is a reply, notify the parent author (unless it's the same user).
@@ -4746,6 +4944,8 @@ def move_task(task_id):
 
     if role_name in ('PMP', 'Admin'):
         pass
+    elif role_name == 'Supervisor' and user in project.members:
+        pass
     elif role_name == 'Participante' and is_assigned:
         pass
     else:
@@ -4934,7 +5134,7 @@ def edit_task(task_id):
             }
 
             # Role checks: only PMP/Admin can modify most fields. Participants and Clients may only change status and upload files.
-            is_pmp_admin = (current_user.is_authenticated and current_user.is_internal and current_user.role and current_user.role.name in ('PMP','Admin'))
+            is_pmp_admin = (current_user.is_authenticated and current_user.is_internal and current_user.role and current_user.role.name in ('PMP', 'Admin', 'Supervisor'))
             is_participant = (current_user.is_authenticated and current_user.is_internal and current_user.role and current_user.role.name == 'Participante')
             is_client = (not current_user.is_internal) and (project.client_id == current_user.id)
             is_limited_editor = is_participant or is_client
@@ -5045,28 +5245,48 @@ def edit_task(task_id):
                 else:
                     task.estimated_hours = None
 
-            # Update assignees (multi-select). Keep assigned_to_id for compatibility (first selected)
-            current_app.logger.debug('edit_task: raw assignees payload = %s', request.form.getlist('assignees'))
-            if 'assignees' in request.form:
-                assignee_ids = [int(x) for x in request.form.getlist('assignees') if x and x.strip()]
-                # Use ORM relationship management only (avoid direct SQL deletes that confuse the ORM unit-of-work)
-                if assignee_ids:
-                    users = User.query.filter(User.id.in_(assignee_ids)).all()
-                    task.assignees = users
-                    task.assigned_to_id = users[0].id if users else None
+            # Update assignees from three separate role pickers: PMP / Supervisor / Participante
+            # Also accept legacy 'assignees' field for backward compat (API calls, etc.)
+            SPLIT_FIELDS = ('pmp_assignee_ids', 'supervisor_assignee_ids', 'participant_assignee_ids')
+            uses_split = any(f in request.form for f in SPLIT_FIELDS)
+            uses_legacy = 'assignees' in request.form and not uses_split
+
+            if uses_split or uses_legacy:
+                if uses_split:
+                    raw_ids = []
+                    for field in SPLIT_FIELDS:
+                        raw_ids += request.form.getlist(field)
                 else:
-                    # Explicitly clearing assignees requested
+                    raw_ids = request.form.getlist('assignees')
+                current_app.logger.debug('edit_task: combined assignee ids = %s', raw_ids)
+                assignee_ids = list({int(x) for x in raw_ids if x and x.strip()})
+                if assignee_ids:
+                    users_assigned = User.query.filter(User.id.in_(assignee_ids)).all()
+                    task.assignees = users_assigned
+                    task.assigned_to_id = users_assigned[0].id if users_assigned else None
+                    # Auto-add assignees to project members if not already members
+                    existing_member_ids = {m.id for m in project.members}
+                    for u in users_assigned:
+                        if u.id not in existing_member_ids:
+                            project.members.append(u)
+                else:
                     task.assignees = []
                     task.assigned_to_id = None
 
-            # Update assigned client (separate field) only if present in form
+            # Update assigned clients (multi-select); keep assigned_client_id as primary/legacy
             assigned_client_provided = False
             new_assigned_client_id = None
             if 'assigned_client_id' in request.form:
                 assigned_client_provided = True
-                assigned_client_id = request.form.get('assigned_client_id')
-                new_assigned_client_id = int(assigned_client_id) if assigned_client_id and assigned_client_id.strip() else None
-                task.assigned_client_id = new_assigned_client_id
+                client_ids = [int(x) for x in request.form.getlist('assigned_client_id') if x and x.strip()]
+                if client_ids:
+                    client_users = User.query.filter(User.id.in_(client_ids)).all()
+                    task.assigned_clients = client_users
+                    new_assigned_client_id = client_ids[0]
+                    task.assigned_client_id = new_assigned_client_id
+                else:
+                    task.assigned_clients = []
+                    task.assigned_client_id = None
             # Predecessor handling moved earlier to occur BEFORE status validation to ensure
             # that status changes take the new predecessors into account. See above.
 
@@ -5074,10 +5294,12 @@ def edit_task(task_id):
             files = request.files.getlist('attachments')
             has_files_to_upload = any(f and getattr(f, 'filename', None) for f in files)
             assigned_user_ids = set([u.id for u in task.assignees]) if getattr(task, 'assignees', None) else set()
+            assigned_client_ids = set([u.id for u in task.assigned_clients]) if getattr(task, 'assigned_clients', None) else set()
             can_upload_attachments = bool(
                 task.assigned_to_id == current_user.id or
                 current_user.id in assigned_user_ids or
-                task.assigned_client_id == current_user.id
+                task.assigned_client_id == current_user.id or
+                current_user.id in assigned_client_ids
             )
             if has_files_to_upload and not can_upload_attachments:
                 flash('Solo usuarios asignados pueden subir archivos a esta tarea.', 'danger')
@@ -5229,25 +5451,84 @@ def edit_task(task_id):
             current_app.logger.exception('Error updating task %s: %s', task.id if task else None, e)
             flash(f'Error al actualizar: {str(e)}', 'danger')
 
-    # Provide user list for assignment
-    # Fix 5: Asociar responsables al proyecto (filtrar lista)
-    if project.members:
-        # Mostrar miembros del proyecto + manager + admins (opcional, aquí simplificado a miembros + manager)
-        users = list(set(project.members + ([project.manager] if project.manager else [])))
-        users.sort(key=lambda u: u.first_name or '')
-    else:
-        users = User.query.filter_by(is_internal=True, is_active=True).order_by(User.first_name).all()
-    
+    # Usuarios asignables: miembros del proyecto + manager + cualquier usuario que ya tenga
+    # tareas asignadas en este proyecto (datos previos a auto-membresía).
+    # Además, sincronizamos: si un usuario tiene tareas asignadas pero no es miembro, lo agregamos.
+    task_assignee_ids = db.session.query(Task.assigned_to_id).filter(
+        Task.project_id == project.id,
+        Task.assigned_to_id.isnot(None)
+    ).distinct().all()
+    task_assignee_ids = {row[0] for row in task_assignee_ids}
+
+    # Multi-assignees también
+    from sqlalchemy import text as _text
+    multi_rows = db.session.execute(
+        _text('SELECT user_id FROM task_assignees ta JOIN tasks t ON ta.task_id = t.id WHERE t.project_id = :pid'),
+        {'pid': project.id}
+    ).fetchall()
+    task_assignee_ids |= {row[0] for row in multi_rows}
+
+    # Backfill: agregar como miembros del proyecto a quienes tienen tareas asignadas
+    existing_member_ids = {m.id for m in project.members}
+    new_members_added = False
+    if task_assignee_ids - existing_member_ids:
+        extra_users = User.query.filter(
+            User.id.in_(task_assignee_ids - existing_member_ids),
+            User.is_internal == True,
+            User.is_active == True
+        ).all()
+        for u in extra_users:
+            project.members.append(u)
+            new_members_added = True
+        if new_members_added:
+            db.session.commit()
+
     # Candidate predecessors: tasks within the same project (exclude self)
     candidate_predecessors = Task.query.filter(Task.project_id == project.id, Task.id != task.id).order_by(Task.title).all()
 
     # Role flags for template: limit edit capabilities for Participants and Clients
-    is_pmp_admin = (current_user.is_authenticated and current_user.is_internal and current_user.role and current_user.role.name in ('PMP','Admin'))
+    is_pmp_admin = (current_user.is_authenticated and current_user.is_internal and current_user.role and current_user.role.name in ('PMP', 'Admin', 'Supervisor'))
     is_participant = (current_user.is_authenticated and current_user.is_internal and current_user.role and current_user.role.name == 'Participante')
     is_client = (not current_user.is_internal) and (project.client_id == current_user.id)
     is_limited_editor = is_participant or is_client
 
-    return render_template('task_edit.html', task=task, project=project, users=users, candidate_predecessors=candidate_predecessors, is_pmp_admin=is_pmp_admin, is_limited_editor=is_limited_editor, allowed_extensions=list(current_app.config.get('ALLOWED_EXTENSIONS', [])))
+    # Selector de asignados: miembros del proyecto (internos activos), agrupados por rol.
+    # También incluir al manager del proyecto si no está ya en members.
+    TASK_ROLE_GROUPS = ['PMP', 'Supervisor', 'Participante']
+    users_by_role = {r: [] for r in TASK_ROLE_GROUPS}
+    users_other = []
+    seen_ids = set()
+    project_team = list(project.members)
+    if project.manager and project.manager.is_internal and project.manager.is_active:
+        if project.manager.id not in {m.id for m in project_team}:
+            project_team.append(project.manager)
+    project_team.sort(key=lambda u: (u.first_name or u.email))
+    for u in project_team:
+        if u.id in seen_ids or not u.is_internal or not u.is_active:
+            continue
+        seen_ids.add(u.id)
+        rn = u.role.name if u.role else None
+        if rn in users_by_role:
+            users_by_role[rn].append(u)
+        else:
+            users_other.append(u)
+    users = project_team  # lista plana para compatibilidad
+
+    # Clientes disponibles para asignar a la tarea: del proyecto, si no hay, todos los clientes del sistema
+    _client_role = Role.query.filter_by(name='Cliente').first()
+    if project.clients:
+        available_task_clients = project.clients
+    elif _client_role:
+        available_task_clients = User.query.filter_by(role_id=_client_role.id, is_active=True).order_by(User.first_name).all()
+    else:
+        available_task_clients = []
+
+    return render_template('task_edit.html', task=task, project=project,
+                           users=users, users_by_role=users_by_role, users_other=users_other,
+                           available_task_clients=available_task_clients,
+                           candidate_predecessors=candidate_predecessors,
+                           is_pmp_admin=is_pmp_admin, is_limited_editor=is_limited_editor,
+                           allowed_extensions=list(current_app.config.get('ALLOWED_EXTENSIONS', [])))
 
 
 @main_bp.route('/task/<int:task_id>/client_accept', methods=['POST'])
@@ -5591,6 +5872,7 @@ def admin_settings_page():
         'portfolio_enabled',
         'budget_tracking_enabled',
         'risks_enabled',
+        'departments_enabled',
     ]
     # Treat global alert enabled as boolean for templates
     notify_keys.append('global_alert_enabled')
@@ -5613,13 +5895,16 @@ def admin_settings_page():
     license_info = license_service.check_license_status()
     hardware_id = license_service.get_hardware_id()
     
-    return render_template('admin_settings.html', 
-                         users=users, 
+    from ..models import Department
+    departments = Department.query.order_by(Department.name).all()
+    return render_template('admin_settings.html',
+                         users=users,
                          roles=roles,
                          settings=settings,
                          stats=stats,
                          license_info=license_info,
-                         hardware_id=hardware_id)
+                         hardware_id=hardware_id,
+                         departments=departments)
 
 
 @main_bp.route('/admin/settings', methods=['POST'])
@@ -5680,6 +5965,7 @@ def admin_settings():
             'portfolio_enabled',
             'budget_tracking_enabled',
             'risks_enabled',
+            'departments_enabled',
         ],
         'global_alert': [
             'global_alert_enabled'

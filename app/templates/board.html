@@ -753,16 +753,43 @@ tr.table-warning:hover {
   <div class="col-md-6">
     <div class="card border-0 shadow-sm">
       <div class="card-body py-2 px-3">
-        <div class="d-flex align-items-center">
+        <div class="d-flex align-items-center flex-wrap gap-1">
           <i class="fa-solid fa-users text-primary me-2"></i>
-          <span class="fw-semibold text-muted small me-3">Equipo:</span>
-          <div class="d-flex flex-wrap gap-2">
+          <span class="fw-semibold text-muted small me-2">Equipo:</span>
+          <div class="d-flex flex-wrap gap-1">
             {% for member in project.members %}
-              <span class="badge bg-primary" style="color: white !important;">
-                <i class="fa-solid fa-user me-1"></i>{{ member.first_name }} {{ member.last_name }}
+              {% set role_name = member.role.name if member.role else '' %}
+              {% if role_name == 'Admin' %}
+                {% set badge_style = 'background:#6f42c1;color:#fff;' %}
+                {% set role_icon = 'fa-shield-halved' %}
+                {% set role_title = 'Admin' %}
+              {% elif role_name == 'PMP' %}
+                {% set badge_style = 'background:#0d6efd;color:#fff;' %}
+                {% set role_icon = 'fa-briefcase' %}
+                {% set role_title = 'PMP' %}
+              {% elif role_name == 'Supervisor' %}
+                {% set badge_style = 'background:#fd7e14;color:#fff;' %}
+                {% set role_icon = 'fa-user-check' %}
+                {% set role_title = 'Supervisor' %}
+              {% elif role_name == 'Participante' %}
+                {% set badge_style = 'background:#198754;color:#fff;' %}
+                {% set role_icon = 'fa-user' %}
+                {% set role_title = 'Participante' %}
+              {% else %}
+                {% set badge_style = 'background:#6c757d;color:#fff;' %}
+                {% set role_icon = 'fa-user' %}
+                {% set role_title = role_name or 'Sin rol' %}
+              {% endif %}
+              <span class="badge" style="{{ badge_style }}" title="{{ role_title }}">
+                <i class="fa-solid {{ role_icon }} me-1"></i>{{ member.first_name }} {{ member.last_name }}
               </span>
             {% endfor %}
           </div>
+          <span tabindex="0" data-bs-toggle="popover" data-bs-trigger="focus hover" data-bs-placement="bottom" data-bs-html="true"
+                data-bs-content="<span class='badge me-1' style='background:#0d6efd'><i class='fa-solid fa-briefcase me-1'></i>PMP</span><span class='badge me-1' style='background:#fd7e14'><i class='fa-solid fa-user-check me-1'></i>Supervisor</span><span class='badge' style='background:#198754'><i class='fa-solid fa-user me-1'></i>Participante</span>"
+                class="ms-1 text-muted" style="cursor:pointer;font-size:0.8rem;" title="Roles">
+            <i class="fa-solid fa-circle-info"></i>
+          </span>
         </div>
       </div>
     </div>
@@ -928,8 +955,8 @@ tr.table-warning:hover {
                 {% else %}
                   <span class="toggle-placeholder" style="display:inline-block;width:20px;"></span>
                 {% endif %}
-                {% if current_user.is_internal and current_user.role and current_user.role.name in ('PMP', 'Admin') %}
-                <div class="task-title-input" contenteditable="true" 
+                {% if current_user.is_internal and current_user.role and current_user.role.name in ('PMP', 'Admin', 'Supervisor') %}
+                <div class="task-title-input" contenteditable="true"
                      onblur="updateTask({{ task.id }}, 'title', this.innerText)">{{ task.title }}</div>
                 {% else %}
                 <div class="task-title-input">{{ task.title }}</div>
@@ -985,7 +1012,7 @@ tr.table-warning:hover {
               </div>
             </td>
             <td>
-              <div class="cell person-cell" data-assignee-id="{{ task.assigned_to_id or '' }}" {% if current_user.is_internal and current_user.role and current_user.role.name in ['PMP','Admin'] %}onclick="showPersonDropdown(event, {{ task.id }})"{% endif %}>
+              <div class="cell person-cell" data-assignee-id="{{ task.assigned_to_id or '' }}" {% if current_user.is_internal and current_user.role and current_user.role.name in ['PMP','Admin','Supervisor'] %}onclick="showPersonDropdown(event, {{ task.id }})"{% endif %}>
                 {% set assignees = task.assignee_list %}
                 {% if assignees and assignees|length > 0 %}
                 <div class="person-avatars">
@@ -1002,7 +1029,7 @@ tr.table-warning:hover {
                   {% endif %}
                 </div>
                 {% else %}
-                <span class="text-muted">{% if current_user.is_internal and current_user.role and current_user.role.name in ['PMP','Admin'] %}+ Asignar{% else %}—{% endif %}</span>
+                <span class="text-muted">{% if current_user.is_internal and current_user.role and current_user.role.name in ['PMP','Admin','Supervisor'] %}+ Asignar{% else %}—{% endif %}</span>
                 {% endif %}
 
                 {% if task.assigned_client %}
@@ -1015,7 +1042,7 @@ tr.table-warning:hover {
             </td>
             <td>
               <div class="cell date-cell">
-                {% if current_user.is_authenticated and current_user.is_internal and current_user.role and current_user.role.name in ('PMP', 'Admin') %}
+                {% if current_user.is_authenticated and current_user.is_internal and current_user.role and current_user.role.name in ('PMP', 'Admin', 'Supervisor') %}
                 <input type="date" value="{{ task.start_date.strftime('%Y-%m-%d') if task.start_date else '' }}" 
                        onchange="updateTask({{ task.id }}, 'start_date', this.value)">
                 {% else %}
@@ -1025,7 +1052,7 @@ tr.table-warning:hover {
             </td>
             <td>
               <div class="cell date-cell">
-                {% if current_user.is_authenticated and current_user.is_internal and current_user.role and current_user.role.name in ('PMP', 'Admin') %}
+                {% if current_user.is_authenticated and current_user.is_internal and current_user.role and current_user.role.name in ('PMP', 'Admin', 'Supervisor') %}
                 <input type="date" value="{{ task.due_date.strftime('%Y-%m-%d') if task.due_date else '' }}" 
                        class="{% if task.due_date and task.due_date.date() < now.date() and task.status != 'COMPLETED' %}date-overdue{% endif %}"
                        onchange="updateTask({{ task.id }}, 'due_date', this.value)">
@@ -1084,7 +1111,7 @@ tr.table-warning:hover {
             <td>
               <div class="cell task-actions-visible">
                 <a href="{{ url_for('main.task_detail', task_id=task.id) }}" class="action-btn-visible" title="Ver detalles"><i class="fa-solid fa-eye"></i></a>
-                {% if current_user.is_internal and current_user.role and current_user.role.name in ('PMP', 'Admin') %}
+                {% if current_user.is_internal and current_user.role and current_user.role.name in ('PMP', 'Admin', 'Supervisor') %}
                 <a href="{{ url_for('main.edit_task', task_id=task.id) }}" class="action-btn-visible" title="Editar"><i class="fa-solid fa-pen"></i></a>
                 {% endif %}
                 {% if current_user.is_internal and current_user.role and current_user.role.name in ('PMP', 'Admin') %}
@@ -1193,7 +1220,7 @@ tr.table-warning:hover {
   <div class="status-option" onclick="setPriority('CRITICAL')"><div class="status-dot" style="background:var(--monday-red)"></div>Crítica</div>
 </div>
 
-{% if current_user.is_internal and current_user.role and current_user.role.name in ['PMP','Admin'] %}
+{% if current_user.is_internal and current_user.role and current_user.role.name in ['PMP','Admin','Supervisor'] %}
 <!-- Person Dropdown -->
 <div class="person-dropdown" id="personDropdown" style="display:none;">
   <div class="person-option" onclick="setAssignee(null)">
@@ -1612,7 +1639,7 @@ tr.table-warning:hover {
                 </label>
                 <select name="assignees" class="form-select" multiple size="4">
                   {% for u in users %}
-                  <option value="{{ u.id }}">{{ u.first_name or u.email }}</option>
+                  <option value="{{ u.id }}">{{ ((u.first_name or '') + ' ' + (u.last_name or ''))|trim or u.email }}</option>
                   {% endfor %}
                 </select>
                 <div class="form-text">Mantén Ctrl/Cmd para seleccionar múltiples usuarios</div>
@@ -1894,6 +1921,9 @@ document.getElementById('importTasksForm')?.addEventListener('submit', function(
   text.textContent = 'Importando...';
 });
 
+// Inicializar popovers de Bootstrap (sanitize:false para permitir estilos inline)
+document.querySelectorAll('[data-bs-toggle="popover"]').forEach(el => new bootstrap.Popover(el, { sanitize: false }));
+
 // Close dropdowns on click outside
 document.addEventListener('click', (e) => {
   if (!e.target.closest('.status-dropdown') && !e.target.closest('.person-dropdown') && !e.target.closest('.status-cell') && !e.target.closest('.person-cell')) {
@@ -1931,7 +1961,7 @@ function showStatusDropdown(e, taskId, isBlocked = false) {
 
 function canCurrentUserChangeTaskStatus(taskId) {
   if (!currentUserRole) return false;
-  if (currentUserRole === 'PMP' || currentUserRole === 'Admin') return true;
+  if (currentUserRole === 'PMP' || currentUserRole === 'Admin' || currentUserRole === 'Supervisor') return true;
   if (currentUserRole !== 'Participante') return false;
 
   const row = document.querySelector(`#tasksBody tr[data-task-id='${taskId}']`);

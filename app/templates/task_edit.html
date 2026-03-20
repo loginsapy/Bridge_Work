@@ -222,54 +222,100 @@
             </div>
           </div>
 
+          {# Pre-compute sets of assigned IDs per role for pre-selection #}
+          {% set assignee_ids = task.assignees | map(attribute='id') | list if task.assignees else ([task.assigned_to_id] if task.assigned_to_id else []) %}
+
           <div class="row">
+            <!-- PMP adicional -->
             <div class="col-md-6 mb-3">
-              <label class="form-label fw-semibold">Asignados (Internos)</label>
+              <label class="form-label fw-semibold">
+                <i class="fa-solid fa-user-shield me-1 text-primary"></i>PMP adicional
+              </label>
               {% if is_limited_editor %}
-                <div class="p-2" style="max-height:160px; overflow:auto; border:1px solid var(--monday-border); border-radius:6px; background:#fff;">
-                  {% for u in task.assignee_list %}
-                    <div class="d-flex align-items-center">
-                      {% if u.photo %}
-                        <img src="{{ url_for('main.user_photo', user_id=u.id) }}" class="person-avatar small me-2" alt="{{ u.name }}" />
-                      {% else %}
-                        <div class="person-avatar small me-2">{{ (u.first_name or u.email)[0]|upper }}</div>
-                      {% endif %}
-                      <div>{{ u.first_name or u.email }}</div>
-                    </div>
-                  {% endfor %}
-                  {% if (task.assignee_list|length) == 0 %}
-                    <div class="text-muted">—</div>
-                  {% endif %}
-                </div>
+                <p class="form-control-plaintext">
+                  {% set pmp_assigned = task.assignees | selectattr('role') | selectattr('role.name', 'equalto', 'PMP') | list if task.assignees else [] %}
+                  {{ pmp_assigned | map(attribute='first_name') | join(', ') or '—' }}
+                </p>
               {% else %}
-              <div class="p-2" style="max-height:160px; overflow:auto; border:1px solid var(--monday-border); border-radius:6px; background:#fff;">
-                {% for u in users %}
-                  {% set checked = false %}
-                  {% if task.assignees and u in task.assignees %}
-                    {% set checked = true %}
-                  {% elif task.assigned_to and task.assigned_to.id == u.id and (not task.assignees or task.assignees|length == 0) %}
-                    {% set checked = true %}
-                  {% endif %}
-                  <div class="form-check">
-                    <input class="form-check-input" type="checkbox" name="assignees" id="edit-assignee-{{ u.id }}" value="{{ u.id }}" {% if checked %}checked{% endif %}>
-                    <label class="form-check-label" for="edit-assignee-{{ u.id }}">{{ u.first_name or u.email }}</label>
-                  </div>
-                {% endfor %}
-              </div>
-              <small class="text-muted d-block">Selecciona uno o varios usuarios marcando las casillas.</small>
-              {% endif %}
-            </div>
-            <div class="col-md-6 mb-3">
-              <label class="form-label fw-semibold">Asignado a (Cliente)</label>
-              {% if is_limited_editor %}
-                <p class="form-control-plaintext">{{ task.assigned_client.first_name if task.assigned_client else '—' }}</p>
-              {% else %}
-              <select class="form-select" name="assigned_client_id">
-                <option value="">-- Sin asignar --</option>
-                {% for c in project.clients %}
-                  <option value="{{ c.id }}" {% if task.assigned_client_id and task.assigned_client_id == c.id %}selected{% endif %}>{{ c.first_name or c.email }}</option>
+              <select name="pmp_assignee_ids" id="taskPmpPicker" class="form-select" multiple>
+                {% for u in users_by_role['PMP'] %}
+                  <option value="{{ u.id }}" {% if u.id in assignee_ids %}selected{% endif %}>
+                    {{ ((u.first_name or '') + ' ' + (u.last_name or ''))|trim or u.email }}
+                  </option>
                 {% endfor %}
               </select>
+              <small class="text-muted d-block mt-1">PMPs que colaboran en la tarea.</small>
+              {% endif %}
+            </div>
+
+            <!-- Supervisores -->
+            <div class="col-md-6 mb-3">
+              <label class="form-label fw-semibold">
+                <i class="fa-solid fa-user-check me-1 text-warning"></i>Supervisores
+              </label>
+              {% if is_limited_editor %}
+                <p class="form-control-plaintext">
+                  {% set sup_assigned = task.assignees | selectattr('role') | selectattr('role.name', 'equalto', 'Supervisor') | list if task.assignees else [] %}
+                  {{ sup_assigned | map(attribute='first_name') | join(', ') or '—' }}
+                </p>
+              {% else %}
+              <select name="supervisor_assignee_ids" id="taskSupervisorPicker" class="form-select" multiple>
+                {% for u in users_by_role['Supervisor'] %}
+                  <option value="{{ u.id }}" {% if u.id in assignee_ids %}selected{% endif %}>
+                    {{ ((u.first_name or '') + ' ' + (u.last_name or ''))|trim or u.email }}
+                  </option>
+                {% endfor %}
+              </select>
+              <small class="text-muted d-block mt-1">Supervisores asignados a la tarea.</small>
+              {% endif %}
+            </div>
+
+            <!-- Participantes -->
+            <div class="col-md-6 mb-3">
+              <label class="form-label fw-semibold">
+                <i class="fa-solid fa-users me-1 text-success"></i>Participantes
+              </label>
+              {% if is_limited_editor %}
+                <div class="p-2" style="max-height:120px; overflow:auto; border:1px solid var(--monday-border); border-radius:6px; background:#fff;">
+                  {% for u in task.assignee_list %}
+                    <div>{{ u.first_name or u.email }}</div>
+                  {% else %}
+                    <div class="text-muted">—</div>
+                  {% endfor %}
+                </div>
+              {% else %}
+              <select name="participant_assignee_ids" id="taskParticipantPicker" class="form-select" multiple>
+                {% for u in users_by_role['Participante'] %}
+                  <option value="{{ u.id }}" {% if u.id in assignee_ids %}selected{% endif %}>
+                    {{ ((u.first_name or '') + ' ' + (u.last_name or ''))|trim or u.email }}
+                  </option>
+                {% endfor %}
+              </select>
+              <small class="text-muted d-block mt-1">Participantes asignados a la tarea.</small>
+              {% endif %}
+            </div>
+
+            <div class="col-md-6 mb-3">
+              <label class="form-label fw-semibold">Asignado a (Clientes)</label>
+              {% if is_limited_editor %}
+                <p class="form-control-plaintext">
+                  {% if task.assigned_clients %}
+                    {{ task.assigned_clients | map(attribute='first_name') | join(', ') }}
+                  {% elif task.assigned_client %}
+                    {{ task.assigned_client.first_name }}
+                  {% else %}—{% endif %}
+                </p>
+              {% else %}
+              <select id="taskClientPicker" class="form-select" name="assigned_client_id" multiple>
+                {% set selected_client_ids = task.assigned_clients | map(attribute='id') | list if task.assigned_clients else ([task.assigned_client_id] if task.assigned_client_id else []) %}
+                {% for c in available_task_clients %}
+                  <option value="{{ c.id }}" {% if c.id in selected_client_ids %}selected{% endif %}>
+                    {{ ((c.first_name or '') + ' ' + (c.last_name or ''))|trim or c.email }}
+                    {% if c.company %} — {{ c.company }}{% endif %}
+                  </option>
+                {% endfor %}
+              </select>
+              <small class="text-muted d-block mt-1">Clientes asociados al proyecto.</small>
               {% endif %}
             </div>
             <div class="col-md-6 mb-3">
@@ -520,6 +566,26 @@
 {% block scripts %}
 {{ super() }}
 <script>
+document.addEventListener('DOMContentLoaded', function() {
+  const pickerOpts = {
+    plugins: ['remove_button'],
+    create: false,
+    render: {
+      no_results: () => '<div class="no-results p-2">No se encontraron resultados</div>',
+    }
+  };
+
+  [
+    ['taskPmpPicker',         'Selecciona PMPs adicionales...'],
+    ['taskSupervisorPicker',  'Selecciona supervisores...'],
+    ['taskParticipantPicker', 'Selecciona participantes...'],
+    ['taskClientPicker',      'Selecciona clientes...'],
+  ].forEach(([id, placeholder]) => {
+    const el = document.getElementById(id);
+    if (el) new TomSelect(el, { ...pickerOpts, placeholder });
+  });
+});
+
 // Show selected files without auto-submit
 function showSelectedFiles(input) {
   const container = document.getElementById('pendingFiles');

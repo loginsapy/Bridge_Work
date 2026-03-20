@@ -46,45 +46,95 @@
           </div>
 
           <div class="mb-3">
-            <label class="form-label fw-semibold">Responsable del Proyecto</label>
-            <select class="form-select" name="manager_id">
-              <option value="">-- Sin asignar --</option>
+            <label class="form-label fw-semibold">
+              <i class="fa-solid fa-user-tie me-1 text-secondary"></i>Responsable del Proyecto
+            </label>
+            <select class="form-select" name="manager_id" id="projManagerPicker">
+              <option value="">— Sin asignar —</option>
               {% for manager in available_managers %}
                 <option value="{{ manager.id }}" {% if project.manager_id == manager.id %}selected{% endif %}>
-                  {{ manager.first_name }} {{ manager.last_name }} ({{ manager.email }})
+                  {{ manager.first_name }} {{ manager.last_name }}
                 </option>
               {% endfor %}
             </select>
-            <small class="text-muted">Usuario interno responsable de la gestión del proyecto.</small>
+            <small class="text-muted">Solo usuarios con rol PMP pueden ser responsables.</small>
           </div>
 
           <div class="mb-3">
             <label class="form-label fw-semibold">
-              <i class="fa-solid fa-user-tie me-1"></i>Clientes Asociados (opcional) - Multiples
+              <i class="fa-solid fa-user-tie me-1 text-muted"></i>Clientes Asociados
             </label>
-            <select name="client_ids" class="form-select" multiple>
+            <select name="client_ids" id="projClientPicker" class="form-select" multiple>
               {% for client in available_clients %}
               <option value="{{ client.id }}" {% if client in project.clients %}selected{% endif %}>
                 {{ client.first_name or client.email }} {{ client.last_name or '' }}
-                {% if client.company %} ({{ client.company }}){% endif %}
               </option>
               {% endfor %}
             </select>
-            <small class="text-muted">Manten presionado Ctrl/Cmd para seleccionar multiples clientes</small>
+            <small class="text-muted">Clientes externos asociados al proyecto.</small>
           </div>
 
           <div class="mb-3">
             <label class="form-label fw-semibold">
-              <i class="fa-solid fa-users me-1"></i>Asignados (Internos) — Múltiples
+              <i class="fa-solid fa-user-shield me-1 text-primary"></i>PMPs adicionales
             </label>
-            <select name="member_ids" id="editMemberIds" class="form-select" multiple>
-              {% for member in available_members %}
+            <select name="pmp_ids" id="projPmpPicker" class="form-select" multiple>
+              {% for member in members_by_role['PMP'] %}
               <option value="{{ member.id }}" {% if member.id in project_member_ids %}selected{% endif %}>
-                {{ member.first_name or member.email }}
+                {{ member.first_name or '' }} {{ member.last_name or '' }}
               </option>
               {% endfor %}
             </select>
-            <small class="text-muted">Mantén presionado Ctrl/Cmd para seleccionar múltiples usuarios</small>
+            <small class="text-muted">PMPs que colaborarán en el proyecto.</small>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label fw-semibold">
+              <i class="fa-solid fa-user-check me-1 text-warning"></i>Supervisores
+            </label>
+            <select name="supervisor_ids" id="projSupervisorPicker" class="form-select" multiple>
+              {% for member in members_by_role['Supervisor'] %}
+              <option value="{{ member.id }}" {% if member.id in project_member_ids %}selected{% endif %}>
+                {{ member.first_name or '' }} {{ member.last_name or '' }}
+              </option>
+              {% endfor %}
+            </select>
+            <small class="text-muted">Podrán aprobar tareas y supervisar avances.</small>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label fw-semibold">
+              <i class="fa-solid fa-users me-1 text-success"></i>Participantes
+            </label>
+            <select name="member_ids" id="projParticipantPicker" class="form-select" multiple>
+              {% for member in members_by_role['Participante'] %}
+              <option value="{{ member.id }}" {% if member.id in project_member_ids %}selected{% endif %}>
+                {{ member.first_name or '' }} {{ member.last_name or '' }}
+              </option>
+              {% endfor %}
+            </select>
+            <small class="text-muted">Miembros del equipo que trabajarán en el proyecto.</small>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label fw-semibold">
+              <i class="fa-solid fa-sitemap me-1"></i>Área
+            </label>
+            {% if available_departments %}
+            <select name="department_id" class="form-select">
+              <option value="">— Sin área —</option>
+              {% for dept in available_departments %}
+              <option value="{{ dept.id }}" {% if project.department_id == dept.id %}selected{% endif %}>
+                {{ dept.name }}{% if dept.description %} — {{ dept.description }}{% endif %}
+              </option>
+              {% endfor %}
+            </select>
+            {% else %}
+            <div class="text-muted" style="font-size:13px;">
+              <i class="fa-solid fa-circle-info me-1"></i>No hay áreas creadas.
+              <a href="{{ url_for('main.admin_settings') }}#projects" target="_blank">Crear en Configuración</a>
+            </div>
+            {% endif %}
           </div>
 
           <div class="d-flex gap-2 pt-3">
@@ -121,10 +171,22 @@
 {{ super() }}
 <script>
   document.addEventListener('DOMContentLoaded', function() {
-    const select = document.getElementById('editMemberIds');
-    if(select) {
-       new Choices(select, { removeItemButton: true, placeholderValue: 'Selecciona miembros...', allowHTML: false });
-    }
+    const pickerOpts = {
+      plugins: ['remove_button'],
+      create: false,
+      render: {
+        no_results: () => '<div class="no-results p-2">No se encontraron resultados</div>',
+      }
+    };
+    [
+      ['projClientPicker',      'Selecciona clientes...'],
+      ['projPmpPicker',         'Selecciona PMPs adicionales...'],
+      ['projSupervisorPicker',  'Selecciona supervisores...'],
+      ['projParticipantPicker', 'Selecciona participantes...'],
+    ].forEach(([id, placeholder]) => {
+      const el = document.getElementById(id);
+      if (el) new TomSelect(el, { ...pickerOpts, placeholder });
+    });
   });
 </script>
 {% endblock %}

@@ -370,15 +370,17 @@
         {% endif %}
       </div>
     </div>
-    {% if current_user.is_internal and current_user.role and current_user.role.name in ('PMP','Admin') %}
+    {% if can_edit_task_form %}
     <div class="d-flex gap-2">
       <a href="{{ url_for('main.edit_task', task_id=task.id) }}" class="action-btn btn-edit text-white" style="color: white !important;">
         <i class="fa-solid fa-pen me-2"></i>
         <span class="btn-text">Editar</span>
       </a>
+      {% if can_delete_task %}
       <button type="button" class="action-btn btn-delete" onclick="deleteTask()">
         <i class="fa-solid fa-trash me-2"></i>Eliminar
       </button>
+      {% endif %}
     </div>
     {% elif (task.project.client_id and task.project.client_id == current_user.id) or (current_user in task.project.clients) %}
       {% if task.assigned_client_id == current_user.id %}
@@ -491,13 +493,13 @@
               <td class="fw-bold">{{ entry.hours }}h</td>
               <td><small class="text-muted">{{ entry.description or '—' }}</small></td>
               <td class="text-end">
-                {% if current_user.role and current_user.role.name in ['Participante','PMP','Admin'] %}
+                {% if current_user.role and current_user.role.name in ['Participante','PMP','Admin','Supervisor'] %}
                 <button type="button" class="btn btn-sm btn-outline-secondary me-1" onclick="openTimeEntryModal({{ entry.id }})" title="Ver registro">
                   <i class="fa-solid fa-eye"></i>
                 </button>
                 {% endif %}
 
-                {% if current_user.role and current_user.role.name in ['PMP','Admin'] %}
+                {% if current_user.role and current_user.role.name in ['PMP','Admin','Supervisor'] %}
                 <a href="{{ url_for('main.edit_time_entry', entry_id=entry.id) }}" class="btn btn-sm btn-outline-primary">
                   <i class="fa-solid fa-pen"></i>
                 </a>
@@ -630,7 +632,7 @@
               <i class="fa-solid fa-eye"></i>
             </a>
             {% endif %}
-            {% set is_admin_or_pmp = current_user.is_internal and current_user.role and current_user.role.name in ('PMP','Admin') %}
+            {% set is_admin_or_pmp = current_user.is_internal and current_user.role and current_user.role.name in ('PMP','Admin','Supervisor') %}
             {% if is_admin_or_pmp or att.uploaded_by_id == current_user.id %}
               <button type="button" class="attachment-btn delete" title="Eliminar" 
                       onclick="deleteAttachment('{{ url_for('api.delete_attachment', attachment_id=att.id) }}')">

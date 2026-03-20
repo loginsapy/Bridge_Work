@@ -12,7 +12,7 @@ def seed_database():
         # db.create_all()
         
         # 0. Crear Roles (Necesario para que los usuarios tengan permisos)
-        roles_list = ['Admin', 'PMP', 'Participante', 'Cliente']
+        roles_list = ['Admin', 'PMP', 'Supervisor', 'Participante', 'Cliente']
         roles_map = {}
         for r_name in roles_list:
             role = Role.query.filter_by(name=r_name).first()

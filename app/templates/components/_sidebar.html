@@ -99,7 +99,7 @@
     </a>
 
     <!-- Portfolio -->
-    {% if sys_portfolio_enabled and current_user.is_internal and current_user.role and current_user.role.name in ['PMP', 'Admin'] %}
+    {% if current_user.is_internal and current_user.role and current_user.role.name in ['PMP', 'Admin'] %}
     <a href="{{ url_for('main.portfolio') }}" class="sidebar-link {% if request.endpoint == 'main.portfolio' %}active{% endif %}">
       <i class="fa-solid fa-layer-group"></i>
       <span>Portfolio</span>

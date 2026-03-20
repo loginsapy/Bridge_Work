@@ -850,10 +850,66 @@
             </div>
             <div class="setting-control">
               <div class="form-check form-switch">
-                <input type="checkbox" name="block_parent_until_children_complete" class="form-check-input" 
+                <input type="checkbox" name="block_parent_until_children_complete" class="form-check-input"
                   {% if settings.block_parent_until_children_complete != 'false' %}checked{% endif %}>
               </div>
             </div>
+          </div>
+
+          {# Departments toggle #}
+          <div class="setting-row">
+            <div class="setting-info">
+              <div class="setting-label"><i class="fa-solid fa-sitemap me-1 text-primary"></i>Habilitar Áreas</div>
+              <div class="setting-description">Permite agrupar proyectos y usuarios por Área organizativa. Si el usuario inicia sesión con Entra ID, su área puede sincronizarse automáticamente.</div>
+            </div>
+            <div class="setting-control">
+              <div class="form-check form-switch">
+                <input type="checkbox" name="departments_enabled" class="form-check-input" id="deptEnabledToggle"
+                  {% if settings.departments_enabled %}checked{% endif %}
+                  onchange="toggleDeptSection(this.checked)">
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {# Department Management Section #}
+      <div class="settings-section mt-4" id="deptManagementSection" {% if not settings.departments_enabled %}style="display:none"{% endif %}>
+        <div class="settings-section-header">
+          <i class="fa-solid fa-sitemap"></i>
+          <h5>Gestión de Áreas</h5>
+        </div>
+        <div class="settings-section-body">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <p class="text-muted mb-0">Administra las áreas de tu organización.</p>
+            <button type="button" class="btn btn-sm btn-primary" onclick="showAddDeptModal()">
+              <i class="fa-solid fa-plus me-1"></i>Nueva Área
+            </button>
+          </div>
+          <div id="deptList">
+            {% if departments %}
+            <table class="table table-sm">
+              <thead><tr><th>Nombre</th><th>Descripción</th><th style="width:100px">Acciones</th></tr></thead>
+              <tbody id="deptTableBody">
+              {% for dept in departments %}
+              <tr id="dept-row-{{ dept.id }}">
+                <td><strong>{{ dept.name }}</strong></td>
+                <td class="text-muted">{{ dept.description or '—' }}</td>
+                <td>
+                  <button class="btn btn-xs btn-outline-secondary me-1" onclick="editDept({{ dept.id }}, '{{ dept.name|e }}', '{{ (dept.description or '')|e }}')">
+                    <i class="fa-solid fa-pen"></i>
+                  </button>
+                  <button class="btn btn-xs btn-outline-danger" onclick="deleteDept({{ dept.id }}, '{{ dept.name|e }}')">
+                    <i class="fa-solid fa-trash"></i>
+                  </button>
+                </td>
+              </tr>
+              {% endfor %}
+              </tbody>
+            </table>
+            {% else %}
+            <p class="text-muted text-center py-3" id="deptEmptyMsg">No hay áreas creadas aún.</p>
+            {% endif %}
           </div>
         </div>
       </div>
@@ -2330,13 +2386,115 @@ document.querySelectorAll('input[type="color"]').forEach(picker => {
   });
 });
 
-// Initialize users table on page load if users tab is in URL hash
+// Activate tab from URL hash on page load
 document.addEventListener('DOMContentLoaded', function() {
-  if (window.location.hash === '#users') {
-    const tab = new bootstrap.Tab(document.getElementById('users-tab'));
-    tab.show();
-    setTimeout(initUsersTable, 100);
+  const hash = window.location.hash.replace('#', '');
+  if (hash) {
+    const tabEl = document.getElementById(hash + '-tab');
+    if (tabEl) {
+      new bootstrap.Tab(tabEl).show();
+      if (hash === 'users') setTimeout(initUsersTable, 100);
+    }
   }
 });
+
+// ── Department Management ──
+function toggleDeptSection(enabled) {
+  const section = document.getElementById('deptManagementSection');
+  if (section) section.style.display = enabled ? '' : 'none';
+}
+
+let editingDeptId = null;
+
+function showAddDeptModal() {
+  editingDeptId = null;
+  document.getElementById('deptModalTitle').textContent = 'Nueva Área';
+  document.getElementById('deptNameInput').value = '';
+  document.getElementById('deptDescInput').value = '';
+  new bootstrap.Modal(document.getElementById('deptModal')).show();
+}
+
+function editDept(id, name, desc) {
+  editingDeptId = id;
+  document.getElementById('deptModalTitle').textContent = 'Editar Área';
+  document.getElementById('deptNameInput').value = name;
+  document.getElementById('deptDescInput').value = desc;
+  new bootstrap.Modal(document.getElementById('deptModal')).show();
+}
+
+function saveDept() {
+  const name = document.getElementById('deptNameInput').value.trim();
+  const desc = document.getElementById('deptDescInput').value.trim();
+  if (!name) { alert('El nombre es requerido'); return; }
+
+  const btn = document.getElementById('deptSaveBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status"></span>Guardando…';
+
+  const url = editingDeptId ? `/api/departments/${editingDeptId}` : '/api/departments';
+  const method = editingDeptId ? 'PUT' : 'POST';
+
+  fetch(url, {
+    method,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, description: desc })
+  })
+  .then(r => r.json().then(d => ({ ok: r.ok, data: d })))
+  .then(({ ok, data }) => {
+    if (!ok) {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fa-solid fa-save me-1"></i>Guardar';
+      alert(data.error || 'Error guardando área');
+      return;
+    }
+    bootstrap.Modal.getInstance(document.getElementById('deptModal')).hide();
+    history.pushState(null, '', location.pathname + '#projects');
+    location.reload();
+  })
+  .catch(() => {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fa-solid fa-save me-1"></i>Guardar';
+    alert('Error de conexión al guardar');
+  });
+}
+
+function deleteDept(id, name) {
+  if (!confirm(`¿Eliminar el área "${name}"? Solo se puede si no tiene proyectos o usuarios asignados.`)) return;
+  fetch(`/api/departments/${id}`, { method: 'DELETE' })
+  .then(r => r.json().then(d => ({ ok: r.ok, data: d })))
+  .then(({ ok, data }) => {
+    if (!ok) { alert(data.error || 'No se pudo eliminar'); return; }
+    const row = document.getElementById(`dept-row-${id}`);
+    if (row) row.remove();
+  });
+}
 </script>
+
+{# Department modal #}
+<div class="modal fade" id="deptModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-md">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="deptModalTitle">Área</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Nombre <span class="text-danger">*</span></label>
+          <input type="text" id="deptNameInput" class="form-control" placeholder="Ej: Tecnología, Marketing, Operaciones">
+        </div>
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Descripción</label>
+          <input type="text" id="deptDescInput" class="form-control" placeholder="Descripción breve (opcional)">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancelar</button>
+        <button type="button" class="btn btn-primary" id="deptSaveBtn" onclick="saveDept()">
+          <i class="fa-solid fa-save me-1"></i>Guardar
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
 {% endblock %}
