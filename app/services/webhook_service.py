@@ -14,10 +14,14 @@ Configuración almacenada en SystemSettings key='webhooks' como JSON:
 ]
 
 Eventos disponibles:
-  task.created          — nueva tarea creada
-  task.status_changed   — cambio de estado de tarea
-  task.completed        — tarea marcada como completada
-  task.assigned         — tarea asignada a un usuario
+  task.created           — nueva tarea creada
+  task.status_changed    — cambio de estado de tarea
+  task.completed         — tarea marcada como completada
+  task.assigned          — tarea asignada a un usuario
+  project.created        — nuevo proyecto creado
+  project.status_changed — cambio de estado de proyecto
+  project.completed      — proyecto marcado como completado
+  comment.created        — nuevo comentario en una tarea
 """
 
 import hashlib
@@ -41,6 +45,10 @@ EVENTS = {
     'task.status_changed': 'Cambio de estado de tarea',
     'task.completed': 'Tarea completada',
     'task.assigned': 'Tarea asignada',
+    'project.created': 'Proyecto creado',
+    'project.status_changed': 'Cambio de estado de proyecto',
+    'project.completed': 'Proyecto completado',
+    'comment.created': 'Comentario en tarea',
 }
 
 
@@ -131,16 +139,29 @@ def _build_slack_payload(event: str, data: Dict) -> Dict:
         'task.created': '#0073ea',
         'task.status_changed': '#fd7e14',
         'task.assigned': '#a25ddc',
+        'project.created': '#0073ea',
+        'project.status_changed': '#fd7e14',
+        'project.completed': '#198754',
+        'comment.created': '#6c757d',
     }
     status_labels = {
         'BACKLOG': 'Backlog', 'IN_PROGRESS': 'En Progreso',
         'IN_REVIEW': 'En Revisión', 'COMPLETED': 'Completado',
+        'PLANNING': 'Planificación', 'ACTIVE': 'Activo',
+        'BLOCKED': 'Bloqueado',
     }
     color = color_map.get(event, '#6c757d')
     title = EVENTS.get(event, event)
 
+    # Determine the main entity name for the attachment title
+    entity_name = (
+        data.get('task_title')
+        or data.get('project_name')
+        or ''
+    )
+
     fields = []
-    if data.get('project_name'):
+    if data.get('project_name') and event not in ('project.created', 'project.status_changed', 'project.completed'):
         fields.append({'title': 'Proyecto', 'value': data['project_name'], 'short': True})
     if data.get('user_name'):
         fields.append({'title': 'Usuario', 'value': data['user_name'], 'short': True})
@@ -151,11 +172,15 @@ def _build_slack_payload(event: str, data: Dict) -> Dict:
             fields.append({'title': 'Estado', 'value': f'{old_label} → {label}', 'short': True})
         else:
             fields.append({'title': 'Estado', 'value': label, 'short': True})
+    if data.get('comment_snippet'):
+        fields.append({'title': 'Comentario', 'value': data['comment_snippet'], 'short': False})
+    if data.get('department_name'):
+        fields.append({'title': 'Área', 'value': data['department_name'], 'short': True})
 
     return {
         'attachments': [{
             'color': color,
-            'title': f'{title}: {data.get("task_title", "")}',
+            'title': f'{title}: {entity_name}',
             'fields': fields,
             'footer': 'BridgeWork',
             'ts': int(datetime.now().timestamp()),
@@ -165,23 +190,40 @@ def _build_slack_payload(event: str, data: Dict) -> Dict:
 
 def _build_teams_payload(event: str, data: Dict) -> Dict:
     """Formatea el payload en formato Microsoft Teams Adaptive Card."""
+    status_labels = {
+        'BACKLOG': 'Backlog', 'IN_PROGRESS': 'En Progreso',
+        'IN_REVIEW': 'En Revisión', 'COMPLETED': 'Completado',
+        'PLANNING': 'Planificación', 'ACTIVE': 'Activo',
+        'BLOCKED': 'Bloqueado',
+    }
     title = EVENTS.get(event, event)
+    entity_name = data.get('task_title') or data.get('project_name') or ''
+
     facts = []
-    if data.get('project_name'):
+    if data.get('project_name') and event not in ('project.created', 'project.status_changed', 'project.completed'):
         facts.append({'name': 'Proyecto', 'value': data['project_name']})
     if data.get('user_name'):
         facts.append({'name': 'Usuario', 'value': data['user_name']})
     if data.get('new_status'):
-        facts.append({'name': 'Estado', 'value': data['new_status']})
+        label = status_labels.get(data['new_status'], data['new_status'])
+        if data.get('old_status'):
+            old_label = status_labels.get(data['old_status'], data['old_status'])
+            facts.append({'name': 'Estado', 'value': f'{old_label} → {label}'})
+        else:
+            facts.append({'name': 'Estado', 'value': label})
+    if data.get('comment_snippet'):
+        facts.append({'name': 'Comentario', 'value': data['comment_snippet']})
+    if data.get('department_name'):
+        facts.append({'name': 'Área', 'value': data['department_name']})
 
     return {
         '@type': 'MessageCard',
         '@context': 'http://schema.org/extensions',
         'themeColor': '0073ea',
-        'summary': f'{title}: {data.get("task_title", "")}',
+        'summary': f'{title}: {entity_name}',
         'sections': [{
             'activityTitle': f'**{title}**',
-            'activitySubtitle': data.get('task_title', ''),
+            'activitySubtitle': entity_name,
             'facts': facts,
         }]
     }

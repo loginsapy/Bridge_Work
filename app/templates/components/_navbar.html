@@ -35,6 +35,13 @@
         </div>
         <!-- Search Results Dropdown -->
         <div id="searchResults" class="search-results-dropdown shadow-lg">
+          <div class="search-filters d-none" id="searchFilters">
+            <button class="search-filter-btn active" data-type="">Todos</button>
+            <button class="search-filter-btn" data-type="tasks"><i class="fa-solid fa-check-square me-1"></i>Tareas</button>
+            <button class="search-filter-btn" data-type="projects"><i class="fa-solid fa-folder me-1"></i>Proyectos</button>
+            <button class="search-filter-btn" data-type="clients"><i class="fa-solid fa-building me-1"></i>Clientes</button>
+            <button class="search-filter-btn" data-type="users"><i class="fa-solid fa-user me-1"></i>Usuarios</button>
+          </div>
           <div class="search-results-content"></div>
         </div>
       </div>
@@ -561,8 +568,36 @@ function updateNotificationBadge(callback) {
   }
 }
 
+.search-filters {
+  display: flex;
+  gap: 6px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border-light, #e6e9ef);
+  flex-wrap: wrap;
+}
+.search-filter-btn {
+  padding: 3px 10px;
+  border: 1px solid #dee2e6;
+  border-radius: 999px;
+  background: #fff;
+  font-size: 0.75rem;
+  cursor: pointer;
+  color: #495057;
+  transition: all 0.15s;
+  line-height: 1.4;
+}
+.search-filter-btn:hover {
+  border-color: var(--primary, #0073ea);
+  color: var(--primary, #0073ea);
+}
+.search-filter-btn.active {
+  background: var(--primary, #0073ea);
+  border-color: var(--primary, #0073ea);
+  color: #fff;
+}
+
 .search-results-content {
-  max-height: 480px;
+  max-height: 440px;
   overflow-y: auto;
 }
 
@@ -828,8 +863,21 @@ function updateNotificationBadge(callback) {
   let searchTimeout = null;
   let currentResults = [];
   let selectedIndex = -1;
+  let currentFilter = '';
+  const searchFilters = document.getElementById('searchFilters');
 
   if (!searchInput || !searchResults) return;
+
+  // Filter pill click handlers
+  searchFilters?.querySelectorAll('.search-filter-btn').forEach(btn => {
+    btn.addEventListener('click', function() {
+      searchFilters.querySelectorAll('.search-filter-btn').forEach(b => b.classList.remove('active'));
+      this.classList.add('active');
+      currentFilter = this.dataset.type;
+      const q = searchInput.value.trim();
+      if (q.length >= 2) performSearch(q);
+    });
+  });
 
   // Determine whether the current user is allowed to search (PMP/Admin/Participante) - controlled via data attribute on container
 
@@ -868,7 +916,8 @@ function updateNotificationBadge(callback) {
     const spinner = searchContainer.querySelector('.search-spinner');
     
     try {
-      const response = await fetch(`{{ url_for("main.global_search") }}?q=${encodeURIComponent(query)}`);      if (response.status === 403) {
+      const url = `{{ url_for("main.global_search") }}?q=${encodeURIComponent(query)}${currentFilter ? '&type=' + currentFilter : ''}`;
+      const response = await fetch(url);      if (response.status === 403) {
         const err = await response.json();
         spinner?.classList.add('d-none');
         searchResults.querySelector('.search-results-content').innerHTML = `
@@ -1089,12 +1138,17 @@ function updateNotificationBadge(callback) {
 
   function showResults() {
     searchResults.classList.add('active');
+    searchFilters?.classList.remove('d-none');
   }
 
   function hideResults() {
     searchResults.classList.remove('active');
+    searchFilters?.classList.add('d-none');
     currentResults = [];
     selectedIndex = -1;
+    currentFilter = '';
+    searchFilters?.querySelectorAll('.search-filter-btn').forEach(b => b.classList.remove('active'));
+    searchFilters?.querySelector('[data-type=""]')?.classList.add('active');
   }
 
   function highlightMatch(text, query) {

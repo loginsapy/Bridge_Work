@@ -426,6 +426,22 @@ def edit_project(project_id):
             
             db.session.commit()
             flash(f"Proyecto '{project.name}' actualizado.", 'success')
+
+            # Webhook: project.status_changed / project.completed
+            try:
+                from app.services import webhook_service
+                if 'status' in changes:
+                    event = 'project.completed' if project.status == 'COMPLETED' else 'project.status_changed'
+                    webhook_service.dispatch(event, {
+                        'project_id': project.id,
+                        'project_name': project.name,
+                        'user_name': current_user.name or current_user.email,
+                        'old_status': changes['status']['old'],
+                        'new_status': project.status,
+                    })
+            except Exception:
+                current_app.logger.exception('Failed to dispatch project status webhook')
+
             return redirect(url_for('main.project_detail', project_id=project.id))
         except Exception as e:
             db.session.rollback()
@@ -2797,10 +2813,23 @@ def create_project():
         
         # Asegurar que las notificaciones generadas se reflejen en la BD inmediatamente
         db.session.commit()
+
+        # Webhook: project.created
+        try:
+            from app.services import webhook_service
+            webhook_service.dispatch('project.created', {
+                'project_id': new_project.id,
+                'project_name': new_project.name,
+                'user_name': current_user.name or current_user.email,
+                'new_status': new_project.status,
+                'department_name': new_project.department.name if new_project.department_id and new_project.department else None,
+            })
+        except Exception:
+            current_app.logger.exception('Failed to dispatch project.created webhook')
     except Exception as e:
         db.session.rollback()
         flash(f'Error al crear proyecto: {str(e)}', 'danger')
-    
+
     return redirect(url_for('main.projects'))
 
 @main_bp.route('/calendar')
@@ -4773,6 +4802,21 @@ def task_comments(task_id):
                     current_app.logger.exception(f'Failed to notify mentioned user {uid}')
         except Exception:
             current_app.logger.exception('Failed to dispatch comment notifications')
+
+        # Webhook: comment.created
+        try:
+            from app.services import webhook_service
+            snippet = (comment.body[:200] + '...') if len(comment.body) > 200 else comment.body
+            webhook_service.dispatch('comment.created', {
+                'task_id': task.id,
+                'task_title': task.title,
+                'project_name': task.project.name if task.project else None,
+                'user_name': current_user.name or current_user.email,
+                'comment_snippet': snippet,
+                'is_reply': bool(parent_id),
+            })
+        except Exception:
+            current_app.logger.exception('Failed to dispatch comment.created webhook')
 
         return jsonify({
             'id': comment.id,

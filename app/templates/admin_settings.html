@@ -1653,6 +1653,7 @@
           <div class="mb-3">
             <label class="form-label">Eventos <span class="text-danger">*</span></label>
             <div id="webhookEvents" style="display:flex;flex-direction:column;gap:6px;padding:8px;background:#f8f9fa;border-radius:6px">
+              <small class="text-muted fw-semibold" style="font-size:0.72rem;letter-spacing:.04em;">TAREAS</small>
               <label class="d-flex align-items-center gap-2" style="cursor:pointer">
                 <input type="checkbox" value="task.created"> <span>Tarea creada</span>
               </label>
@@ -1660,13 +1661,26 @@
                 <input type="checkbox" value="task.updated"> <span>Tarea editada</span>
               </label>
               <label class="d-flex align-items-center gap-2" style="cursor:pointer">
-                <input type="checkbox" value="task.status_changed"> <span>Cambio de estado</span>
+                <input type="checkbox" value="task.status_changed"> <span>Cambio de estado de tarea</span>
               </label>
               <label class="d-flex align-items-center gap-2" style="cursor:pointer">
                 <input type="checkbox" value="task.completed"> <span>Tarea completada</span>
               </label>
               <label class="d-flex align-items-center gap-2" style="cursor:pointer">
                 <input type="checkbox" value="task.assigned"> <span>Tarea asignada</span>
+              </label>
+              <label class="d-flex align-items-center gap-2" style="cursor:pointer">
+                <input type="checkbox" value="comment.created"> <span>Comentario en tarea</span>
+              </label>
+              <small class="text-muted fw-semibold mt-1" style="font-size:0.72rem;letter-spacing:.04em;">PROYECTOS</small>
+              <label class="d-flex align-items-center gap-2" style="cursor:pointer">
+                <input type="checkbox" value="project.created"> <span>Proyecto creado</span>
+              </label>
+              <label class="d-flex align-items-center gap-2" style="cursor:pointer">
+                <input type="checkbox" value="project.status_changed"> <span>Cambio de estado de proyecto</span>
+              </label>
+              <label class="d-flex align-items-center gap-2" style="cursor:pointer">
+                <input type="checkbox" value="project.completed"> <span>Proyecto completado</span>
               </label>
             </div>
           </div>
