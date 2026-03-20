@@ -1669,6 +1669,240 @@ def deactivate_license():
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# DATABASE HEALTH
+# ─────────────────────────────────────────────────────────────────────────────
+
+@api_bp.route('/admin/db-health', methods=['GET'])
+@login_required
+def admin_db_health():
+    """Read-only PostgreSQL health report. Admin only."""
+    if not current_user.is_authenticated:
+        abort(401)
+    if not current_user.role or current_user.role.name != 'Admin':
+        abort(403)
+
+    from sqlalchemy import text
+
+    def q(sql, **kw):
+        return db.session.execute(text(sql), kw).mappings().all()
+
+    try:
+        # ── Overall database stats ─────────────────────────────────────────────
+        overview = q("""
+            SELECT
+                pg_size_pretty(pg_database_size(current_database()))   AS db_size,
+                pg_database_size(current_database())                   AS db_size_bytes,
+                (SELECT count(*) FROM pg_stat_activity
+                 WHERE datname = current_database())                   AS total_connections,
+                (SELECT count(*) FROM pg_stat_activity
+                 WHERE datname = current_database() AND state = 'active') AS active_connections,
+                (SELECT count(*) FROM pg_stat_activity
+                 WHERE datname = current_database() AND state = 'idle')   AS idle_connections,
+                current_database()                                     AS db_name,
+                version()                                              AS pg_version
+        """)[0]
+
+        # ── Buffer cache hit ratio ─────────────────────────────────────────────
+        cache = q("""
+            SELECT
+                ROUND(
+                    sum(heap_blks_hit) * 100.0 /
+                    NULLIF(sum(heap_blks_hit) + sum(heap_blks_read), 0)
+                , 2) AS table_cache_hit_pct,
+                ROUND(
+                    sum(idx_blks_hit) * 100.0 /
+                    NULLIF(sum(idx_blks_hit) + sum(idx_blks_read), 0)
+                , 2) AS index_cache_hit_pct
+            FROM pg_statio_user_tables
+        """)[0]
+
+        # ── Per-table health ───────────────────────────────────────────────────
+        tables = q("""
+            SELECT
+                relname                                                              AS table_name,
+                n_live_tup                                                           AS live_rows,
+                n_dead_tup                                                           AS dead_rows,
+                ROUND(n_dead_tup * 100.0 /
+                    NULLIF(n_live_tup + n_dead_tup, 0), 1)                          AS dead_pct,
+                pg_size_pretty(pg_total_relation_size(schemaname||'.'||relname))     AS total_size,
+                pg_size_pretty(pg_relation_size(schemaname||'.'||relname))           AS table_size,
+                pg_size_pretty(pg_total_relation_size(schemaname||'.'||relname)
+                               - pg_relation_size(schemaname||'.'||relname))         AS index_size,
+                pg_total_relation_size(schemaname||'.'||relname)                     AS total_size_bytes,
+                to_char(last_vacuum,      'DD/MM/YYYY HH24:MI')                     AS last_vacuum,
+                to_char(last_autovacuum,  'DD/MM/YYYY HH24:MI')                     AS last_autovacuum,
+                to_char(last_analyze,     'DD/MM/YYYY HH24:MI')                     AS last_analyze,
+                to_char(last_autoanalyze, 'DD/MM/YYYY HH24:MI')                     AS last_autoanalyze,
+                n_mod_since_analyze                                                  AS rows_since_analyze
+            FROM pg_stat_user_tables
+            ORDER BY pg_total_relation_size(schemaname||'.'||relname) DESC
+        """)
+
+        # ── Index usage ────────────────────────────────────────────────────────
+        indexes = q("""
+            SELECT
+                i.relname                                               AS table_name,
+                ix.indexrelname                                         AS index_name,
+                ix.idx_scan                                             AS times_used,
+                pg_size_pretty(pg_relation_size(ix.indexrelid))         AS index_size,
+                pg_relation_size(ix.indexrelid)                         AS index_size_bytes,
+                indisunique                                             AS is_unique,
+                indisprimary                                            AS is_primary
+            FROM pg_stat_user_indexes ix
+            JOIN pg_class i ON i.oid = ix.relid
+            JOIN pg_index pi ON pi.indexrelid = ix.indexrelid
+            ORDER BY ix.idx_scan ASC, pg_relation_size(ix.indexrelid) DESC
+        """)
+
+        # ── Longest running queries (if any active) ────────────────────────────
+        slow_queries = q("""
+            SELECT
+                pid,
+                state,
+                ROUND(EXTRACT(EPOCH FROM (now() - query_start)))::int AS duration_secs,
+                LEFT(query, 120)                                       AS query_snippet
+            FROM pg_stat_activity
+            WHERE datname = current_database()
+              AND state != 'idle'
+              AND query NOT ILIKE '%pg_stat_activity%'
+              AND query_start IS NOT NULL
+            ORDER BY query_start ASC
+            LIMIT 10
+        """)
+
+        # ── Build recommendations ──────────────────────────────────────────────
+        recommendations = []
+
+        table_cache = float(cache['table_cache_hit_pct'] or 0)
+        index_cache = float(cache['index_cache_hit_pct'] or 0)
+
+        if table_cache < 95:
+            recommendations.append({
+                'level': 'warning',
+                'icon': 'gauge-high',
+                'text': f'Cache hit de tablas bajo ({table_cache}%). Considera aumentar shared_buffers en postgresql.conf.',
+            })
+        if index_cache < 95:
+            recommendations.append({
+                'level': 'warning',
+                'icon': 'gauge-high',
+                'text': f'Cache hit de índices bajo ({index_cache}%). Aumentar shared_buffers o effective_cache_size puede ayudar.',
+            })
+
+        bloated = [t for t in tables if (t['dead_pct'] or 0) > 20]
+        for t in bloated:
+            recommendations.append({
+                'level': 'warning',
+                'icon': 'trash-can',
+                'text': f'Tabla "{t["table_name"]}" tiene {t["dead_pct"]}% de filas muertas ({t["dead_rows"]:,}). El autovacuum podría necesitar ajuste.',
+            })
+
+        stale = [t for t in tables if (t['rows_since_analyze'] or 0) > 10000
+                 and t['last_analyze'] is None and t['last_autoanalyze'] is None]
+        for t in stale:
+            recommendations.append({
+                'level': 'info',
+                'icon': 'chart-bar',
+                'text': f'Tabla "{t["table_name"]}" tiene {t["rows_since_analyze"]:,} filas sin analizar. Las estadísticas del query planner pueden estar desactualizadas.',
+            })
+
+        unused_noncritical = [
+            i for i in indexes
+            if i['times_used'] == 0 and not i['is_primary'] and not i['is_unique']
+            and i['index_size_bytes'] > 0
+        ]
+        if unused_noncritical:
+            names = ', '.join(f'"{i["index_name"]}"' for i in unused_noncritical[:5])
+            recommendations.append({
+                'level': 'info',
+                'icon': 'magnifying-glass-chart',
+                'text': f'{len(unused_noncritical)} índice(s) sin uso detectado(s): {names}. Revisarlos podría liberar espacio.',
+            })
+
+        if not recommendations:
+            recommendations.append({
+                'level': 'success',
+                'icon': 'circle-check',
+                'text': 'La base de datos está en buen estado. No se detectaron problemas.',
+            })
+
+        return jsonify({
+            'overview': dict(overview),
+            'cache': dict(cache),
+            'tables': [dict(t) for t in tables],
+            'indexes': [dict(i) for i in indexes],
+            'slow_queries': [dict(q) for q in slow_queries],
+            'recommendations': recommendations,
+        })
+
+    except Exception as e:
+        current_app.logger.exception('db-health query failed')
+        return jsonify({'error': str(e)}), 500
+
+
+@api_bp.route('/admin/db-maintain', methods=['POST'])
+@login_required
+def admin_db_maintain():
+    """Safe, non-destructive PostgreSQL maintenance. Admin only.
+
+    Body JSON:
+      { "action": "vacuum_analyze" | "analyze" | "reindex",
+        "target": "<table_name>" | "<index_name>" | null (= all tables) }
+    """
+    if not current_user.is_authenticated:
+        abort(401)
+    if not current_user.role or current_user.role.name != 'Admin':
+        abort(403)
+
+    from sqlalchemy import text
+    import re, time
+
+    body   = request.get_json(silent=True) or {}
+    action = body.get('action', '')
+    target = (body.get('target') or '').strip()
+
+    # Whitelist: only alphanumeric + underscore to prevent SQL injection
+    if target and not re.fullmatch(r'[a-zA-Z_][a-zA-Z0-9_]*', target):
+        return jsonify({'error': 'Nombre de tabla/índice inválido'}), 400
+
+    allowed_actions = {'vacuum_analyze', 'analyze', 'reindex'}
+    if action not in allowed_actions:
+        return jsonify({'error': f'Acción no reconocida: {action}'}), 400
+
+    try:
+        start = time.time()
+
+        # These statements must run outside a transaction block
+        with db.engine.connect() as conn:
+            conn.execution_options(isolation_level='AUTOCOMMIT')
+
+            if action == 'vacuum_analyze':
+                sql = f'VACUUM ANALYZE "{target}"' if target else 'VACUUM ANALYZE'
+                conn.execute(text(sql))
+                msg = f'VACUUM ANALYZE completado{"en " + target if target else " en todas las tablas"}'
+
+            elif action == 'analyze':
+                sql = f'ANALYZE "{target}"' if target else 'ANALYZE'
+                conn.execute(text(sql))
+                msg = f'ANALYZE completado{"en " + target if target else " en todas las tablas"}'
+
+            elif action == 'reindex':
+                if not target:
+                    return jsonify({'error': 'REINDEX requiere especificar un índice'}), 400
+                conn.execute(text(f'REINDEX INDEX CONCURRENTLY "{target}"'))
+                msg = f'REINDEX CONCURRENTLY completado en índice "{target}"'
+
+        elapsed = round(time.time() - start, 2)
+        current_app.logger.info('DB maintenance [%s] target=%s by %s — %.2fs',
+                                action, target or 'ALL', current_user.email, elapsed)
+        return jsonify({'success': True, 'message': msg, 'elapsed_secs': elapsed})
+
+    except Exception as e:
+        current_app.logger.exception('DB maintenance failed: action=%s target=%s', action, target)
+        return jsonify({'error': str(e)}), 500
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # BACKUP & RESTORE  (pg_dump / psql — Linux servers only)
 # ─────────────────────────────────────────────────────────────────────────────
 
