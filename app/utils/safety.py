@@ -2,21 +2,13 @@ import os
 
 
 def is_safe_db_uri(uri: str) -> bool:
-    """Return True if the URI looks like a local/test DB we can safely drop.
+    """Return True if the URI points to a local/test DB (localhost or 127.0.0.1).
 
-    Safe URIs:
-    - sqlite (in-memory or file)
-    - postgres/mysql on localhost or 127.0.0.1
-
-    Otherwise return False.
+    Remote URIs (production PostgreSQL) return False.
     """
     if not uri:
         return False
     u = uri.lower()
-    # sqlite is always local
-    if u.startswith('sqlite'):
-        return True
-    # localhost or 127.0.0.1 is acceptable
     if 'localhost' in u or '127.0.0.1' in u:
         return True
     return False

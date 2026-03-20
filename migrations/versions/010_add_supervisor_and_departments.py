@@ -8,24 +8,15 @@ Create Date: 2026-03-18
 revision = '010_add_supervisor_and_departments'
 down_revision = '009_add_webhook_deliveries'
 
-import sqlalchemy as sa
 from sqlalchemy import text
 
 
 def upgrade(db):
     conn = db.engine.connect()
-    dialect = db.engine.dialect.name
 
     # --- Create departments table ---
     try:
         conn.execute(text("""
-            CREATE TABLE IF NOT EXISTS departments (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name VARCHAR(128) NOT NULL UNIQUE,
-                description TEXT,
-                created_at DATETIME
-            )
-        """) if dialect == 'sqlite' else text("""
             CREATE TABLE IF NOT EXISTS departments (
                 id SERIAL PRIMARY KEY,
                 name VARCHAR(128) NOT NULL UNIQUE,
@@ -74,19 +65,11 @@ def downgrade(db):
     conn = db.engine.connect()
     try:
         conn.execute(text("DELETE FROM roles WHERE name = 'Supervisor'"))
+        conn.execute(text("ALTER TABLE projects DROP COLUMN IF EXISTS department_id"))
+        conn.execute(text("ALTER TABLE users DROP COLUMN IF EXISTS department_id"))
+        conn.execute(text("DROP TABLE IF EXISTS departments"))
         conn.commit()
-    except Exception:
+    except Exception as e:
         conn.rollback()
-
-    # Note: SQLite doesn't support DROP COLUMN; skip for SQLite
-    dialect = db.engine.dialect.name
-    if dialect != 'sqlite':
-        try:
-            conn.execute(text("ALTER TABLE projects DROP COLUMN department_id"))
-            conn.execute(text("ALTER TABLE users DROP COLUMN department_id"))
-            conn.execute(text("DROP TABLE IF EXISTS departments"))
-            conn.commit()
-        except Exception as e:
-            conn.rollback()
-            print(f"Downgrade error: {e}")
+        print(f"Downgrade error: {e}")
     conn.close()

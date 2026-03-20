@@ -396,16 +396,12 @@ def create_app(config_object="config.DevConfig"):
         
         # Compute DB name for display in UI footer/sidebar
         db_uri = app.config.get('SQLALCHEMY_DATABASE_URI', '')
-        db_name = ''
-        if db_uri.startswith('sqlite'):
-            db_name = db_uri.split('///')[-1] or db_uri
-        else:
-            try:
-                from urllib.parse import urlparse
-                parsed = urlparse(db_uri)
-                db_name = parsed.path.lstrip('/') or parsed.netloc
-            except Exception:
-                db_name = db_uri
+        try:
+            from urllib.parse import urlparse
+            parsed = urlparse(db_uri)
+            db_name = parsed.path.lstrip('/') or parsed.netloc
+        except Exception:
+            db_name = db_uri
         context['sys_db_name'] = db_name
 
         # Ensure we return the context dict for Flask to update the template context

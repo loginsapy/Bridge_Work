@@ -25,7 +25,6 @@ class Department(db.Model):
 
 class User(UserMixin, db.Model):
     __tablename__ = "users"
-    __table_args__ = {'sqlite_autoincrement': True}
 
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     email = db.Column(db.String(255), unique=True, nullable=False, index=True)
@@ -594,7 +593,6 @@ class AlertLog(db.Model):
 
 class TaskAttachment(db.Model):
     __tablename__ = 'task_attachments'
-    __table_args__ = {'sqlite_autoincrement': True}
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     task_id = db.Column(db.Integer, db.ForeignKey('tasks.id'), nullable=False)
     filename = db.Column(db.String(255), nullable=False)  # Original filename
@@ -610,7 +608,6 @@ class TaskAttachment(db.Model):
 
 class AuditLog(db.Model):
     __tablename__ = 'audit_logs'
-    __table_args__ = {'sqlite_autoincrement': True}
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     entity_type = db.Column(db.String(64), nullable=False)  # 'Project', 'Task', etc.
     entity_id = db.Column(db.Integer, nullable=False)

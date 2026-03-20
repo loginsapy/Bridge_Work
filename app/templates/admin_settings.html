@@ -307,6 +307,11 @@
         <i class="fa-solid fa-plug"></i>Webhooks
       </button>
     </li>
+    <li class="nav-item">
+      <button class="nav-link" id="backup-tab" data-bs-toggle="tab" data-bs-target="#backup" type="button">
+        <i class="fa-solid fa-database"></i>Respaldo
+      </button>
+    </li>
   </ul>
 </nav>
 
@@ -1611,6 +1616,82 @@
     </div>
   </div>
 
+  <!-- ==================== BACKUP TAB ==================== -->
+  <div class="tab-pane fade" id="backup" role="tabpanel">
+    <div class="settings-section">
+      <div class="settings-section-header">
+        <i class="fa-solid fa-database"></i>
+        <h5>Respaldo y Restauración</h5>
+        <span class="text-muted ms-2" style="font-size:13px;font-weight:400">Exporta e importa todos los datos del sistema en formato JSON</span>
+      </div>
+      <div class="settings-section-body">
+
+        <!-- Download Backup -->
+        <div class="card mb-4 border-0" style="background:#f8f9fa">
+          <div class="card-body">
+            <div class="d-flex align-items-start gap-3">
+              <div class="rounded-circle d-flex align-items-center justify-content-center flex-shrink-0"
+                   style="width:44px;height:44px;background:var(--app-primary-light,#e7f0ff)">
+                <i class="fa-solid fa-cloud-arrow-down" style="color:var(--app-primary,#0073ea);font-size:18px"></i>
+              </div>
+              <div class="flex-grow-1">
+                <h6 class="fw-semibold mb-1">Crear Respaldo</h6>
+                <p class="text-muted mb-3" style="font-size:13px">
+                  Descarga un archivo <code>.json</code> con todos los proyectos, tareas, usuarios, configuración y demás datos del sistema.
+                </p>
+                <div class="d-flex flex-wrap gap-2 mb-3">
+                  <span class="badge bg-secondary"><i class="fa-solid fa-users me-1"></i>Usuarios</span>
+                  <span class="badge bg-secondary"><i class="fa-solid fa-diagram-project me-1"></i>Proyectos</span>
+                  <span class="badge bg-secondary"><i class="fa-solid fa-list-check me-1"></i>Tareas</span>
+                  <span class="badge bg-secondary"><i class="fa-solid fa-clock me-1"></i>Tiempos</span>
+                  <span class="badge bg-secondary"><i class="fa-solid fa-comments me-1"></i>Comentarios</span>
+                  <span class="badge bg-secondary"><i class="fa-solid fa-sliders me-1"></i>Configuración</span>
+                  <span class="badge bg-secondary"><i class="fa-solid fa-sitemap me-1"></i>Áreas</span>
+                  <span class="badge bg-secondary"><i class="fa-solid fa-shield-halved me-1"></i>Riesgos</span>
+                </div>
+                <button class="btn btn-primary" id="backupDownloadBtn" onclick="downloadBackup(this)">
+                  <i class="fa-solid fa-cloud-arrow-down me-2"></i>Descargar Respaldo
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Restore -->
+        <div class="card" style="border:1.5px solid #fd7e14">
+          <div class="card-header border-bottom" style="background:#fff8f0;border-color:#fd7e14">
+            <div class="d-flex align-items-center gap-2">
+              <i class="fa-solid fa-triangle-exclamation text-warning"></i>
+              <h6 class="mb-0 fw-semibold">Restaurar desde Respaldo</h6>
+            </div>
+          </div>
+          <div class="card-body">
+            <p class="text-muted mb-3" style="font-size:13px">
+              <strong>Esta operación es irreversible.</strong> Todos los datos actuales serán reemplazados por los del archivo de respaldo seleccionado.
+              Se recomienda descargar un respaldo antes de proceder.
+            </p>
+            <div class="mb-3">
+              <label class="form-label fw-semibold">Seleccionar archivo de respaldo <span class="text-danger">*</span></label>
+              <input type="file" class="form-control" id="restoreFileInput" accept=".sql" onchange="previewBackup(this)">
+            </div>
+            <div id="restorePreview" class="d-none">
+              <div class="alert border-0 mb-3" id="restorePreviewContent" style="background:#f0f4ff;color:#222"></div>
+              <div class="mb-3">
+                <label class="form-label fw-semibold">Para confirmar escribe <code>RESTAURAR</code>:</label>
+                <input type="text" class="form-control" id="restoreConfirmInput" placeholder="RESTAURAR"
+                       oninput="toggleRestoreBtn(this)" autocomplete="off" style="max-width:260px">
+              </div>
+              <button class="btn btn-warning fw-semibold" id="restoreBtn" disabled onclick="doRestore()">
+                <i class="fa-solid fa-rotate-left me-2"></i>Restaurar Sistema
+              </button>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
   <!-- Webhook Delivery History Modal -->
   <div class="modal fade" id="webhookHistoryModal" tabindex="-1">
     <div class="modal-dialog modal-lg">
@@ -1874,6 +1955,83 @@
   // Load on tab click
   document.getElementById('webhooks-tab').addEventListener('shown.bs.tab', loadWebhooks);
   if (document.querySelector('#webhooks-tab.active')) loadWebhooks();
+  </script>
+
+  <script>
+  // ===== Backup & Restore (pg_dump / psql) =====
+  let _restoreFile = null;
+
+  function downloadBackup(btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Generando...';
+    // Trigger download — browser will handle the file save dialog
+    const link = document.createElement('a');
+    link.href = '/api/admin/backup';
+    link.click();
+    // Re-enable after a few seconds (download starts immediately server-side)
+    setTimeout(() => {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fa-solid fa-cloud-arrow-down me-2"></i>Descargar Respaldo';
+    }, 4000);
+  }
+
+  function previewBackup(input) {
+    const file = input.files[0];
+    if (!file) return;
+
+    if (!file.name.endsWith('.sql')) {
+      showToast('Selecciona un archivo .sql generado por BridgeWork', 'warning');
+      input.value = '';
+      return;
+    }
+
+    _restoreFile = file;
+    const sizeMB = (file.size / 1024 / 1024).toFixed(2);
+    const lines = [
+      `<strong><i class="fa-solid fa-file-code me-2 text-primary"></i>${file.name}</strong>`,
+      `<hr class="my-2">`,
+      `<div class="d-flex gap-4">`,
+      `<span><i class="fa-solid fa-weight-hanging me-1 text-secondary"></i>${sizeMB} MB</span>`,
+      `<span class="text-warning fw-semibold"><i class="fa-solid fa-triangle-exclamation me-1"></i>Esto sobrescribirá todos los datos actuales</span>`,
+      `</div>`,
+    ].join('');
+    document.getElementById('restorePreviewContent').innerHTML = lines;
+    document.getElementById('restorePreview').classList.remove('d-none');
+    document.getElementById('restoreConfirmInput').value = '';
+    document.getElementById('restoreBtn').disabled = true;
+  }
+
+  function toggleRestoreBtn(input) {
+    document.getElementById('restoreBtn').disabled = input.value.trim() !== 'RESTAURAR';
+  }
+
+  function doRestore() {
+    if (!_restoreFile) return;
+    const btn = document.getElementById('restoreBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Restaurando... (puede tardar varios minutos)';
+
+    const fd = new FormData();
+    fd.append('backup_file', _restoreFile);
+
+    fetch('/api/admin/restore', { method: 'POST', body: fd })
+      .then(r => r.json())
+      .then(data => {
+        if (data.success) {
+          showToast('Base de datos restaurada exitosamente. Recargando...', 'success');
+          setTimeout(() => location.reload(), 3000);
+        } else {
+          showToast('Error al restaurar: ' + (data.error || 'Error desconocido'), 'danger');
+          btn.disabled = false;
+          btn.innerHTML = '<i class="fa-solid fa-rotate-left me-2"></i>Restaurar Sistema';
+        }
+      })
+      .catch(() => {
+        showToast('Error de conexión al intentar restaurar', 'danger');
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-rotate-left me-2"></i>Restaurar Sistema';
+      });
+  }
   </script>
 
   <script>

@@ -1667,3 +1667,126 @@ def deactivate_license():
         return jsonify(result), 400
     return jsonify(result), 200
 
+
+# ─────────────────────────────────────────────────────────────────────────────
+# BACKUP & RESTORE  (pg_dump / psql — Linux servers only)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _admin_only():
+    if not current_user.is_authenticated:
+        abort(401)
+    if not current_user.role or current_user.role.name != 'Admin':
+        abort(403, description='Solo administradores pueden realizar esta operación')
+
+
+def _parse_db_url(db_url):
+    """Return (env, pg_conn_args, dbname) parsed from DATABASE_URL.
+
+    Password is passed via PGPASSWORD env var so it never appears in
+    the process argument list (visible via ps/top).
+    """
+    from urllib.parse import urlparse
+    p = urlparse(db_url)
+    env = os.environ.copy()
+    if p.password:
+        env['PGPASSWORD'] = p.password
+    args = []
+    if p.hostname:
+        args += ['-h', p.hostname]
+    if p.port:
+        args += ['-p', str(p.port)]
+    if p.username:
+        args += ['-U', p.username]
+    dbname = p.path.lstrip('/')
+    return env, args, dbname
+
+
+@api_bp.route('/admin/backup', methods=['GET'])
+@login_required
+def admin_backup():
+    """Stream a pg_dump SQL backup. Admin only."""
+    _admin_only()
+    import subprocess, shutil
+    from io import BytesIO
+    from flask import send_file
+
+    if not shutil.which('pg_dump'):
+        return jsonify({'error': 'pg_dump no está disponible en el servidor'}), 500
+
+    db_url = current_app.config.get('SQLALCHEMY_DATABASE_URI', '')
+    env, conn_args, dbname = _parse_db_url(db_url)
+
+    cmd = [
+        'pg_dump',
+        '--format=plain',
+        '--no-owner',
+        '--no-acl',
+        '--clean',
+        '--if-exists',
+    ] + conn_args + [dbname]
+
+    try:
+        result = subprocess.run(cmd, capture_output=True, env=env, timeout=300)
+    except subprocess.TimeoutExpired:
+        return jsonify({'error': 'pg_dump tardó demasiado (timeout 5 min)'}), 500
+    except Exception as e:
+        current_app.logger.exception('pg_dump subprocess error')
+        return jsonify({'error': str(e)}), 500
+
+    if result.returncode != 0:
+        err = result.stderr.decode('utf-8', errors='replace')
+        current_app.logger.error('pg_dump failed (rc=%s): %s', result.returncode, err)
+        return jsonify({'error': 'pg_dump falló: ' + err[:300]}), 500
+
+    bio = BytesIO(result.stdout)
+    filename = f"bridgework_{dbname}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.sql"
+    return send_file(bio, mimetype='text/plain; charset=utf-8', as_attachment=True, download_name=filename)
+
+
+@api_bp.route('/admin/restore', methods=['POST'])
+@login_required
+def admin_restore():
+    """Restore database from a pg_dump SQL file via psql. Admin only. DESTRUCTIVE."""
+    _admin_only()
+    import subprocess, shutil, tempfile
+
+    if not shutil.which('psql'):
+        return jsonify({'error': 'psql no está disponible en el servidor'}), 500
+
+    file = request.files.get('backup_file')
+    if not file:
+        return jsonify({'error': 'No se recibió ningún archivo'}), 400
+
+    db_url = current_app.config.get('SQLALCHEMY_DATABASE_URI', '')
+    env, conn_args, dbname = _parse_db_url(db_url)
+
+    # Write the uploaded SQL to a temp file — psql needs a file path
+    tmp_fd, tmp_path = tempfile.mkstemp(suffix='.sql')
+    try:
+        with os.fdopen(tmp_fd, 'wb') as tmp:
+            file.save(tmp)
+
+        cmd = ['psql', '--set=ON_ERROR_STOP=1'] + conn_args + [dbname, '-f', tmp_path]
+
+        try:
+            result = subprocess.run(cmd, capture_output=True, env=env, timeout=600)
+        except subprocess.TimeoutExpired:
+            return jsonify({'error': 'La restauración tardó demasiado (timeout 10 min)'}), 500
+        except Exception as e:
+            current_app.logger.exception('psql subprocess error')
+            return jsonify({'error': str(e)}), 500
+
+        if result.returncode != 0:
+            err = result.stderr.decode('utf-8', errors='replace')
+            current_app.logger.error('psql restore failed (rc=%s): %s', result.returncode, err)
+            return jsonify({'error': 'psql falló: ' + err[:500]}), 500
+
+        current_app.logger.info('Database restored from backup by user %s', current_user.email)
+        return jsonify({'success': True, 'message': 'Base de datos restaurada exitosamente'})
+
+    finally:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+

@@ -25,8 +25,7 @@ class Config:
 
 
 class DevConfig(Config):
-    # Default to sqlite for local dev convenience; override with DATABASE_URL env var if needed
-    SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL', 'sqlite:///dev.db')
+    SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL')
     DEBUG = True
 
     # Celery / Redis defaults for local development
