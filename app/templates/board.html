@@ -71,13 +71,6 @@
   background: #e0e5ff;
 }
 
-.board-table tr.row-dirty td {
-  background-color: #fffce0 !important;
-}
-.board-table tr.row-dirty:hover td {
-  background-color: #fff8c5 !important;
-}
-
 .cell {
   padding: 8px 12px;
   min-height: 40px;
@@ -964,7 +957,7 @@ tr.table-warning:hover {
                 {% endif %}
                 {% if current_user.is_internal and current_user.role and current_user.role.name in ('PMP', 'Admin', 'Supervisor') %}
                 <div class="task-title-input" contenteditable="true"
-                     onblur="markDirty({{ task.id }}, 'title', this.innerText.trim()); scheduleCommit({{ task.id }})">{{ task.title }}</div>
+                     onblur="updateTask({{ task.id }}, 'title', this.innerText)">{{ task.title }}</div>
                 {% else %}
                 <div class="task-title-input">{{ task.title }}</div>
                 {% endif %}
@@ -1050,8 +1043,8 @@ tr.table-warning:hover {
             <td>
               <div class="cell date-cell">
                 {% if current_user.is_authenticated and current_user.is_internal and current_user.role and current_user.role.name in ('PMP', 'Admin', 'Supervisor') %}
-                <input type="date" value="{{ task.start_date.strftime('%Y-%m-%d') if task.start_date else '' }}"
-                       onchange="markDirty({{ task.id }}, 'start_date', this.value); scheduleCommit({{ task.id }})" data-task-field="start_date">
+                <input type="date" value="{{ task.start_date.strftime('%Y-%m-%d') if task.start_date else '' }}" 
+                       onchange="updateTask({{ task.id }}, 'start_date', this.value)">
                 {% else %}
                 <span>{{ task.start_date.strftime('%d/%m/%Y') if task.start_date else '—' }}</span>
                 {% endif %}
@@ -1060,9 +1053,9 @@ tr.table-warning:hover {
             <td>
               <div class="cell date-cell">
                 {% if current_user.is_authenticated and current_user.is_internal and current_user.role and current_user.role.name in ('PMP', 'Admin', 'Supervisor') %}
-                <input type="date" value="{{ task.due_date.strftime('%Y-%m-%d') if task.due_date else '' }}"
+                <input type="date" value="{{ task.due_date.strftime('%Y-%m-%d') if task.due_date else '' }}" 
                        class="{% if task.due_date and task.due_date.date() < now.date() and task.status != 'COMPLETED' %}date-overdue{% endif %}"
-                       onchange="markDirty({{ task.id }}, 'due_date', this.value); scheduleCommit({{ task.id }})" data-task-field="due_date">
+                       onchange="updateTask({{ task.id }}, 'due_date', this.value)">
                 {% else %}
                 <span class="{% if task.due_date and task.due_date.date() < now.date() and task.status != 'COMPLETED' %}text-danger{% endif %}">
                   {{ task.due_date.strftime('%d/%m/%Y') if task.due_date else '—' }}
@@ -1109,7 +1102,7 @@ tr.table-warning:hover {
               <div class="cell hours-cell">
                 {% if current_user.is_internal %}
                 <input type="number" step="0.5" value="{{ task.estimated_hours or '' }}" placeholder="—"
-                       onblur="markDirty({{ task.id }}, 'estimated_hours', this.value); scheduleCommit({{ task.id }})" onkeypress="if(event.key==='Enter')this.blur()" data-task-field="estimated_hours">
+                       onblur="updateTask({{ task.id }}, 'estimated_hours', this.value)" onkeypress="if(event.key==='Enter')this.blur()">
                 {% else %}
                 <span>{{ task.estimated_hours or '—' }}</span>
                 {% endif %}
@@ -2023,93 +2016,79 @@ function showPersonDropdown(e, taskId) {
 }
 
 function setStatus(status) {
+  updateTask(currentTaskId, 'status', status);
   document.getElementById('statusDropdown').style.display = 'none';
-  // Optimistic DOM update
-  const tr = document.querySelector(`tr[data-task-id="${currentTaskId}"]`);
-  if (tr) {
-    const pill = tr.querySelector('.status-pill');
-    const labels = {'BACKLOG':'Backlog','IN_PROGRESS':'En Progreso','IN_REVIEW':'En Revisión','COMPLETED':'Completado'};
-    if (pill) { pill.className = `status-pill status-${status}`; pill.textContent = labels[status] || status; }
-    tr.dataset.status = status;
-  }
-  updateTaskFields(currentTaskId, { status }, { silent: true });
 }
 
 function setPriority(priority) {
+  updateTask(currentTaskId, 'priority', priority);
   document.getElementById('priorityDropdown').style.display = 'none';
-  // Optimistic DOM update
-  const tr = document.querySelector(`tr[data-task-id="${currentTaskId}"]`);
-  if (tr) {
-    const priorityPill = tr.querySelector('[class*="priority-"]');
-    const labels = {'LOW':'Baja','MEDIUM':'Media','HIGH':'Alta','CRITICAL':'Crítica'};
-    if (priorityPill) { priorityPill.className = `status-pill priority-${priority}`; priorityPill.textContent = labels[priority] || priority; }
-  }
-  updateTaskFields(currentTaskId, { priority }, { silent: true });
 }
 
 function setAssignee(userId) {
-  // Additive assign: read current assignees from DOM (no GET request needed), merge, then PATCH.
+  // Additive assign: fetch current assignees, add the selected user (if any), and send merged list.
   const dd = document.getElementById('personDropdown');
   if (dd) dd.style.display = 'none';
 
-  const tr = document.querySelector(`tr[data-task-id="${currentTaskId}"]`);
-  const currentIds = (tr?.dataset?.assigneeIds || '')
-    .split(',').map(Number).filter(Boolean);
-
-  let newIds;
   if (!userId) {
-    newIds = [];
-  } else {
-    const uid = parseInt(userId);
-    newIds = currentIds.includes(uid) ? currentIds : [...currentIds, uid];
-  }
-
-  if (!userId) {
+    // 'Sin asignar' chosen: clear assignees
     updateTaskFields(currentTaskId, { assignees: [] });
     return;
   }
 
-  // Show wait banner (may send notification emails)
-  let waitEl = document.getElementById('assignWaitMsg');
-  if (!waitEl) {
-    waitEl = document.createElement('div');
-    waitEl.id = 'assignWaitMsg';
-    waitEl.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-1"></i> Aguarde... Enviando notificación';
-    waitEl.style.cssText = 'position:fixed; top:12px; right:12px; background:linear-gradient(90deg,#0d6efd,#6610f2); color:#fff; padding:10px 14px; font-size:0.95rem; border-radius:8px; box-shadow:0 8px 24px rgba(13,110,253,0.18); z-index:2100; display:flex; align-items:center; gap:8px;';
-    waitEl.dataset.startTime = Date.now();
-    let overlay = document.getElementById('assignOverlay');
-    if (!overlay) {
-      overlay = document.createElement('div');
-      overlay.id = 'assignOverlay';
-      overlay.style.cssText = 'position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.06); z-index:2000; cursor:wait;';
-      overlay.setAttribute('aria-hidden', 'true');
-      document.body.appendChild(overlay);
-    }
-    document.body.appendChild(waitEl);
-  } else {
-    waitEl.dataset.startTime = Date.now();
-    if (!document.getElementById('assignOverlay')) {
-      const overlay = document.createElement('div');
-      overlay.id = 'assignOverlay';
-      overlay.style.cssText = 'position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.06); z-index:2000; cursor:wait;';
-      overlay.setAttribute('aria-hidden', 'true');
-      document.body.appendChild(overlay);
-    }
-  }
-
-  updateTaskFields(currentTaskId, { assignees: newIds }, { silent: true })
-    .then(() => {
-      // Update data-assignee-ids on the row so subsequent assignments read the new list
-      if (tr) tr.dataset.assigneeIds = newIds.join(',');
-      try { document.getElementById('assignWaitMsg')?.remove(); document.getElementById('assignOverlay')?.remove(); } catch(e){}
+  // Fetch current task to get current assignees, then merge
+  fetch(`/api/tasks/${currentTaskId}`)
+    .then(async r => {
+      if (!r.ok) throw new Error('Failed to fetch task');
+      return r.json();
     })
-    .catch(() => {
-      try { document.getElementById('assignWaitMsg')?.remove(); document.getElementById('assignOverlay')?.remove(); } catch(e){}
+    .then(data => {
+      const current = Array.isArray(data.assignees) ? data.assignees.map(x => parseInt(x)) : [];
+      const uid = parseInt(userId);
+      if (!current.includes(uid)) current.push(uid);
+      // Show a small wait indicator while the server processes assignment (may send emails)
+      let waitEl = document.getElementById('assignWaitMsg');
+      if (!waitEl) {
+        waitEl = document.createElement('div');
+        waitEl.id = 'assignWaitMsg';
+        waitEl.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-1"></i> Aguarde... Enviando notificación';
+        // Make it a fixed, high-contrast banner so it's clearly visible on the board
+        waitEl.style.cssText = 'position:fixed; top:12px; right:12px; background:linear-gradient(90deg,#0d6efd,#6610f2); color:#fff; padding:10px 14px; font-size:0.95rem; border-radius:8px; box-shadow:0 8px 24px rgba(13,110,253,0.18); z-index:2100; display:flex; align-items:center; gap:8px;';
+        // mark start time so we can ensure a minimum visible duration
+        waitEl.dataset.startTime = Date.now();
+        // Create an overlay that blocks user interaction with the board while processing
+        let overlay = document.getElementById('assignOverlay');
+        if (!overlay) {
+          overlay = document.createElement('div');
+          overlay.id = 'assignOverlay';
+          overlay.style.cssText = 'position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.06); z-index:2000; cursor:wait;';
+          overlay.setAttribute('aria-hidden', 'true');
+          document.body.appendChild(overlay);
+        }
+        document.body.appendChild(waitEl);
+      } else {
+        // update start time in case re-used
+        waitEl.dataset.startTime = Date.now();
+        // ensure overlay exists
+        if (!document.getElementById('assignOverlay')) {
+          const overlay = document.createElement('div');
+          overlay.id = 'assignOverlay';
+          overlay.style.cssText = 'position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.06); z-index:2000; cursor:wait;';
+          overlay.setAttribute('aria-hidden', 'true');
+          document.body.appendChild(overlay);
+        }
+      }
+      // Call update and ensure we remove the wait indicator on error (success triggers reload)
+      updateTaskFields(currentTaskId, { assignees: current })
+        .catch(() => { try { document.getElementById('assignWaitMsg')?.remove(); document.getElementById('assignOverlay')?.remove(); } catch(e){} });
+    })
+    .catch(err => {
+      console.error('Error fetching task:', err);
+      alert('Error al asignar usuario');
     });
 }
 
-// opts.silent = true → no page reload after success (for inline batch edits)
-function updateTaskFields(taskId, payload, opts = {}) {
+function updateTaskFields(taskId, payload) {
   return fetch(`/api/tasks/${taskId}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
@@ -2126,6 +2105,7 @@ function updateTaskFields(taskId, payload, opts = {}) {
         showDescendantModal(taskId, json.incomplete_children);
         return Promise.reject('children_incomplete');
       }
+      // Mostrar mensaje de error específico del servidor
       if (json && json.error) {
         return Promise.reject({ type: 'server_error', message: json.error });
       }
@@ -2134,22 +2114,20 @@ function updateTaskFields(taskId, payload, opts = {}) {
     return r.json();
   })
   .then(data => {
-    if (opts.silent) {
-      // Inline batch edit: show toast, no reload
-      if (typeof showToast === 'function') showToast('Cambios guardados', 'success');
-      return data;
-    }
-    // Assignee path: keep the wait banner visible briefly before reload
+    // Ensure any 'assignWaitMsg' banner is visible for at least a short time
     try {
       const waitEl = document.getElementById('assignWaitMsg');
-      const minVisible = 700;
+      const minVisible = 700; // ms
       if (waitEl && waitEl.dataset && waitEl.dataset.startTime) {
-        const elapsed = Date.now() - parseInt(waitEl.dataset.startTime || '0');
+        const start = parseInt(waitEl.dataset.startTime || '0');
+        const elapsed = Date.now() - start;
         const delay = Math.max(0, minVisible - elapsed);
         setTimeout(() => location.reload(), delay);
         return;
       }
-    } catch (e) {}
+    } catch (e) {
+      // ignore and reload immediately
+    }
     location.reload();
   })
   .catch(err => {
@@ -2160,77 +2138,53 @@ function updateTaskFields(taskId, payload, opts = {}) {
     }
     console.error(err);
     alert('Error al actualizar la tarea');
+    // remove any assign wait indicator and overlay if present
     try { document.getElementById('assignWaitMsg')?.remove(); document.getElementById('assignOverlay')?.remove(); } catch(e){}
     return Promise.reject(err);
   });
 }
 
 function updateTask(taskId, field, value) {
-  return updateTaskFields(taskId, { [field]: value });
-}
-
-// ── Excel-like dirty state ────────────────────────────────────────────────
-// Rules:
-//   • markDirty()  → stores change locally, tints row yellow. NO network call.
-//   • commitRow()  → ONE PATCH for all dirty fields in the row. No page reload.
-//   • Commit fires ONLY when focus leaves the row entirely (another row or outside the board).
-//   • While you stay inside the row (tab between cells) nothing is sent.
-
-const _dirty = {};          // { taskId: { field: value, ... } }
-let   _activeRow = null;    // the <tr> currently being edited
-
-function markDirty(taskId, field, value) {
-  if (!_dirty[taskId]) _dirty[taskId] = {};
-  _dirty[taskId][field] = value;
-  const tr = document.querySelector(`tr[data-task-id="${taskId}"]`);
-  if (tr) { tr.classList.add('row-dirty'); _activeRow = tr; }
-}
-
-function commitRow(taskId) {
-  if (!_dirty[taskId] || Object.keys(_dirty[taskId]).length === 0) return Promise.resolve();
-  const payload = { ..._dirty[taskId] };
-  delete _dirty[taskId];
-  const tr = document.querySelector(`tr[data-task-id="${taskId}"]`);
-  if (tr) tr.classList.remove('row-dirty');
-  if (_activeRow === tr) _activeRow = null;
-  return updateTaskFields(taskId, payload, { silent: true });
-}
-
-// scheduleCommit is kept only as a no-op alias (called from inline handlers)
-function scheduleCommit(taskId) { /* commit happens on row focusout */ }
-
-// ── Single focusin listener tracks which row is active ────────────────────
-document.getElementById('tasksBody').addEventListener('focusin', function(e) {
-  const row = e.target.closest('tr[data-task-id]');
-  if (!row) return;
-  // If focus moved to a DIFFERENT row, commit the previous one first
-  if (_activeRow && _activeRow !== row) {
-    const prevId = parseInt(_activeRow.dataset.taskId);
-    commitRow(prevId);
-  }
-  _activeRow = row;
-});
-
-// When focus leaves the board entirely, commit the active row
-document.getElementById('tasksBody').addEventListener('focusout', function(e) {
-  // Use relatedTarget: where focus is going to
-  const goingTo = e.relatedTarget;
-  if (!goingTo || !e.currentTarget.contains(goingTo)) {
-    // Focus left the board — commit active row
-    if (_activeRow) {
-      const taskId = parseInt(_activeRow.dataset.taskId);
-      commitRow(taskId);
+  fetch(`/api/tasks/${taskId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ [field]: value })
+  })
+  .then(async r => {
+    if (!r.ok) {
+      const json = await r.json().catch(()=>null);
+      if (json && json.incomplete_predecessors) {
+        // Show modal listing incomplete predecessors
+        showPredecessorModal(taskId, json.incomplete_predecessors);
+        return Promise.reject('predecessors_incomplete');
+      }
+      if (json && json.incomplete_children) {
+        // Show modal listing incomplete child tasks
+        showDescendantModal(taskId, json.incomplete_children);
+        return Promise.reject('children_incomplete');
+      }
+      // Mostrar mensaje de error específico del servidor
+      if (json && json.error) {
+        return Promise.reject({ type: 'server_error', message: json.error });
+      }
+      throw new Error('Update failed');
     }
-  }
-});
-
-// Warn before navigating away with unsaved changes
-window.addEventListener('beforeunload', function(e) {
-  if (Object.keys(_dirty).length > 0) {
-    e.preventDefault();
-    e.returnValue = '';
-  }
-});
+    return r.json();
+  })
+  .then(data => {
+    // Refresh row or update UI
+    location.reload();
+  })
+  .catch(err => {
+    if (err === 'predecessors_incomplete' || err === 'descendants_incomplete') return;
+    if (err && err.type === 'server_error') {
+      alert(err.message);
+      return;
+    }
+    console.error(err);
+    alert('Error al actualizar la tarea');
+  });
+}
 
 function showDescendantModal(taskId, preds) {
   const modal = document.getElementById('predecessorModal');
