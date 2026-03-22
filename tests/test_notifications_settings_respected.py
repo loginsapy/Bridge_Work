@@ -6,7 +6,7 @@ def test_notify_approved_respects_setting(client, db, create_user, monkeypatch):
     u = create_user(email='notify_approve@example.com', is_internal=True)
     calls = []
 
-    def fake_send_email(user_id, subject, notification_type='general', context=None):
+    def fake_send_email(user_id, subject, notification_type='general', context=None, notification_id=None):
         calls.append((user_id, subject, notification_type))
         return True
 
@@ -27,7 +27,7 @@ def test_notify_comment_respects_setting(client, db, create_user, monkeypatch):
     u = create_user(email='notify_comment@example.com', is_internal=True)
     calls = []
 
-    def fake_send_email(user_id, subject, notification_type='general', context=None):
+    def fake_send_email(user_id, subject, notification_type='general', context=None, notification_id=None):
         calls.append((user_id, subject, notification_type))
         return True
 
@@ -47,7 +47,7 @@ def test_notify_comment_respects_setting(client, db, create_user, monkeypatch):
 def test_due_soon_respects_setting(client, db, create_user, monkeypatch):
     u = create_user(email='notify_due@example.com', is_internal=True)
     calls = []
-    def fake_send_email(user_id, subject, notification_type='general', context=None):
+    def fake_send_email(user_id, subject, notification_type='general', context=None, notification_id=None):
         calls.append((user_id, subject, notification_type))
         return True
     monkeypatch.setattr(NotificationService, 'send_email', staticmethod(fake_send_email))

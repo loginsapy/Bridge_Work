@@ -359,10 +359,10 @@
         {% endif %}
       </h1>
       <div class="mt-3 d-flex gap-2 flex-wrap">
-        <span class="status-pill status-{{ task.status }}">
+        <span class="status-pill status-{{ task.status }}" id="taskStatusPill">
           {{ {'BACKLOG':'Backlog','IN_PROGRESS':'En Progreso','IN_REVIEW':'En Revisión','REVIEW':'En Revisión','REVISION':'En Revisión','REVISIÓN':'En Revisión','COMPLETED':'Completado'}.get(task.status, task.status) }}
         </span>
-        <span class="priority-pill priority-{{ task.priority }}">
+        <span class="priority-pill priority-{{ task.priority }}" id="taskPriorityPill">
           {{ {'LOW':'Baja','MEDIUM':'Media','HIGH':'Alta','CRITICAL':'Crítica'}.get(task.priority, task.priority) }}
         </span>
         {% if task.is_external_visible %}
@@ -385,11 +385,9 @@
     {% elif (task.project.client_id and task.project.client_id == current_user.id) or (current_user in task.project.clients) %}
       {% if task.assigned_client_id == current_user.id %}
         {% if task.status != 'COMPLETED' %}
-        <form method="POST" action="{{ url_for('main.client_accept_task', task_id=task.id) }}" style="display:inline;">
-          <button type="submit" class="action-btn btn-accept">
-            <i class="fa-solid fa-check me-2"></i>Marcar como Completado
-          </button>
-        </form>
+        <button type="button" class="action-btn btn-accept" id="clientAcceptBtn" onclick="clientAcceptTask()">
+          <i class="fa-solid fa-check me-2"></i>Marcar como Completado
+        </button>
         {% endif %}
       {% else %}
         <!-- Cliente puede ver en modo lectura, pero no puede aceptar si la tarea no está asignada a él -->
@@ -592,13 +590,13 @@
     <div class="detail-card mt-4">
       <div class="detail-card-header">
         <span><i class="fa-solid fa-paperclip me-2"></i>Archivos Adjuntos</span>
-        <span class="badge bg-secondary">{{ task.attachments|length }}</span>
+        <span class="badge bg-secondary" id="attachmentCount">{{ task.attachments|length }}</span>
       </div>
       
       {% if task.attachments %}
-      <ul class="attachments-list">
+      <ul class="attachments-list" id="attachmentsList">
         {% for att in task.attachments %}
-        <li class="attachment-item">
+        <li class="attachment-item" data-attachment-id="{{ att.id }}">
           {% set ext = att.filename.rsplit('.', 1)[-1].lower() if '.' in att.filename else '' %}
           <div class="attachment-icon 
             {% if ext == 'pdf' %}pdf
@@ -634,8 +632,8 @@
             {% endif %}
             {% set is_admin_or_pmp = current_user.is_internal and current_user.role and current_user.role.name in ('PMP','Admin','Supervisor') %}
             {% if is_admin_or_pmp or att.uploaded_by_id == current_user.id %}
-              <button type="button" class="attachment-btn delete" title="Eliminar" 
-                      onclick="deleteAttachment('{{ url_for('api.delete_attachment', attachment_id=att.id) }}')">
+              <button type="button" class="attachment-btn delete" title="Eliminar"
+                      onclick="deleteAttachment('{{ url_for('api.delete_attachment', attachment_id=att.id) }}', this)">
                 <i class="fa-solid fa-trash"></i>
               </button>
             {% endif %}
@@ -644,7 +642,8 @@
         {% endfor %}
       </ul>
       {% else %}
-      <div class="empty-attachments">
+      <ul class="attachments-list" id="attachmentsList" style="display:none"></ul>
+      <div class="empty-attachments" id="emptyAttachments">
         <i class="fa-solid fa-paperclip d-block"></i>
         <p class="mb-0">Sin archivos adjuntos</p>
       </div>
@@ -1197,45 +1196,128 @@ function uploadFiles() {
   if (!input.files.length) return;
 
   const formData = new FormData();
-  for (const file of input.files) {
-    formData.append('file', file);
-  }
+  for (const file of input.files) formData.append('file', file);
 
   const btn = document.getElementById('uploadBtn');
-  if (btn) {
-    btn.disabled = true;
-    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Subiendo...';
-  }
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Subiendo...'; }
 
-  fetch("{{ url_for('api.upload_attachment', task_id=task.id) }}", {
-    method: 'POST',
-    body: formData
-  })
-  .then(response => {
-    if (response.ok) {
-      window.location.reload();
+  fetch("{{ url_for('api.upload_attachment', task_id=task.id) }}", { method: 'POST', body: formData })
+  .then(r => r.json())
+  .then(data => {
+    if (data.success && data.uploaded.length) {
+      data.uploaded.forEach(att => addAttachmentToDOM(att));
+      if (typeof showToast === 'function') showToast(`${data.uploaded.length} archivo(s) subido(s)`, 'success');
+      // Reset input
+      input.value = '';
+      if (btn) { btn.disabled = true; btn.innerHTML = 'Guardar'; }
     } else {
-      alert('Error al subir archivo');
+      const msg = data.errors?.join(', ') || 'Error al subir archivo';
+      if (typeof showToast === 'function') showToast(msg, 'danger');
       if (btn) { btn.disabled = false; btn.innerHTML = 'Guardar'; }
     }
   })
   .catch(err => {
     console.error(err);
-    alert('Error de conexión');
+    if (typeof showToast === 'function') showToast('Error de conexión', 'danger');
     if (btn) { btn.disabled = false; btn.innerHTML = 'Guardar'; }
   });
 }
 {% endif %}
 
-function deleteAttachment(url) {
+function addAttachmentToDOM(att) {
+  const ext = att.filename.includes('.') ? att.filename.split('.').pop().toLowerCase() : '';
+  const iconMap = { pdf:'fa-file-pdf', jpg:'fa-file-image', jpeg:'fa-file-image', png:'fa-file-image', gif:'fa-file-image', bmp:'fa-file-image', webp:'fa-file-image', doc:'fa-file-word', docx:'fa-file-word', xls:'fa-file-excel', xlsx:'fa-file-excel', csv:'fa-file-excel', zip:'fa-file-zipper', rar:'fa-file-zipper', '7z':'fa-file-zipper' };
+  const classMap = { pdf:'pdf', jpg:'image', jpeg:'image', png:'image', gif:'image', bmp:'image', webp:'image', doc:'doc', docx:'doc', xls:'spreadsheet', xlsx:'spreadsheet', csv:'spreadsheet', zip:'archive', rar:'archive', '7z':'archive' };
+  const icon = iconMap[ext] || 'fa-file';
+  const cls = classMap[ext] || 'default';
+  const sizeKB = (att.file_size / 1024).toFixed(1);
+  const canPreview = ['pdf','jpg','jpeg','png','gif','bmp','webp'].includes(ext);
+
+  const li = document.createElement('li');
+  li.className = 'attachment-item';
+  li.dataset.attachmentId = att.id;
+  const safeName = escapeHtml(att.filename);
+  li.innerHTML = `
+    <div class="attachment-icon ${cls}"><i class="fa-solid ${icon}"></i></div>
+    <div class="attachment-info">
+      <div class="attachment-name" title="${safeName}">${safeName}</div>
+      <div class="attachment-meta">${sizeKB} KB • Ahora</div>
+    </div>
+    <div class="attachment-actions">
+      <a href="/attachment/${att.id}/download" class="attachment-btn download" title="Descargar"><i class="fa-solid fa-download"></i></a>
+      ${canPreview ? `<a href="#" class="attachment-btn preview" title="Vista previa" onclick="showAttachmentPreview('/attachment/${att.id}/download?inline=1','${ext}');return false;"><i class="fa-solid fa-eye"></i></a>` : ''}
+      <button type="button" class="attachment-btn delete" title="Eliminar" onclick="deleteAttachment('/api/attachments/${att.id}', this)"><i class="fa-solid fa-trash"></i></button>
+    </div>`;
+
+  // Ensure list is visible and empty-state is hidden
+  let list = document.getElementById('attachmentsList');
+  if (!list) {
+    list = document.createElement('ul');
+    list.className = 'attachments-list';
+    list.id = 'attachmentsList';
+    const empty = document.getElementById('emptyAttachments');
+    if (empty) empty.parentNode.insertBefore(list, empty);
+  }
+  list.style.display = '';
+  const empty = document.getElementById('emptyAttachments');
+  if (empty) empty.style.display = 'none';
+  list.prepend(li);
+
+  // Update count badge
+  const badge = document.getElementById('attachmentCount');
+  if (badge) badge.textContent = list.querySelectorAll('li').length;
+}
+
+function deleteAttachment(url, btn) {
   if (!confirm('¿Eliminar este archivo?')) return;
-  
+
   fetch(url, { method: 'DELETE' })
-  .then(response => {
-    if (response.ok) window.location.reload();
-    else alert('Error al eliminar archivo');
+  .then(r => {
+    if (r.ok) {
+      const li = btn ? btn.closest('li[data-attachment-id]') : null;
+      if (li) li.remove();
+      // Update count and show empty state if needed
+      const list = document.getElementById('attachmentsList');
+      const badge = document.getElementById('attachmentCount');
+      const count = list ? list.querySelectorAll('li').length : 0;
+      if (badge) badge.textContent = count;
+      if (list && count === 0) {
+        list.style.display = 'none';
+        const empty = document.getElementById('emptyAttachments');
+        if (empty) empty.style.display = '';
+      }
+      if (typeof showToast === 'function') showToast('Archivo eliminado', 'success');
+    } else {
+      if (typeof showToast === 'function') showToast('Error al eliminar archivo', 'danger');
+    }
   })
-  .catch(err => alert('Error de conexión'));
+  .catch(() => { if (typeof showToast === 'function') showToast('Error de conexión', 'danger'); });
+}
+
+function clientAcceptTask() {
+  const btn = document.getElementById('clientAcceptBtn');
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-2"></i>Procesando...'; }
+  fetch('/api/tasks/{{ task.id }}', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ status: 'COMPLETED' })
+  })
+  .then(async r => {
+    const data = await r.json().catch(() => ({}));
+    if (r.ok) {
+      const pill = document.getElementById('taskStatusPill');
+      if (pill) { pill.className = 'status-pill status-COMPLETED'; pill.textContent = 'Completado'; }
+      if (btn) btn.remove();
+      if (typeof showToast === 'function') showToast('Tarea marcada como completada', 'success');
+    } else {
+      if (typeof showToast === 'function') showToast(data.error || 'No se pudo completar', 'danger');
+      if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-check me-2"></i>Completar tarea'; }
+    }
+  })
+  .catch(() => {
+    if (typeof showToast === 'function') showToast('Error de conexión', 'danger');
+    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-check me-2"></i>Completar tarea'; }
+  });
 }
 
 function showAttachmentPreview(url, ext) {

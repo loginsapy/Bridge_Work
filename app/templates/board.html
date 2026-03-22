@@ -71,6 +71,25 @@
   background: #e0e5ff;
 }
 
+.board-table tr.row-dirty td {
+  background-color: #fffce0 !important;
+}
+.board-table tr.row-dirty:hover td {
+  background-color: #fff8c5 !important;
+}
+
+/* Sortable column headers */
+.board-table th.sortable-col {
+  cursor: pointer;
+  user-select: none;
+}
+.board-table th.sortable-col:hover { background: #e0e5ff; }
+.board-table th.sortable-col.sort-asc,
+.board-table th.sortable-col.sort-desc { background: #dce3ff; color: #0d6efd; }
+.sort-icon::after { content: '⇅'; opacity: 0.3; font-size: 11px; margin-left: 4px; }
+.sort-asc  .sort-icon::after { content: '↑'; opacity: 1; }
+.sort-desc .sort-icon::after { content: '↓'; opacity: 1; }
+
 .cell {
   padding: 8px 12px;
   min-height: 40px;
@@ -903,6 +922,11 @@ tr.table-warning:hover {
       <button class="btn btn-light btn-sm" onclick="openNewTaskModal()">
         <i class="fa-solid fa-plus me-1"></i>Nueva Tarea
       </button>
+      {% if user_role == 'Supervisor' %}
+      <button class="btn btn-outline-secondary btn-sm" data-bs-toggle="modal" data-bs-target="#inviteParticipanteModal">
+        <i class="fa-solid fa-user-plus me-1"></i>Invitar participante
+      </button>
+      {% endif %}
       {% endif %}
     </div>
     <div class="project-progress">
@@ -919,22 +943,42 @@ tr.table-warning:hover {
         <tr>
           <th class="row-checkbox">{% if current_user.is_internal %}<input type="checkbox" id="selectAll">{% endif %}</th>
           <th class="row-grip"></th>
-          <th style="min-width: 340px;">Tarea</th>
-          <th>Estado</th>
-          <th>Prioridad</th>
-          <th>Asignado</th>
-          <th>Inicio</th>
-          <th>Vencimiento</th>
-          <th>Finalizado</th>
-          <th>Desvío</th>
-          <th>Horas</th>
+          <th class="sortable-col" data-sort-col="title" style="min-width: 340px;">Tarea <span class="sort-icon"></span></th>
+          <th class="sortable-col" data-sort-col="status">Estado <span class="sort-icon"></span></th>
+          <th class="sortable-col" data-sort-col="priority">Prioridad <span class="sort-icon"></span></th>
+          <th class="sortable-col" data-sort-col="assignee">Asignado <span class="sort-icon"></span></th>
+          <th class="sortable-col" data-sort-col="start">Inicio <span class="sort-icon"></span></th>
+          <th class="sortable-col" data-sort-col="due">Vencimiento <span class="sort-icon"></span></th>
+          <th class="sortable-col" data-sort-col="completed">Finalizado <span class="sort-icon"></span></th>
+          <th class="sortable-col" data-sort-col="deviation">Desvío <span class="sort-icon"></span></th>
+          <th class="sortable-col" data-sort-col="hours">Horas <span class="sort-icon"></span></th>
           <th></th>
         </tr>
       </thead>
       <tbody id="tasksBody">
         {% macro render_node(node, level=0, parent_id=None) %}
           {% set task = node.task %}
-          <tr class="{% if level>0 %}child-row{% endif %}{% if task.is_blocked() %} table-warning{% endif %}" data-task-id="{{ task.id }}" data-status="{{ task.status }}" data-assignee-ids="{{ task.assignee_list|map(attribute='id')|join(',') }}" {% if parent_id %}data-parent-id="{{ parent_id }}"{% endif %} {% if current_user.is_internal %}draggable="true"{% endif %}>
+          {% set _first_assignee = task.assignee_list[0] if task.assignee_list else None %}
+          {% set _assignee_name = (_first_assignee.first_name ~ ' ' ~ (_first_assignee.last_name or '')) if _first_assignee else 'zzz' %}
+          {% set _prio_order = {'CRITICAL':1,'HIGH':2,'MEDIUM':3,'LOW':4} %}
+          {% set _status_order = {'BACKLOG':1,'IN_PROGRESS':2,'IN_REVIEW':3,'REVIEW':3,'REVISION':3,'REVISIÓN':3,'COMPLETED':4} %}
+          {% set _deviation = task.time_deviation_days if task.time_deviation_days is not none else 9999 %}
+          <tr class="{% if level>0 %}child-row{% endif %}{% if task.is_blocked() %} table-warning{% endif %}"
+              data-task-id="{{ task.id }}"
+              data-status="{{ task.status }}"
+              data-assignee-ids="{{ task.assignee_list|map(attribute='id')|join(',') }}"
+              {% if parent_id %}data-parent-id="{{ parent_id }}"{% endif %}
+              {% if current_user.is_internal %}draggable="true"{% endif %}
+              data-sort-title="{{ task.title|lower }}"
+              data-sort-status="{{ _status_order.get(task.status, 5) }}"
+              data-sort-priority="{{ _prio_order.get(task.priority, 5) }}"
+              data-sort-assignee="{{ _assignee_name|lower }}"
+              data-sort-start="{{ task.start_date.strftime('%Y-%m-%d') if task.start_date else '9999-99-99' }}"
+              data-sort-due="{{ task.due_date.strftime('%Y-%m-%d') if task.due_date else '9999-99-99' }}"
+              data-sort-completed="{{ task.completed_at.strftime('%Y-%m-%d') if task.completed_at else '9999-99-99' }}"
+              data-sort-deviation="{{ _deviation }}"
+              data-sort-hours="{{ task.estimated_hours or 0 }}"
+          >
             <td class="row-checkbox">{% if current_user.is_internal %}<input type="checkbox" class="task-check">{% endif %}</td>
             <td class="row-grip">{% if current_user.is_internal %}{% if current_user.role and current_user.role.name in ['PMP', 'Admin'] %}<i class="fa-solid fa-grip-vertical" draggable="true" title="Arrastrar"></i>{% else %}<i class="fa-solid fa-grip-vertical disabled-grip" title="Solo Admin/PMP pueden reordenar" style="opacity:0.4;cursor:not-allowed;"></i>{% endif %}{% endif %}</td>
             <td>
@@ -957,7 +1001,7 @@ tr.table-warning:hover {
                 {% endif %}
                 {% if current_user.is_internal and current_user.role and current_user.role.name in ('PMP', 'Admin', 'Supervisor') %}
                 <div class="task-title-input" contenteditable="true"
-                     onblur="updateTask({{ task.id }}, 'title', this.innerText)">{{ task.title }}</div>
+                     onblur="markDirty({{ task.id }}, 'title', this.innerText.trim()); scheduleCommit({{ task.id }})">{{ task.title }}</div>
                 {% else %}
                 <div class="task-title-input">{{ task.title }}</div>
                 {% endif %}
@@ -1042,9 +1086,9 @@ tr.table-warning:hover {
             </td>
             <td>
               <div class="cell date-cell">
-                {% if current_user.is_authenticated and current_user.is_internal and current_user.role and current_user.role.name in ('PMP', 'Admin', 'Supervisor') %}
-                <input type="date" value="{{ task.start_date.strftime('%Y-%m-%d') if task.start_date else '' }}" 
-                       onchange="updateTask({{ task.id }}, 'start_date', this.value)">
+                {% if current_user.is_authenticated and current_user.is_internal and current_user.role and current_user.role.name in ('PMP', 'Admin') %}
+                <input type="date" value="{{ task.start_date.strftime('%Y-%m-%d') if task.start_date else '' }}"
+                       onchange="markDirty({{ task.id }}, 'start_date', this.value); scheduleCommit({{ task.id }})" data-task-field="start_date">
                 {% else %}
                 <span>{{ task.start_date.strftime('%d/%m/%Y') if task.start_date else '—' }}</span>
                 {% endif %}
@@ -1052,10 +1096,10 @@ tr.table-warning:hover {
             </td>
             <td>
               <div class="cell date-cell">
-                {% if current_user.is_authenticated and current_user.is_internal and current_user.role and current_user.role.name in ('PMP', 'Admin', 'Supervisor') %}
-                <input type="date" value="{{ task.due_date.strftime('%Y-%m-%d') if task.due_date else '' }}" 
+                {% if current_user.is_authenticated and current_user.is_internal and current_user.role and current_user.role.name in ('PMP', 'Admin') %}
+                <input type="date" value="{{ task.due_date.strftime('%Y-%m-%d') if task.due_date else '' }}"
                        class="{% if task.due_date and task.due_date.date() < now.date() and task.status != 'COMPLETED' %}date-overdue{% endif %}"
-                       onchange="updateTask({{ task.id }}, 'due_date', this.value)">
+                       onchange="markDirty({{ task.id }}, 'due_date', this.value); scheduleCommit({{ task.id }})" data-task-field="due_date">
                 {% else %}
                 <span class="{% if task.due_date and task.due_date.date() < now.date() and task.status != 'COMPLETED' %}text-danger{% endif %}">
                   {{ task.due_date.strftime('%d/%m/%Y') if task.due_date else '—' }}
@@ -1102,7 +1146,7 @@ tr.table-warning:hover {
               <div class="cell hours-cell">
                 {% if current_user.is_internal %}
                 <input type="number" step="0.5" value="{{ task.estimated_hours or '' }}" placeholder="—"
-                       onblur="updateTask({{ task.id }}, 'estimated_hours', this.value)" onkeypress="if(event.key==='Enter')this.blur()">
+                       onblur="markDirty({{ task.id }}, 'estimated_hours', this.value); scheduleCommit({{ task.id }})" onkeypress="if(event.key==='Enter')this.blur()" data-task-field="estimated_hours">
                 {% else %}
                 <span>{{ task.estimated_hours or '—' }}</span>
                 {% endif %}
@@ -1897,6 +1941,43 @@ document.getElementById('newTaskForm')?.addEventListener('submit', function(e) {
 </div>
 {% endif %}
 
+{% if user_role == 'Supervisor' %}
+<div class="modal fade" id="inviteParticipanteModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title fw-bold"><i class="fa-solid fa-user-plus me-2 text-primary"></i>Invitar participante al proyecto</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        {% if available_participantes %}
+        <p class="text-muted small mb-3">Seleccioná un usuario con rol <strong>Participante</strong> para agregarlo a este proyecto.</p>
+        <select id="inviteParticipanteSelect" class="form-select">
+          <option value="">— Seleccionar participante —</option>
+          {% for u in available_participantes %}
+          <option value="{{ u.id }}">{{ u.first_name or '' }} {{ u.last_name or '' }} ({{ u.email }})</option>
+          {% endfor %}
+        </select>
+        {% else %}
+        <div class="alert alert-info mb-0">
+          <i class="fa-solid fa-circle-info me-2"></i>
+          No hay participantes disponibles para invitar (todos ya son miembros del proyecto).
+        </div>
+        {% endif %}
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+        {% if available_participantes %}
+        <button type="button" class="btn btn-primary" onclick="inviteParticipante()">
+          <i class="fa-solid fa-user-plus me-1"></i>Agregar al proyecto
+        </button>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
 {% endblock %}
 
 {% block scripts %}
@@ -2016,79 +2097,94 @@ function showPersonDropdown(e, taskId) {
 }
 
 function setStatus(status) {
-  updateTask(currentTaskId, 'status', status);
   document.getElementById('statusDropdown').style.display = 'none';
+  // Optimistic DOM update
+  const tr = document.querySelector(`tr[data-task-id="${currentTaskId}"]`);
+  if (tr) {
+    const pill = tr.querySelector('.status-pill');
+    const labels = {'BACKLOG':'Backlog','IN_PROGRESS':'En Progreso','IN_REVIEW':'En Revisión','COMPLETED':'Completado'};
+    if (pill) { pill.className = `status-pill status-${status}`; pill.textContent = labels[status] || status; }
+    tr.dataset.status = status;
+  }
+  updateTaskFields(currentTaskId, { status }, { silent: true });
 }
 
 function setPriority(priority) {
-  updateTask(currentTaskId, 'priority', priority);
   document.getElementById('priorityDropdown').style.display = 'none';
+  // Optimistic DOM update
+  const tr = document.querySelector(`tr[data-task-id="${currentTaskId}"]`);
+  if (tr) {
+    const priorityPill = tr.querySelector('[class*="priority-"]');
+    const labels = {'LOW':'Baja','MEDIUM':'Media','HIGH':'Alta','CRITICAL':'Crítica'};
+    if (priorityPill) { priorityPill.className = `status-pill priority-${priority}`; priorityPill.textContent = labels[priority] || priority; }
+  }
+  updateTaskFields(currentTaskId, { priority }, { silent: true });
 }
 
 function setAssignee(userId) {
-  // Additive assign: fetch current assignees, add the selected user (if any), and send merged list.
+  // Additive assign: read current assignees from DOM (no GET request needed), merge, then PATCH.
   const dd = document.getElementById('personDropdown');
   if (dd) dd.style.display = 'none';
 
+  const tr = document.querySelector(`tr[data-task-id="${currentTaskId}"]`);
+  const currentIds = (tr?.dataset?.assigneeIds || '')
+    .split(',').map(Number).filter(Boolean);
+
+  let newIds;
   if (!userId) {
-    // 'Sin asignar' chosen: clear assignees
-    updateTaskFields(currentTaskId, { assignees: [] });
+    newIds = [];
+  } else {
+    const uid = parseInt(userId);
+    newIds = currentIds.includes(uid) ? currentIds : [...currentIds, uid];
+  }
+
+  if (!userId) {
+    updateTaskFields(currentTaskId, { assignees: [] }, { silent: true })
+      .then(() => { if (tr) tr.dataset.assigneeIds = ''; });
     return;
   }
 
-  // Fetch current task to get current assignees, then merge
-  fetch(`/api/tasks/${currentTaskId}`)
-    .then(async r => {
-      if (!r.ok) throw new Error('Failed to fetch task');
-      return r.json();
+  // Show wait banner (may send notification emails)
+  let waitEl = document.getElementById('assignWaitMsg');
+  if (!waitEl) {
+    waitEl = document.createElement('div');
+    waitEl.id = 'assignWaitMsg';
+    waitEl.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-1"></i> Aguarde... Enviando notificación';
+    waitEl.style.cssText = 'position:fixed; top:12px; right:12px; background:linear-gradient(90deg,#0d6efd,#6610f2); color:#fff; padding:10px 14px; font-size:0.95rem; border-radius:8px; box-shadow:0 8px 24px rgba(13,110,253,0.18); z-index:2100; display:flex; align-items:center; gap:8px;';
+    waitEl.dataset.startTime = Date.now();
+    let overlay = document.getElementById('assignOverlay');
+    if (!overlay) {
+      overlay = document.createElement('div');
+      overlay.id = 'assignOverlay';
+      overlay.style.cssText = 'position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.06); z-index:2000; cursor:wait;';
+      overlay.setAttribute('aria-hidden', 'true');
+      document.body.appendChild(overlay);
+    }
+    document.body.appendChild(waitEl);
+  } else {
+    waitEl.dataset.startTime = Date.now();
+    if (!document.getElementById('assignOverlay')) {
+      const overlay = document.createElement('div');
+      overlay.id = 'assignOverlay';
+      overlay.style.cssText = 'position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.06); z-index:2000; cursor:wait;';
+      overlay.setAttribute('aria-hidden', 'true');
+      document.body.appendChild(overlay);
+    }
+  }
+
+  updateTaskFields(currentTaskId, { assignees: newIds }, { silent: true })
+    .then(() => {
+      // Update data-assignee-ids on the row so subsequent assignments read the new list
+      if (tr) tr.dataset.assigneeIds = newIds.join(',');
+      try { document.getElementById('assignWaitMsg')?.remove(); document.getElementById('assignOverlay')?.remove(); } catch(e){}
     })
-    .then(data => {
-      const current = Array.isArray(data.assignees) ? data.assignees.map(x => parseInt(x)) : [];
-      const uid = parseInt(userId);
-      if (!current.includes(uid)) current.push(uid);
-      // Show a small wait indicator while the server processes assignment (may send emails)
-      let waitEl = document.getElementById('assignWaitMsg');
-      if (!waitEl) {
-        waitEl = document.createElement('div');
-        waitEl.id = 'assignWaitMsg';
-        waitEl.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-1"></i> Aguarde... Enviando notificación';
-        // Make it a fixed, high-contrast banner so it's clearly visible on the board
-        waitEl.style.cssText = 'position:fixed; top:12px; right:12px; background:linear-gradient(90deg,#0d6efd,#6610f2); color:#fff; padding:10px 14px; font-size:0.95rem; border-radius:8px; box-shadow:0 8px 24px rgba(13,110,253,0.18); z-index:2100; display:flex; align-items:center; gap:8px;';
-        // mark start time so we can ensure a minimum visible duration
-        waitEl.dataset.startTime = Date.now();
-        // Create an overlay that blocks user interaction with the board while processing
-        let overlay = document.getElementById('assignOverlay');
-        if (!overlay) {
-          overlay = document.createElement('div');
-          overlay.id = 'assignOverlay';
-          overlay.style.cssText = 'position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.06); z-index:2000; cursor:wait;';
-          overlay.setAttribute('aria-hidden', 'true');
-          document.body.appendChild(overlay);
-        }
-        document.body.appendChild(waitEl);
-      } else {
-        // update start time in case re-used
-        waitEl.dataset.startTime = Date.now();
-        // ensure overlay exists
-        if (!document.getElementById('assignOverlay')) {
-          const overlay = document.createElement('div');
-          overlay.id = 'assignOverlay';
-          overlay.style.cssText = 'position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.06); z-index:2000; cursor:wait;';
-          overlay.setAttribute('aria-hidden', 'true');
-          document.body.appendChild(overlay);
-        }
-      }
-      // Call update and ensure we remove the wait indicator on error (success triggers reload)
-      updateTaskFields(currentTaskId, { assignees: current })
-        .catch(() => { try { document.getElementById('assignWaitMsg')?.remove(); document.getElementById('assignOverlay')?.remove(); } catch(e){} });
-    })
-    .catch(err => {
-      console.error('Error fetching task:', err);
-      alert('Error al asignar usuario');
+    .catch(() => {
+      try { document.getElementById('assignWaitMsg')?.remove(); document.getElementById('assignOverlay')?.remove(); } catch(e){}
     });
 }
 
-function updateTaskFields(taskId, payload) {
+// opts.silent = true → no page reload after success (for inline batch edits)
+function updateTaskFields(taskId, payload, opts = {}) {
   return fetch(`/api/tasks/${taskId}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
@@ -2105,7 +2201,6 @@ function updateTaskFields(taskId, payload) {
         showDescendantModal(taskId, json.incomplete_children);
         return Promise.reject('children_incomplete');
       }
-      // Mostrar mensaje de error específico del servidor
       if (json && json.error) {
         return Promise.reject({ type: 'server_error', message: json.error });
       }
@@ -2114,77 +2209,184 @@ function updateTaskFields(taskId, payload) {
     return r.json();
   })
   .then(data => {
-    // Ensure any 'assignWaitMsg' banner is visible for at least a short time
+    if (opts.silent) {
+      // Inline batch edit: show toast, no reload
+      if (typeof showToast === 'function') showToast('Cambios guardados', 'success');
+      return data;
+    }
+    // Assignee path: keep the wait banner visible briefly before reload
     try {
       const waitEl = document.getElementById('assignWaitMsg');
-      const minVisible = 700; // ms
+      const minVisible = 700;
       if (waitEl && waitEl.dataset && waitEl.dataset.startTime) {
-        const start = parseInt(waitEl.dataset.startTime || '0');
-        const elapsed = Date.now() - start;
+        const elapsed = Date.now() - parseInt(waitEl.dataset.startTime || '0');
         const delay = Math.max(0, minVisible - elapsed);
         setTimeout(() => location.reload(), delay);
         return;
       }
-    } catch (e) {
-      // ignore and reload immediately
-    }
+    } catch (e) {}
     location.reload();
   })
   .catch(err => {
     if (err === 'predecessors_incomplete' || err === 'children_incomplete') return Promise.reject(err);
     if (err && err.type === 'server_error') {
-      alert(err.message);
+      if (typeof showToast === 'function') showToast(err.message, 'danger'); else alert(err.message);
       return Promise.reject(err);
     }
     console.error(err);
-    alert('Error al actualizar la tarea');
-    // remove any assign wait indicator and overlay if present
+    if (typeof showToast === 'function') showToast('Error al actualizar la tarea', 'danger'); else alert('Error al actualizar la tarea');
     try { document.getElementById('assignWaitMsg')?.remove(); document.getElementById('assignOverlay')?.remove(); } catch(e){}
     return Promise.reject(err);
   });
 }
 
 function updateTask(taskId, field, value) {
-  fetch(`/api/tasks/${taskId}`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ [field]: value })
-  })
-  .then(async r => {
-    if (!r.ok) {
-      const json = await r.json().catch(()=>null);
-      if (json && json.incomplete_predecessors) {
-        // Show modal listing incomplete predecessors
-        showPredecessorModal(taskId, json.incomplete_predecessors);
-        return Promise.reject('predecessors_incomplete');
-      }
-      if (json && json.incomplete_children) {
-        // Show modal listing incomplete child tasks
-        showDescendantModal(taskId, json.incomplete_children);
-        return Promise.reject('children_incomplete');
-      }
-      // Mostrar mensaje de error específico del servidor
-      if (json && json.error) {
-        return Promise.reject({ type: 'server_error', message: json.error });
-      }
-      throw new Error('Update failed');
-    }
-    return r.json();
-  })
-  .then(data => {
-    // Refresh row or update UI
-    location.reload();
-  })
-  .catch(err => {
-    if (err === 'predecessors_incomplete' || err === 'descendants_incomplete') return;
-    if (err && err.type === 'server_error') {
-      alert(err.message);
-      return;
-    }
-    console.error(err);
-    alert('Error al actualizar la tarea');
-  });
+  return updateTaskFields(taskId, { [field]: value });
 }
+
+// ── Column sorting ───────────────────────────────────────────────────────
+(function() {
+  let _sortCol = null;
+  let _sortDir = 'asc';
+
+  function getSortValue(row, col) {
+    const d = row.dataset;
+    switch (col) {
+      case 'title':     return d.sortTitle || '';
+      case 'status':    return parseInt(d.sortStatus) || 99;
+      case 'priority':  return parseInt(d.sortPriority) || 99;
+      case 'assignee':  return d.sortAssignee || 'zzz';
+      case 'start':     return d.sortStart || '9999-99-99';
+      case 'due':       return d.sortDue || '9999-99-99';
+      case 'completed': return d.sortCompleted || '9999-99-99';
+      case 'deviation': return parseFloat(d.sortDeviation) || 9999;
+      case 'hours':     return parseFloat(d.sortHours) || 0;
+      default:          return '';
+    }
+  }
+
+  function sortBoard(col) {
+    if (_sortCol === col) {
+      _sortDir = _sortDir === 'asc' ? 'desc' : 'asc';
+    } else {
+      _sortCol = col;
+      _sortDir = 'asc';
+    }
+
+    // Update header classes
+    document.querySelectorAll('.board-table th.sortable-col').forEach(th => {
+      th.classList.remove('sort-asc', 'sort-desc');
+      if (th.dataset.sortCol === col) th.classList.add('sort-' + _sortDir);
+    });
+
+    const tbody = document.getElementById('tasksBody');
+    const allRows = Array.from(tbody.querySelectorAll('tr[data-task-id]'));
+
+    // Build child map: parentId -> [rows]
+    const childMap = {};
+    const rootRows = [];
+    allRows.forEach(r => {
+      const pid = r.dataset.parentId;
+      if (pid) {
+        if (!childMap[pid]) childMap[pid] = [];
+        childMap[pid].push(r);
+      } else {
+        rootRows.push(r);
+      }
+    });
+
+    // Sort root rows
+    const dir = _sortDir === 'asc' ? 1 : -1;
+    rootRows.sort((a, b) => {
+      const av = getSortValue(a, col);
+      const bv = getSortValue(b, col);
+      if (av < bv) return -dir;
+      if (av > bv) return dir;
+      return 0;
+    });
+
+    // Re-insert: root then its descendants recursively
+    function insertGroup(row) {
+      tbody.appendChild(row);
+      const tid = row.dataset.taskId;
+      if (childMap[tid]) childMap[tid].forEach(c => insertGroup(c));
+    }
+    rootRows.forEach(r => insertGroup(r));
+  }
+
+  document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('.board-table th.sortable-col').forEach(th => {
+      th.addEventListener('click', function(e) {
+        // Don't sort if clicking a checkbox inside the th
+        if (e.target.tagName === 'INPUT') return;
+        sortBoard(this.dataset.sortCol);
+      });
+    });
+  });
+})();
+
+// ── Excel-like dirty state ────────────────────────────────────────────────
+// Rules:
+//   • markDirty()  → stores change locally, tints row yellow. NO network call.
+//   • commitRow()  → ONE PATCH for all dirty fields in the row. No page reload.
+//   • Commit fires ONLY when focus leaves the row entirely (another row or outside the board).
+//   • While you stay inside the row (tab between cells) nothing is sent.
+
+const _dirty = {};          // { taskId: { field: value, ... } }
+let   _activeRow = null;    // the <tr> currently being edited
+
+function markDirty(taskId, field, value) {
+  if (!_dirty[taskId]) _dirty[taskId] = {};
+  _dirty[taskId][field] = value;
+  const tr = document.querySelector(`tr[data-task-id="${taskId}"]`);
+  if (tr) { tr.classList.add('row-dirty'); _activeRow = tr; }
+}
+
+function commitRow(taskId) {
+  if (!_dirty[taskId] || Object.keys(_dirty[taskId]).length === 0) return Promise.resolve();
+  const payload = { ..._dirty[taskId] };
+  delete _dirty[taskId];
+  const tr = document.querySelector(`tr[data-task-id="${taskId}"]`);
+  if (tr) tr.classList.remove('row-dirty');
+  if (_activeRow === tr) _activeRow = null;
+  return updateTaskFields(taskId, payload, { silent: true });
+}
+
+// scheduleCommit is kept only as a no-op alias (called from inline handlers)
+function scheduleCommit(taskId) { /* commit happens on row focusout */ }
+
+// ── Single focusin listener tracks which row is active ────────────────────
+document.getElementById('tasksBody').addEventListener('focusin', function(e) {
+  const row = e.target.closest('tr[data-task-id]');
+  if (!row) return;
+  // If focus moved to a DIFFERENT row, commit the previous one first
+  if (_activeRow && _activeRow !== row) {
+    const prevId = parseInt(_activeRow.dataset.taskId);
+    commitRow(prevId);
+  }
+  _activeRow = row;
+});
+
+// When focus leaves the board entirely, commit the active row
+document.getElementById('tasksBody').addEventListener('focusout', function(e) {
+  // Use relatedTarget: where focus is going to
+  const goingTo = e.relatedTarget;
+  if (!goingTo || !e.currentTarget.contains(goingTo)) {
+    // Focus left the board — commit active row
+    if (_activeRow) {
+      const taskId = parseInt(_activeRow.dataset.taskId);
+      commitRow(taskId);
+    }
+  }
+});
+
+// Warn before navigating away with unsaved changes
+window.addEventListener('beforeunload', function(e) {
+  if (Object.keys(_dirty).length > 0) {
+    e.preventDefault();
+    e.returnValue = '';
+  }
+});
 
 function showDescendantModal(taskId, preds) {
   const modal = document.getElementById('predecessorModal');
@@ -2698,5 +2900,41 @@ window.toggleView = function(view) {
     window.location.href = `/project/${projectId}/gantt`;
   }
 };
+
+{% if user_role == 'Supervisor' %}
+function inviteParticipante() {
+  const sel = document.getElementById('inviteParticipanteSelect');
+  const userId = sel ? sel.value : '';
+  if (!userId) { if (typeof showToast === 'function') showToast('Seleccioná un participante', 'warning'); return; }
+  const btn = document.querySelector('#inviteParticipanteModal .btn-primary');
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-1"></i>Agregando...'; }
+  fetch('/api/projects/{{ project.id }}/members', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ user_id: parseInt(userId) })
+  })
+  .then(r => r.json())
+  .then(data => {
+    if (data.success) {
+      bootstrap.Modal.getInstance(document.getElementById('inviteParticipanteModal')).hide();
+      if (typeof showToast === 'function') showToast(`${data.user.name} agregado al proyecto`, 'success');
+      // Remove invited user from the select so they can't be added twice
+      sel.querySelector(`option[value="${userId}"]`)?.remove();
+      if (sel.options.length <= 1) {
+        // No more participantes to invite
+        sel.closest('.modal-body').innerHTML = '<div class="alert alert-info mb-0"><i class="fa-solid fa-circle-info me-2"></i>No hay más participantes disponibles para invitar.</div>';
+        document.querySelector('#inviteParticipanteModal .btn-primary')?.remove();
+      }
+    } else {
+      if (typeof showToast === 'function') showToast(data.error || 'Error al invitar', 'danger');
+      if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-user-plus me-1"></i>Agregar al proyecto'; }
+    }
+  })
+  .catch(() => {
+    if (typeof showToast === 'function') showToast('Error de conexión', 'danger');
+    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-user-plus me-1"></i>Agregar al proyecto'; }
+  });
+}
+{% endif %}
 </script>
 {% endblock %}

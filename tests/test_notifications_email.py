@@ -9,7 +9,7 @@ def test_create_task_assigned_sends_email(client, db, create_user, monkeypatch):
     u = create_user(email='notify_test@example.com', is_internal=True)
 
     sent = {}
-    def fake_send_email(user_id, subject, notification_type='general', context=None):
+    def fake_send_email(user_id, subject, notification_type='general', context=None, notification_id=None):
         sent['user_id'] = user_id
         sent['subject'] = subject
         sent['notification_type'] = notification_type
@@ -59,7 +59,7 @@ def test_notify_task_assigned_sends_email_once(client, db, create_user, monkeypa
     # Ensure notify_task_assigned triggers a single email send when send_email=True
     u = create_user(email='notify_once@example.com', is_internal=True)
     calls = []
-    def fake_send_email(user_id, subject, notification_type='general', context=None):
+    def fake_send_email(user_id, subject, notification_type='general', context=None, notification_id=None):
         calls.append((user_id, subject, notification_type))
         return True
     monkeypatch.setattr(NotificationService, 'send_email', staticmethod(fake_send_email))

@@ -12,6 +12,7 @@ from flask_login import current_user, login_required
 from ..auth.decorators import internal_required, client_required
 import os
 import mimetypes
+import shutil
 from werkzeug.utils import secure_filename
 
 # Simple serializers
@@ -1935,23 +1936,57 @@ def _parse_db_url(db_url):
     return env, args, dbname
 
 
+def _resolve_pg_binary(binary_name, env_var_name):
+    """Resolve postgres client binary path robustly for service environments.
+
+    Some on-prem services run with a reduced PATH, so shutil.which may fail even
+    when the binary exists in standard Linux locations.
+    """
+    preferred = os.environ.get(env_var_name) or current_app.config.get(env_var_name)
+    candidates = [preferred] if preferred else []
+
+    project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+    candidates.extend([
+        os.path.join(project_root, 'bin', binary_name),
+        os.path.join(project_root, 'tools', 'postgresql', 'bin', binary_name),
+        os.path.join(project_root, 'vendor', 'postgresql', 'bin', binary_name),
+    ])
+
+    found = shutil.which(binary_name)
+    if found:
+        candidates.append(found)
+
+    candidates.extend([
+        f'/usr/bin/{binary_name}',
+        f'/usr/local/bin/{binary_name}',
+        f'/bin/{binary_name}',
+    ])
+
+    for path in candidates:
+        if path and os.path.isfile(path) and os.access(path, os.X_OK):
+            return path
+    return None
+
+
 @api_bp.route('/admin/backup', methods=['GET'])
 @login_required
 def admin_backup():
     """Stream a pg_dump SQL backup. Admin only."""
     _admin_only()
-    import subprocess, shutil
+    import subprocess
     from io import BytesIO
     from flask import send_file
 
-    if not shutil.which('pg_dump'):
+    pg_dump_bin = _resolve_pg_binary('pg_dump', 'PG_DUMP_BIN')
+    if not pg_dump_bin:
+        current_app.logger.error('pg_dump not found. PATH=%s', os.environ.get('PATH', ''))
         return jsonify({'error': 'pg_dump no está disponible en el servidor'}), 500
 
     db_url = current_app.config.get('SQLALCHEMY_DATABASE_URI', '')
     env, conn_args, dbname = _parse_db_url(db_url)
 
     cmd = [
-        'pg_dump',
+        pg_dump_bin,
         '--format=plain',
         '--no-owner',
         '--no-acl',
@@ -1970,6 +2005,14 @@ def admin_backup():
     if result.returncode != 0:
         err = result.stderr.decode('utf-8', errors='replace')
         current_app.logger.error('pg_dump failed (rc=%s): %s', result.returncode, err)
+        if 'server version mismatch' in err.lower():
+            return jsonify({
+                'error': (
+                    'pg_dump incompatible con la versión del servidor PostgreSQL. '
+                    'Configura PG_DUMP_BIN con un pg_dump compatible o coloca el binario '
+                    'en bin/pg_dump, tools/postgresql/bin/pg_dump o vendor/postgresql/bin/pg_dump.'
+                )
+            }), 500
         return jsonify({'error': 'pg_dump falló: ' + err[:300]}), 500
 
     bio = BytesIO(result.stdout)
@@ -1982,9 +2025,11 @@ def admin_backup():
 def admin_restore():
     """Restore database from a pg_dump SQL file via psql. Admin only. DESTRUCTIVE."""
     _admin_only()
-    import subprocess, shutil, tempfile
+    import subprocess, tempfile
 
-    if not shutil.which('psql'):
+    psql_bin = _resolve_pg_binary('psql', 'PSQL_BIN')
+    if not psql_bin:
+        current_app.logger.error('psql not found. PATH=%s', os.environ.get('PATH', ''))
         return jsonify({'error': 'psql no está disponible en el servidor'}), 500
 
     file = request.files.get('backup_file')
@@ -2000,7 +2045,7 @@ def admin_restore():
         with os.fdopen(tmp_fd, 'wb') as tmp:
             file.save(tmp)
 
-        cmd = ['psql', '--set=ON_ERROR_STOP=1'] + conn_args + [dbname, '-f', tmp_path]
+        cmd = [psql_bin, '--set=ON_ERROR_STOP=1'] + conn_args + [dbname, '-f', tmp_path]
 
         try:
             result = subprocess.run(cmd, capture_output=True, env=env, timeout=600)
@@ -2013,6 +2058,14 @@ def admin_restore():
         if result.returncode != 0:
             err = result.stderr.decode('utf-8', errors='replace')
             current_app.logger.error('psql restore failed (rc=%s): %s', result.returncode, err)
+            if 'server version mismatch' in err.lower():
+                return jsonify({
+                    'error': (
+                        'psql incompatible con la versión del servidor PostgreSQL. '
+                        'Configura PSQL_BIN con un psql compatible o coloca el binario '
+                        'en bin/psql, tools/postgresql/bin/psql o vendor/postgresql/bin/psql.'
+                    )
+                }), 500
             return jsonify({'error': 'psql falló: ' + err[:500]}), 500
 
         current_app.logger.info('Database restored from backup by user %s', current_user.email)

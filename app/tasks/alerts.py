@@ -102,6 +102,7 @@ def generate_alerts(cutoff_days=None, idempotency_hours=24):
                         title = f"Tarea vence en {days_until_due} días"
                         message = f"La tarea '{t.title}' vence en {days_until_due} días"
 
+                    # Create in-app notification only; send_grouped_alerts handles email
                     NotificationService.notify(
                         user_id=uid,
                         title=title,
@@ -109,7 +110,7 @@ def generate_alerts(cutoff_days=None, idempotency_hours=24):
                         notification_type=NotificationService.TASK_DUE_SOON,
                         related_entity_type='task',
                         related_entity_id=t.id,
-                        send_email=True,
+                        send_email=False,
                         email_context={
                             'task': t,
                             'project': project,
@@ -119,8 +120,6 @@ def generate_alerts(cutoff_days=None, idempotency_hours=24):
                             'task_url': NotificationService._build_task_url(t),
                         }
                     )
-                    al.status = 'SENT'
-                    al.sent_at = datetime.now()
                 except Exception:
                     import logging
                     logging.getLogger(__name__).exception('Failed to notify user %s for task %s', uid, t.id)

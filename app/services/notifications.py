@@ -155,6 +155,15 @@ class NotificationService:
                     should_send = _setting_enabled(key, True)
                 else:
                     should_send = False
+
+            if should_send:
+                cls.send_email(
+                    user_id=user_id,
+                    subject=title,
+                    notification_type=notification_type,
+                    context=email_context or {},
+                    notification_id=notification.id,
+                )
         except Exception as e:
             current_app.logger.exception(f"Error deciding/sending notification email: {e}")
 
@@ -195,6 +204,24 @@ class NotificationService:
             email_context=email_context
         )
         
+        # Resolve send_email from system settings if None
+        if send_email is None:
+            nt_to_setting = {
+                cls.TASK_ASSIGNED: 'notify_task_assigned',
+                cls.TASK_COMPLETED: 'notify_task_completed',
+                cls.TASK_APPROVED: 'notify_task_approved',
+                cls.TASK_REJECTED: 'notify_task_rejected',
+                cls.TASK_COMMENT: 'notify_task_comment',
+                cls.TASK_DUE_SOON: 'notify_due_date_reminder',
+            }
+            key = nt_to_setting.get(notification_type)
+            if key:
+                from ..models import SystemSettings
+                v = SystemSettings.get(key, True)
+                send_email = v.lower() in ('true', '1', 'yes') if isinstance(v, str) else bool(v)
+            else:
+                send_email = False
+
         # Send email if requested by caller
         if send_email:
             cls.send_email(

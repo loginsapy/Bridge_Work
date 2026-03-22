@@ -152,8 +152,8 @@
   </div>
 </nav>
 
-<!-- Modal Nuevo Proyecto (Global) -->
 {% if current_user.is_authenticated and current_user.is_internal and current_user.role and current_user.role.name in ['Admin','PMP'] %}
+<!-- Modal Nuevo Proyecto (Global) -->
 <div class="modal fade" id="createProjectModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog">
     <div class="modal-content">

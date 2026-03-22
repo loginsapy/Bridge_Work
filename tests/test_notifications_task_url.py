@@ -18,7 +18,7 @@ def test_notify_task_assigned_uses_base_url(monkeypatch):
 
     # Fake user and send_email capture
     calls = {}
-    def fake_send_email(user_id, subject, notification_type='general', context=None):
+    def fake_send_email(user_id, subject, notification_type='general', context=None, notification_id=None):
         calls['context'] = context
         return True
 

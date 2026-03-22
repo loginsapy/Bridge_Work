@@ -2000,15 +2000,40 @@
       .finally(() => { if (btn) btn.disabled = false; });
   }
 
+  // Pending maintenance call — set when user clicks an action button
+  let _pendingMaintain = null;
+
   function dbMaintain(action, target, btnEl, label) {
-    if (!confirm(`¿Ejecutar ${label}${target ? ' en "' + target + '"' : ''}?\nEsta operación es segura y no elimina datos.`)) return;
-    const orig = btnEl.innerHTML;
+    _pendingMaintain = { action, target, btnEl, label, origHtml: btnEl.innerHTML };
+    document.getElementById('maintainActionLabel').textContent = `${label}${target ? ' en "' + target + '"' : ' (todas las tablas)'}`;
+    new bootstrap.Modal(document.getElementById('maintainConfirmModal')).show();
+  }
+
+  function maintainDownloadBackupAndProceed() {
+    // Trigger backup download, then proceed after a short delay
+    const link = document.createElement('a');
+    link.href = '/api/admin/backup';
+    link.click();
+    bootstrap.Modal.getInstance(document.getElementById('maintainConfirmModal')).hide();
+    showToast('Descargando respaldo... La operación se ejecutará en 5 segundos.', 'info');
+    setTimeout(_executeMaintain, 5000);
+  }
+
+  function maintainProceedWithoutBackup() {
+    bootstrap.Modal.getInstance(document.getElementById('maintainConfirmModal')).hide();
+    _executeMaintain();
+  }
+
+  function _executeMaintain() {
+    if (!_pendingMaintain) return;
+    const { action, target, btnEl, label, origHtml } = _pendingMaintain;
+    _pendingMaintain = null;
     btnEl.disabled = true;
     btnEl.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
     fetch('/api/admin/db-maintain', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({action, target: target || null})
+      body: JSON.stringify({ action, target: target || null })
     })
     .then(r => r.json())
     .then(data => {
@@ -2018,13 +2043,13 @@
       } else {
         showToast('Error: ' + (data.error || 'desconocido'), 'danger');
         btnEl.disabled = false;
-        btnEl.innerHTML = orig;
+        btnEl.innerHTML = origHtml;
       }
     })
     .catch(() => {
       showToast('Error de conexión', 'danger');
       btnEl.disabled = false;
-      btnEl.innerHTML = orig;
+      btnEl.innerHTML = origHtml;
     });
   }
 
@@ -2907,6 +2932,40 @@ function deleteDept(id, name) {
   });
 }
 </script>
+
+{# Maintenance confirmation modal — recommends backup before any DB operation #}
+<div class="modal fade" id="maintainConfirmModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header border-0 pb-0">
+        <h5 class="modal-title fw-bold">
+          <i class="fa-solid fa-triangle-exclamation text-warning me-2"></i>Recomendación antes de continuar
+        </h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body pt-2">
+        <p class="text-muted mb-1" style="font-size:13px">Estás a punto de ejecutar:</p>
+        <p class="fw-semibold mb-3" id="maintainActionLabel"></p>
+        <div class="alert alert-warning border-0 d-flex gap-2 align-items-start py-2">
+          <i class="fa-solid fa-database mt-1 flex-shrink-0"></i>
+          <span style="font-size:13px">
+            Aunque esta operación <strong>no elimina datos</strong>, te recomendamos tener un respaldo reciente
+            antes de realizar cualquier cambio en la base de datos.
+          </span>
+        </div>
+      </div>
+      <div class="modal-footer border-0 flex-column gap-2 pt-0">
+        <button class="btn btn-primary w-100" onclick="maintainDownloadBackupAndProceed()">
+          <i class="fa-solid fa-cloud-arrow-down me-2"></i>Descargar respaldo y luego ejecutar
+        </button>
+        <button class="btn btn-outline-secondary w-100" onclick="maintainProceedWithoutBackup()">
+          <i class="fa-solid fa-forward me-2"></i>Ejecutar sin respaldo
+        </button>
+        <button class="btn btn-link text-muted w-100 py-1" data-bs-dismiss="modal">Cancelar</button>
+      </div>
+    </div>
+  </div>
+</div>
 
 {# Department modal #}
 <div class="modal fade" id="deptModal" tabindex="-1" aria-hidden="true">

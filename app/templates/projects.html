@@ -88,6 +88,39 @@
   padding-left: 20px;
 }
 
+.monday-table th.proj-sortable { cursor: pointer; user-select: none; }
+.monday-table th.proj-sortable:hover { background: #e8eaff; color: #1967d2; }
+.monday-table th.proj-sortable.sort-asc,
+.monday-table th.proj-sortable.sort-desc { background: #dce3ff; color: #0d6efd; }
+.proj-sort-icon::after { content: '⇅'; opacity: 0.3; font-size: 11px; margin-left: 4px; }
+.sort-asc  .proj-sort-icon::after { content: '↑'; opacity: 1; }
+.sort-desc .proj-sort-icon::after { content: '↓'; opacity: 1; }
+
+/* Filter row */
+.proj-filter-row td {
+  background: #f4f6ff;
+  padding: 4px 8px;
+  border-bottom: 2px solid #c5cae9;
+}
+.proj-filter-input {
+  width: 100%;
+  font-size: 12px;
+  padding: 3px 6px;
+  border: 1px solid #d0d5e8;
+  border-radius: 4px;
+  background: #fff;
+  color: #374151;
+  outline: none;
+  transition: border-color .15s;
+}
+.proj-filter-input:focus { border-color: #0d6efd; box-shadow: 0 0 0 2px rgba(13,110,253,.15); }
+.proj-filter-input.active-filter { border-color: #0d6efd; background: #eef2ff; }
+.proj-filter-clear {
+  background: none; border: none; color: #6b7280; cursor: pointer; padding: 2px 6px; border-radius: 4px;
+}
+.proj-filter-clear:hover { background: #fee2e2; color: #dc2626; }
+.proj-no-results td { text-align: center; color: #9ca3af; padding: 24px; font-size: 14px; }
+
 .monday-table td {
   padding: 12px 16px;
   border-bottom: 1px solid var(--monday-grey-lighter);
@@ -550,19 +583,58 @@
     <table class="monday-table">
       <thead>
         <tr>
-          <th>{{ _('project') }}</th>
-          <th>{{ _('status') }}</th>
-          <th>{{ _('progress') }}</th>
-          <th>Tareas</th>
-          <th>Responsable</th>
+          <th class="proj-sortable" data-sort-col="name">{{ _('project') }} <span class="proj-sort-icon"></span></th>
+          <th class="proj-sortable" data-sort-col="status">{{ _('status') }} <span class="proj-sort-icon"></span></th>
+          <th class="proj-sortable" data-sort-col="progress">{{ _('progress') }} <span class="proj-sort-icon"></span></th>
+          <th class="proj-sortable" data-sort-col="tasks">Tareas <span class="proj-sort-icon"></span></th>
+          <th class="proj-sortable" data-sort-col="manager">Responsable <span class="proj-sort-icon"></span></th>
           <th>{{ _('client') }}</th>
-          <th>{{ _('hours') }}</th>
-          <th>{{ _('due_date') }}</th>
+          <th class="proj-sortable" data-sort-col="hours">{{ _('hours') }} <span class="proj-sort-icon"></span></th>
+          <th class="proj-sortable" data-sort-col="due">{{ _('due_date') }} <span class="proj-sort-icon"></span></th>
           <th>{{ _('actions') if sys_language == 'en' else 'Acciones' }}</th>
+        </tr>
+        <tr class="proj-filter-row" id="projFilterRow">
+          <td><input type="text"  id="fName"     class="proj-filter-input" placeholder="Buscar..."></td>
+          <td><select id="fStatus"  class="proj-filter-input"><option value="">Todos</option></select></td>
+          <td>
+            <select id="fProgress" class="proj-filter-input">
+              <option value="">Todos</option>
+              <option value="0">Sin avance (0%)</option>
+              <option value="50">Mitad o más (≥50%)</option>
+              <option value="75">Avanzado (≥75%)</option>
+              <option value="100">Completado (100%)</option>
+            </select>
+          </td>
+          <td><input type="number" id="fTasks"    class="proj-filter-input" placeholder="≥" min="0" style="width:70px"></td>
+          <td><select id="fManager" class="proj-filter-input"><option value="">Todos</option></select></td>
+          <td></td>
+          <td></td>
+          <td>
+            <select id="fDue" class="proj-filter-input">
+              <option value="">Todas</option>
+              <option value="overdue">Vencidas</option>
+              <option value="week">Esta semana</option>
+              <option value="month">Este mes</option>
+              <option value="nodate">Sin fecha</option>
+            </select>
+          </td>
+          <td><button class="proj-filter-clear" id="projFilterClear" title="Limpiar filtros" style="display:none"><i class="fa-solid fa-xmark"></i></button></td>
         </tr>
       </thead>
       {%- macro proj_row(project) %}
-        <tr>
+        {% set _status_order = {'PLANNING':1,'ACTIVE':2,'IN_PROGRESS':2,'BLOCKED':3,'ON_HOLD':4,'COMPLETED':5,'ARCHIVED':6} %}
+        <tr data-project-id="{{ project.id }}"
+            data-sort-name="{{ project.name|lower }}"
+            data-sort-status="{{ _status_order.get(project.status, 9) }}"
+            data-sort-progress="{{ project.progress|int }}"
+            data-sort-tasks="{{ project.task_count or 0 }}"
+            data-sort-manager="{{ ((project.manager.first_name or project.manager.email)|lower) if project.manager else 'zzz' }}"
+            data-sort-hours="{{ project.hours_spent or 0 }}"
+            data-sort-due="{{ project.end_date.strftime('%Y-%m-%d') if project.end_date else '9999-99-99' }}"
+            data-filter-status="{{ project.status }}"
+            data-filter-manager="{{ ((project.manager.first_name or project.manager.email)) if project.manager else '' }}"
+            data-filter-due="{{ project.end_date.strftime('%Y-%m-%d') if project.end_date else '' }}"
+        >
           <td>
             <div class="project-name-cell">
               <div class="project-color-bar" style="background: {% if project.status == 'PLANNING' %}var(--monday-yellow){% elif project.status == 'ACTIVE' or project.status == 'IN_PROGRESS' %}var(--monday-blue){% elif project.status == 'COMPLETED' %}var(--monday-green){% elif project.status == 'BLOCKED' %}var(--monday-red){% elif project.status == 'ON_HOLD' %}var(--monday-orange){% else %}var(--monday-grey){% endif %};"></div>
@@ -1137,5 +1209,237 @@ function confirmDeleteProject(projectId, projectName) {
   var modal = new bootstrap.Modal(document.getElementById('deleteProjectModal'));
   modal.show();
 }
+
+// ── Project table filter ──────────────────────────────────────────────────
+(function() {
+  const today = new Date(); today.setHours(0,0,0,0);
+  const endOfWeek = new Date(today); endOfWeek.setDate(today.getDate() + (6 - today.getDay()));
+  const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+
+  function getProjectRows() {
+    return Array.from(document.querySelectorAll('.monday-table tbody tr[data-project-id]'));
+  }
+
+  // Populate Status and Manager selects from actual row data
+  function populateSelects() {
+    const statuses = new Set(), managers = new Set();
+    getProjectRows().forEach(r => {
+      if (r.dataset.filterStatus) statuses.add(r.dataset.filterStatus);
+      if (r.dataset.filterManager) managers.add(r.dataset.filterManager);
+    });
+    const statusLabels = {
+      PLANNING:'Planificación', ACTIVE:'Activo', IN_PROGRESS:'En Progreso',
+      COMPLETED:'Completado', BLOCKED:'Bloqueado', ON_HOLD:'En Espera', ARCHIVED:'Archivado'
+    };
+    const fStatus = document.getElementById('fStatus');
+    [...statuses].sort().forEach(s => {
+      const o = document.createElement('option');
+      o.value = s; o.textContent = statusLabels[s] || s;
+      fStatus.appendChild(o);
+    });
+    const fManager = document.getElementById('fManager');
+    [...managers].sort().forEach(m => {
+      const o = document.createElement('option');
+      o.value = m.toLowerCase(); o.textContent = m;
+      fManager.appendChild(o);
+    });
+  }
+
+  function applyFilters() {
+    const name     = document.getElementById('fName').value.toLowerCase().trim();
+    const status   = document.getElementById('fStatus').value;
+    const progress = document.getElementById('fProgress').value;
+    const tasks    = parseInt(document.getElementById('fTasks').value);
+    const manager  = document.getElementById('fManager').value;
+    const due      = document.getElementById('fDue').value;
+
+    const hasFilter = name || status || progress || !isNaN(tasks) || manager || due;
+    const clearBtn = document.getElementById('projFilterClear');
+    if (clearBtn) clearBtn.style.display = hasFilter ? '' : 'none';
+
+    // Highlight active filter inputs
+    ['fName','fStatus','fProgress','fTasks','fManager','fDue'].forEach(id => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      const active = el.value !== '' && el.value !== '0' && !isNaN(parseInt(el.value)) ? true : el.value !== '';
+      el.classList.toggle('active-filter', active);
+    });
+
+    let visibleCount = 0;
+    getProjectRows().forEach(row => {
+      let show = true;
+
+      if (name && !row.dataset.sortName.includes(name)) show = false;
+
+      if (show && status && row.dataset.filterStatus !== status) show = false;
+
+      if (show && progress) {
+        const pct = parseInt(row.dataset.sortProgress);
+        if (progress === '0'   && pct !== 0)   show = false;
+        if (progress === '50'  && pct < 50)    show = false;
+        if (progress === '75'  && pct < 75)    show = false;
+        if (progress === '100' && pct !== 100) show = false;
+      }
+
+      if (show && !isNaN(tasks) && parseInt(row.dataset.sortTasks) < tasks) show = false;
+
+      if (show && manager && row.dataset.sortManager !== manager) show = false;
+
+      if (show && due) {
+        const rawDue = row.dataset.filterDue;
+        if (due === 'nodate') {
+          show = !rawDue;
+        } else if (!rawDue) {
+          show = false;
+        } else {
+          const d = new Date(rawDue); d.setHours(0,0,0,0);
+          if (due === 'overdue') show = d < today;
+          else if (due === 'week') show = d >= today && d <= endOfWeek;
+          else if (due === 'month') show = d >= today && d <= endOfMonth;
+        }
+      }
+
+      row.style.display = show ? '' : 'none';
+      if (show) visibleCount++;
+    });
+
+    // Show/hide group header rows based on whether their group has visible projects
+    document.querySelectorAll('.monday-table tbody tr:not([data-project-id])').forEach(hdr => {
+      // Find following project rows until next header
+      let next = hdr.nextElementSibling;
+      let groupHasVisible = false;
+      while (next && next.dataset.projectId) {
+        if (next.style.display !== 'none') groupHasVisible = true;
+        next = next.nextElementSibling;
+      }
+      hdr.style.display = groupHasVisible ? '' : 'none';
+    });
+
+    // No results row
+    let noRes = document.getElementById('projNoResults');
+    if (visibleCount === 0 && hasFilter) {
+      if (!noRes) {
+        noRes = document.createElement('tr');
+        noRes.id = 'projNoResults';
+        noRes.className = 'proj-no-results';
+        noRes.innerHTML = '<td colspan="9"><i class="fa-solid fa-search me-2"></i>No hay proyectos que coincidan con los filtros</td>';
+        document.querySelector('.monday-table tbody').appendChild(noRes);
+      }
+      noRes.style.display = '';
+    } else if (noRes) {
+      noRes.style.display = 'none';
+    }
+  }
+
+  function clearFilters() {
+    ['fName','fStatus','fProgress','fTasks','fManager','fDue'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) { el.value = ''; el.classList.remove('active-filter'); }
+    });
+    applyFilters();
+  }
+
+  document.addEventListener('DOMContentLoaded', function() {
+    populateSelects();
+    document.getElementById('fName').addEventListener('input', applyFilters);
+    document.getElementById('fStatus').addEventListener('change', applyFilters);
+    document.getElementById('fProgress').addEventListener('change', applyFilters);
+    document.getElementById('fTasks').addEventListener('input', applyFilters);
+    document.getElementById('fManager').addEventListener('change', applyFilters);
+    document.getElementById('fDue').addEventListener('change', applyFilters);
+    const clr = document.getElementById('projFilterClear');
+    if (clr) clr.addEventListener('click', clearFilters);
+  });
+})();
+
+// ── Project table sort ────────────────────────────────────────────────────
+(function() {
+  let _sortCol = null, _sortDir = 'asc';
+
+  function getSortValue(row, col) {
+    const d = row.dataset;
+    switch (col) {
+      case 'name':     return d.sortName || '';
+      case 'status':   return parseInt(d.sortStatus) || 99;
+      case 'progress': return parseFloat(d.sortProgress) || 0;
+      case 'tasks':    return parseInt(d.sortTasks) || 0;
+      case 'manager':  return d.sortManager || 'zzz';
+      case 'hours':    return parseFloat(d.sortHours) || 0;
+      case 'due':      return d.sortDue || '9999-99-99';
+      default:         return '';
+    }
+  }
+
+  function sortProjects(col) {
+    if (_sortCol === col) {
+      _sortDir = _sortDir === 'asc' ? 'desc' : 'asc';
+    } else {
+      _sortCol = col;
+      _sortDir = 'asc';
+    }
+
+    // Update header indicators
+    document.querySelectorAll('.monday-table th.proj-sortable').forEach(th => {
+      th.classList.remove('sort-asc', 'sort-desc');
+      if (th.dataset.sortCol === col) th.classList.add('sort-' + _sortDir);
+    });
+
+    const tbody = document.querySelector('.monday-table tbody');
+    if (!tbody) return;
+    const allRows = Array.from(tbody.querySelectorAll('tr'));
+    const dir = _sortDir === 'asc' ? 1 : -1;
+
+    // Detect if there are group header rows (rows without data-project-id)
+    const hasGroups = allRows.some(r => !r.dataset.projectId);
+
+    if (hasGroups) {
+      // Sort within each group independently
+      // Build groups: [{header, rows}]
+      const groups = [];
+      let current = null;
+      allRows.forEach(r => {
+        if (!r.dataset.projectId) {
+          current = { header: r, rows: [] };
+          groups.push(current);
+        } else if (current) {
+          current.rows.push(r);
+        } else {
+          // Project rows before any group header (shouldn't happen, but handle it)
+          groups.push({ header: null, rows: [r] });
+          current = groups[groups.length - 1];
+        }
+      });
+
+      groups.forEach(g => {
+        g.rows.sort((a, b) => {
+          const av = getSortValue(a, col), bv = getSortValue(b, col);
+          if (av < bv) return -dir;
+          if (av > bv) return dir;
+          return 0;
+        });
+        if (g.header) tbody.appendChild(g.header);
+        g.rows.forEach(r => tbody.appendChild(r));
+      });
+    } else {
+      // No groups — sort all project rows globally
+      const rows = allRows.filter(r => r.dataset.projectId);
+      rows.sort((a, b) => {
+        const av = getSortValue(a, col), bv = getSortValue(b, col);
+        if (av < bv) return -dir;
+        if (av > bv) return dir;
+        return 0;
+      });
+      rows.forEach(r => tbody.appendChild(r));
+    }
+  }
+
+  document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('.monday-table th.proj-sortable').forEach(th => {
+      th.addEventListener('click', function() {
+        sortProjects(this.dataset.sortCol);
+      });
+    });
+  });
+})();
 </script>
 {% endblock %}

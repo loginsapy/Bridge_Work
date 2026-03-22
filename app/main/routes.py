@@ -1156,9 +1156,22 @@ def project_detail(project_id):
     # Calcular métricas del proyecto
     metrics = calculate_project_metrics(project_id)
 
+    # Participantes disponibles para que el Supervisor invite (todos los internos con rol Participante no miembros aún)
+    from ..models import Role as _Role
+    _part_role = _Role.query.filter_by(name='Participante').first()
+    available_participantes = []
+    if user_role == 'Supervisor' and _part_role:
+        current_member_ids = {m.id for m in project.members}
+        available_participantes = User.query.filter_by(
+            is_internal=True, is_active=True, role_id=_part_role.id
+        ).order_by(User.first_name).all()
+        available_participantes = [u for u in available_participantes if u.id not in current_member_ids]
+
     # Render Monday-style board view
-    return render_template('board.html', project=project, tasks=tasks, tasks_tree=tasks_tree, metrics=metrics, 
-                          users=assignees, candidate_predecessors=candidate_predecessors, now=datetime.now(), project_id=project.id)
+    return render_template('board.html', project=project, tasks=tasks, tasks_tree=tasks_tree, metrics=metrics,
+                          users=assignees, candidate_predecessors=candidate_predecessors, now=datetime.now(),
+                          project_id=project.id, user_role=user_role,
+                          available_participantes=available_participantes)
 
 
 @main_bp.route('/project/<int:project_id>/tasks/reorder', methods=['POST'])
@@ -5366,6 +5379,7 @@ def edit_task(task_id):
             assigned_user_ids = set([u.id for u in task.assignees]) if getattr(task, 'assignees', None) else set()
             assigned_client_ids = set([u.id for u in task.assigned_clients]) if getattr(task, 'assigned_clients', None) else set()
             can_upload_attachments = bool(
+                is_pmp_admin or
                 task.assigned_to_id == current_user.id or
                 current_user.id in assigned_user_ids or
                 task.assigned_client_id == current_user.id or
