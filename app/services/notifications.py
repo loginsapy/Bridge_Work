@@ -60,7 +60,8 @@ class NotificationService:
         'task_approval_requested': 'notifications/task_approval_requested.html',
         'task_approved': 'notifications/task_approved.html',
         'task_rejected': 'notifications/task_rejected.html',
-        'task_comment': 'notifications/general.html',
+        'task_comment': 'notifications/task_comment.html',
+        'mention': 'notifications/task_mention.html',
         'task_due_soon': 'notifications/task_due_soon.html',
         'project_created': 'notifications/project_created.html',
         'general': 'notifications/general.html',
@@ -137,10 +138,12 @@ class NotificationService:
             nt_to_setting = {
                 cls.TASK_ASSIGNED: 'notify_task_assigned',
                 cls.TASK_COMPLETED: 'notify_task_completed',
+                cls.TASK_STATUS_CHANGED: 'notify_task_status_changed',
                 cls.TASK_APPROVED: 'notify_task_approved',
                 cls.TASK_REJECTED: 'notify_task_rejected',
                 cls.TASK_COMMENT: 'notify_task_comment',
-                cls.TASK_DUE_SOON: 'notify_due_date_reminder'
+                cls.MENTION: 'notify_task_mention',
+                cls.TASK_DUE_SOON: 'notify_due_date_reminder',
             }
 
             should_send = False
@@ -209,9 +212,11 @@ class NotificationService:
             nt_to_setting = {
                 cls.TASK_ASSIGNED: 'notify_task_assigned',
                 cls.TASK_COMPLETED: 'notify_task_completed',
+                cls.TASK_STATUS_CHANGED: 'notify_task_status_changed',
                 cls.TASK_APPROVED: 'notify_task_approved',
                 cls.TASK_REJECTED: 'notify_task_rejected',
                 cls.TASK_COMMENT: 'notify_task_comment',
+                cls.MENTION: 'notify_task_mention',
                 cls.TASK_DUE_SOON: 'notify_due_date_reminder',
             }
             key = nt_to_setting.get(notification_type)
@@ -538,8 +543,8 @@ class NotificationService:
     @classmethod
     def notify_task_status_changed(cls, task: Task, old_status: str,
                                    changed_by_user: User = None,
-                                   send_email: bool = False) -> list:
-        """Notify all assignees and the project manager when task status changes."""
+                                   send_email: bool = True) -> list:
+        """Notify all assignees, PMP principal, PMP adicionales and Supervisors when task status changes."""
         changer_id = changed_by_user.id if changed_by_user else None
         title = "Estado de tarea actualizado"
         message = f"La tarea '{task.title}' cambió de '{old_status}' a '{task.status}'"
@@ -556,7 +561,7 @@ class NotificationService:
             'task_url': task_url,
         }
 
-        # Collect recipients: primary assignee + multi-assignees + project manager
+        # Collect recipients: primary assignee + multi-assignees + project manager (PMP principal)
         recipients = set()
         if task.assigned_to_id:
             recipients.add(task.assigned_to_id)
@@ -566,6 +571,18 @@ class NotificationService:
                     recipients.add(u.id)
         if task.project and task.project.manager_id:
             recipients.add(task.project.manager_id)
+        # PMP adicionales + Supervisores: project members with role PMP (excluding main manager) or Supervisor
+        if task.project and getattr(task.project, 'members', None):
+            for m in task.project.members:
+                if getattr(m, 'role', None) and m.role.name in ('PMP', 'Supervisor'):
+                    recipients.add(m.id)
+        # Clientes asignados a la tarea
+        if task.assigned_client_id:
+            recipients.add(task.assigned_client_id)
+        if getattr(task, 'assigned_clients', None):
+            for c in task.assigned_clients:
+                if getattr(c, 'id', None):
+                    recipients.add(c.id)
         # Don't notify the person who made the change
         recipients.discard(changer_id)
 

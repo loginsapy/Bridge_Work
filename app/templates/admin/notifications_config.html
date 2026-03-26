@@ -92,22 +92,67 @@
               </div>
               
               <div class="form-check mb-3">
-                <input type="checkbox" name="notify_task_completed" class="form-check-input" id="notifyCompleted" 
+                <input type="checkbox" name="notify_task_completed" class="form-check-input" id="notifyCompleted"
                        value="true" {% if settings.notify_task_completed %}checked{% endif %}>
                 <label class="form-check-label" for="notifyCompleted">
                   <strong>{{ _('task_completed_event') }}</strong>
                   <small class="d-block text-muted">{{ _('task_completed_desc') }}</small>
                 </label>
               </div>
+
+              <div class="form-check mb-3">
+                <input type="checkbox" name="notify_task_status_changed" class="form-check-input" id="notifyStatusChanged"
+                       value="true" {% if settings.notify_task_status_changed %}checked{% endif %}>
+                <label class="form-check-label" for="notifyStatusChanged">
+                  <strong>Cambio de Estado</strong>
+                  <small class="d-block text-muted">Notifica a PMP, Supervisores, asignados y clientes cuando cambia el estado de una tarea</small>
+                </label>
+              </div>
+
+              <div class="form-check mb-3">
+                <input type="checkbox" name="notify_task_comment" class="form-check-input" id="notifyComment"
+                       value="true" {% if settings.notify_task_comment %}checked{% endif %}>
+                <label class="form-check-label" for="notifyComment">
+                  <strong>Comentarios en Tareas</strong>
+                  <small class="d-block text-muted">Notifica a asignados, PMP y Supervisores cuando se comenta en una tarea</small>
+                </label>
+              </div>
+
+              <div class="form-check mb-3">
+                <input type="checkbox" name="notify_task_mention" class="form-check-input" id="notifyMention"
+                       value="true" {% if settings.notify_task_mention %}checked{% endif %}>
+                <label class="form-check-label" for="notifyMention">
+                  <strong>Menciones (@) en Comentarios</strong>
+                  <small class="d-block text-muted">Notifica por email a usuarios mencionados con @ en comentarios</small>
+                </label>
+              </div>
             </div>
-            
+
             <div class="col-md-6">
               <div class="form-check mb-3">
-                <input type="checkbox" name="notify_task_approved" class="form-check-input" id="notifyApproved" 
+                <input type="checkbox" name="notify_task_approved" class="form-check-input" id="notifyApproved"
                        value="true" {% if settings.notify_task_approved %}checked{% endif %}>
                 <label class="form-check-label" for="notifyApproved">
                   <strong>{{ _('task_approved_event') }}</strong>
                   <small class="d-block text-muted">{{ _('task_approved_desc') }}</small>
+                </label>
+              </div>
+
+              <div class="form-check mb-3">
+                <input type="checkbox" name="notify_task_rejected" class="form-check-input" id="notifyRejected"
+                       value="true" {% if settings.notify_task_rejected %}checked{% endif %}>
+                <label class="form-check-label" for="notifyRejected">
+                  <strong>Rechazo de Tareas</strong>
+                  <small class="d-block text-muted">Notifica al asignado cuando el cliente rechaza una tarea con motivo</small>
+                </label>
+              </div>
+
+              <div class="form-check mb-3">
+                <input type="checkbox" name="notify_due_date_reminder" class="form-check-input" id="notifyDueDate"
+                       value="true" {% if settings.notify_due_date_reminder %}checked{% endif %}>
+                <label class="form-check-label" for="notifyDueDate">
+                  <strong>Recordatorio de Vencimiento</strong>
+                  <small class="d-block text-muted">Envía recordatorio a asignados, PMP y Supervisores cuando una tarea está próxima a vencer</small>
                 </label>
               </div>
             </div>

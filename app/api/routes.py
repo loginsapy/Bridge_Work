@@ -810,6 +810,17 @@ def update_task(task_id):
                 except Exception:
                     current_app.logger.exception('Failed to notify new assignee %s for task %s', uid, t.id)
 
+        # status change: notify PMP principal, PMP adicionales and Supervisors
+        if 'status' in data and t.status != old_status:
+            try:
+                NotificationService.notify_task_status_changed(
+                    task=t,
+                    old_status=old_status,
+                    changed_by_user=current_user if getattr(current_user, 'is_authenticated', False) else None,
+                )
+            except Exception:
+                current_app.logger.exception('Failed to notify status change for task %s', t.id)
+
     except Exception as e:
         # Log and ignore notification errors to keep API update successful
         current_app.logger.exception('Error while sending assignment notifications: %s', e)

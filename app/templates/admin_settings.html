@@ -1108,17 +1108,43 @@
           
           <div class="setting-row">
             <div class="setting-info">
-              <div class="setting-label">Comentario en Tarea</div>
-              <div class="setting-description">Notificar cuando alguien comenta en una tarea asignada</div>
+              <div class="setting-label">Cambio de Estado de Tarea</div>
+              <div class="setting-description">Notificar a PMP, Supervisores, asignados y clientes cuando cambia el estado de una tarea</div>
             </div>
             <div class="setting-control">
               <div class="form-check form-switch">
-                <input type="checkbox" name="notify_task_comment" class="form-check-input" 
+                <input type="checkbox" name="notify_task_status_changed" class="form-check-input"
+                  {{ 'checked' if settings.notify_task_status_changed else '' }}>
+              </div>
+            </div>
+          </div>
+
+          <div class="setting-row">
+            <div class="setting-info">
+              <div class="setting-label">Comentario en Tarea</div>
+              <div class="setting-description">Notificar a asignados, PMP y Supervisores cuando alguien comenta en una tarea</div>
+            </div>
+            <div class="setting-control">
+              <div class="form-check form-switch">
+                <input type="checkbox" name="notify_task_comment" class="form-check-input"
                   {{ 'checked' if settings.notify_task_comment else '' }}>
               </div>
             </div>
           </div>
-          
+
+          <div class="setting-row">
+            <div class="setting-info">
+              <div class="setting-label">Menciones (@) en Comentarios</div>
+              <div class="setting-description">Notificar por email a usuarios mencionados con @ en comentarios</div>
+            </div>
+            <div class="setting-control">
+              <div class="form-check form-switch">
+                <input type="checkbox" name="notify_task_mention" class="form-check-input"
+                  {{ 'checked' if settings.notify_task_mention else '' }}>
+              </div>
+            </div>
+          </div>
+
           <div class="setting-row">
             <div class="setting-info">
               <div class="setting-label">Aprobación de Tareas</div>

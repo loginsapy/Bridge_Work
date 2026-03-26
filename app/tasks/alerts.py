@@ -64,6 +64,16 @@ def generate_alerts(cutoff_days=None, idempotency_hours=24):
                     recipients.add(u.id)
         except Exception:
             pass
+        # Also notify PMP principal and PMP adicionales + Supervisores del proyecto
+        try:
+            if t.project and t.project.manager_id:
+                recipients.add(t.project.manager_id)
+            if t.project and getattr(t.project, 'members', None):
+                for _m in t.project.members:
+                    if getattr(_m, 'role', None) and _m.role.name in ('PMP', 'Supervisor'):
+                        recipients.add(_m.id)
+        except Exception:
+            pass
 
         if not recipients:
             continue

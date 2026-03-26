@@ -2602,7 +2602,12 @@ def admin_notifications():
 
             SystemSettings.set('notify_task_assigned', request.form.get('notify_task_assigned', 'true'), 'notifications', 'Notificar asignación', 'boolean', user_id=current_user.id)
             SystemSettings.set('notify_task_completed', request.form.get('notify_task_completed', 'true'), 'notifications', 'Notificar completado', 'boolean', user_id=current_user.id)
+            SystemSettings.set('notify_task_status_changed', request.form.get('notify_task_status_changed', 'true'), 'notifications', 'Notificar cambio de estado', 'boolean', user_id=current_user.id)
             SystemSettings.set('notify_task_approved', request.form.get('notify_task_approved', 'true'), 'notifications', 'Notificar aprobación', 'boolean', user_id=current_user.id)
+            SystemSettings.set('notify_task_rejected', request.form.get('notify_task_rejected', 'true'), 'notifications', 'Notificar rechazo', 'boolean', user_id=current_user.id)
+            SystemSettings.set('notify_task_comment', request.form.get('notify_task_comment', 'true'), 'notifications', 'Notificar comentarios', 'boolean', user_id=current_user.id)
+            SystemSettings.set('notify_task_mention', request.form.get('notify_task_mention', 'true'), 'notifications', 'Notificar menciones', 'boolean', user_id=current_user.id)
+            SystemSettings.set('notify_due_date_reminder', request.form.get('notify_due_date_reminder', 'true'), 'notifications', 'Recordatorio de vencimiento', 'boolean', user_id=current_user.id)
             
             # Auditoría
             audit = AuditLog(
@@ -2629,7 +2634,12 @@ def admin_notifications():
         'email_from_name': SystemSettings.get('email_from_name', 'BridgeWork'),
         'notify_task_assigned': SystemSettings.get('notify_task_assigned', True),
         'notify_task_completed': SystemSettings.get('notify_task_completed', True),
+        'notify_task_status_changed': SystemSettings.get('notify_task_status_changed', True),
         'notify_task_approved': SystemSettings.get('notify_task_approved', True),
+        'notify_task_rejected': SystemSettings.get('notify_task_rejected', True),
+        'notify_task_comment': SystemSettings.get('notify_task_comment', True),
+        'notify_task_mention': SystemSettings.get('notify_task_mention', True),
+        'notify_due_date_reminder': SystemSettings.get('notify_due_date_reminder', True),
     }
     
     return render_template('admin/notifications_config.html', settings=settings)
@@ -4762,10 +4772,18 @@ def task_comments(task_id):
         db.session.commit()
 
         # Send notifications: if this is a reply, notify the parent author (unless it's the same user).
-        # Otherwise, notify assignees of the task (assigned_to_id and any internal assignees).
+        # Otherwise, notify assignees + PMP principal + PMP adicionales + Supervisores of the task.
         try:
             import re as _re
             from app.services.notifications import NotificationService
+            from app.models import SystemSettings as _SysSettings
+
+            # Resolve email send preference from system settings
+            _comment_setting = _SysSettings.get('notify_task_comment', True)
+            _send_comment_email = _comment_setting.lower() in ('true', '1', 'yes') if isinstance(_comment_setting, str) else bool(_comment_setting)
+            # Mentions always notify (separate setting could be added later)
+            _mention_setting = _SysSettings.get('notify_task_mention', True)
+            _send_mention_email = _mention_setting.lower() in ('true', '1', 'yes') if isinstance(_mention_setting, str) else bool(_mention_setting)
 
             recipients = set()
             # If reply to a comment, notify that comment's author
@@ -4775,11 +4793,19 @@ def task_comments(task_id):
                 # Notify primary assignee
                 if getattr(task, 'assigned_to_id', None):
                     recipients.add(task.assigned_to_id)
-                # Notify additional assignees relationship if present
+                # Notify additional assignees
                 if getattr(task, 'assignees', None):
                     for u in task.assignees:
                         if getattr(u, 'id', None) and u.id != current_user.id:
                             recipients.add(u.id)
+                # Notify PMP principal
+                if task.project and task.project.manager_id:
+                    recipients.add(task.project.manager_id)
+                # Notify PMP adicionales y Supervisores del proyecto
+                if task.project and getattr(task.project, 'members', None):
+                    for _m in task.project.members:
+                        if getattr(_m, 'role', None) and _m.role.name in ('PMP', 'Supervisor'):
+                            recipients.add(_m.id)
 
             # Parse @[Name] mentions and notify those users directly
             mention_names = _re.findall(r'@\[([^\]]+)\]', comment.body)
@@ -4816,8 +4842,9 @@ def task_comments(task_id):
                         notification_type=NotificationService.TASK_COMMENT,
                         related_entity_type='task',
                         related_entity_id=task.id,
-                        send_email=True,
-                        email_context={'task': task, 'comment': comment, 'message': message, 'title': title, 'task_url': _task_url}
+                        send_email=_send_comment_email,
+                        email_context={'task': task, 'comment': comment, 'commenter': current_user,
+                                       'message': message, 'title': title, 'task_url': _task_url}
                     )
                 except Exception:
                     current_app.logger.exception(f'Failed to notify user {uid} about comment {comment.id}')
@@ -4831,11 +4858,12 @@ def task_comments(task_id):
                         user_id=uid,
                         title=mention_title,
                         message=mention_msg,
-                        notification_type=NotificationService.TASK_COMMENT,
+                        notification_type=NotificationService.MENTION,
                         related_entity_type='task',
                         related_entity_id=task.id,
-                        send_email=True,
-                        email_context={'task': task, 'comment': comment, 'message': mention_msg, 'title': mention_title, 'task_url': _task_url}
+                        send_email=_send_mention_email,
+                        email_context={'task': task, 'comment': comment, 'commenter': current_user,
+                                       'message': mention_msg, 'title': mention_title, 'task_url': _task_url}
                     )
                 except Exception:
                     current_app.logger.exception(f'Failed to notify mentioned user {uid}')
@@ -5068,13 +5096,12 @@ def move_task(task_id):
         # Si la tarea se completa, notificar a los clientes
         if normalized_new == 'COMPLETED' and old_status != 'COMPLETED':
             notify_clients_task_completed(task, completed_by_user=user)
-        # Notificar cambio de estado al asignado (solo in-app, sin email)
-        elif old_status != normalized_new and task.assigned_to_id:
+        # Notificar cambio de estado
+        elif old_status != normalized_new:
             NotificationService.notify_task_status_changed(
                 task=task,
                 old_status=old_status,
                 changed_by_user=user,
-                send_email=False
             )
         
         db.session.commit()
@@ -5488,6 +5515,18 @@ def edit_task(task_id):
             send_email = send_email_setting == 'true' or send_email_setting == True
             email_sent = False
 
+            # Notify status change: PMP principal, PMP adicionales, Supervisores, Clientes asignados
+            _old_st = old_values.get('status')
+            if _old_st and _old_st != task.status:
+                try:
+                    NotificationService.notify_task_status_changed(
+                        task=task,
+                        old_status=_old_st,
+                        changed_by_user=current_user,
+                    )
+                except Exception:
+                    current_app.logger.exception('Error notifying status change for task %s', task.id)
+
             # Notify newly added assignees (for multi-assign) - including self-assignment
             new_assignees = set([u.id for u in task.assignees]) if getattr(task, 'assignees', None) else set()
             added = new_assignees - old_assignees
@@ -5673,6 +5712,43 @@ def client_accept_task(task_id):
             })
         except Exception:
             current_app.logger.exception('Error dispatching webhook for task %s', task.id)
+
+        # Notificar al asignado y al PMP que la tarea fue aprobada por el cliente
+        try:
+            from app.services.notifications import NotificationService
+            from app.models import SystemSettings
+            _send = SystemSettings.get('notify_task_approved', True)
+            _send_email = _send.lower() in ('true', '1', 'yes') if isinstance(_send, str) else bool(_send)
+            NotificationService.notify_task_approved(task=task, approved_by_user=current_user, send_email=_send_email)
+            # También notificar al PMP principal y adicionales del proyecto
+            _recipients = set()
+            if task.project and task.project.manager_id:
+                _recipients.add(task.project.manager_id)
+            if task.project and getattr(task.project, 'members', None):
+                for _m in task.project.members:
+                    if getattr(_m, 'role', None) and _m.role.name in ('PMP', 'Supervisor'):
+                        _recipients.add(_m.id)
+            _recipients.discard(current_user.id)
+            _recipients.discard(task.assigned_to_id)  # ya notificado por notify_task_approved
+            _task_url = NotificationService._build_task_url(task)
+            for _uid in _recipients:
+                try:
+                    NotificationService.notify(
+                        user_id=_uid,
+                        title='Tarea aprobada por cliente',
+                        message=f"La tarea '{task.title}' fue aprobada por {current_user.name or current_user.email}",
+                        notification_type=NotificationService.TASK_APPROVED,
+                        related_entity_type='task',
+                        related_entity_id=task.id,
+                        send_email=_send_email,
+                        email_context={'task': task, 'approved_by': current_user, 'task_url': _task_url,
+                                       'message': f"La tarea '{task.title}' fue aprobada por {current_user.name or current_user.email}",
+                                       'title': 'Tarea aprobada por cliente'},
+                    )
+                except Exception:
+                    current_app.logger.exception('Failed to notify uid %s of task approval', _uid)
+        except Exception:
+            current_app.logger.exception('Error sending approval notifications for task %s', task.id)
 
         flash('Tarea aceptada y marcada como completada.', 'success')
     except Exception as e:
@@ -5933,9 +6009,11 @@ def admin_settings_page():
         'budget_currency':         'USD',
         'notify_task_assigned': 'true',
         'notify_task_completed': 'true',
+        'notify_task_status_changed': 'true',
         'notify_task_approved': 'true',
         'notify_task_rejected': 'true',
         'notify_task_comment': 'true',
+        'notify_task_mention': 'true',
         'notify_due_date_reminder': 'true',
         'show_notification_center': 'true',
         'enable_azure_auth': 'true',
@@ -5949,8 +6027,9 @@ def admin_settings_page():
 
     # Normalize boolean-like options so templates can rely on Python booleans
     notify_keys = [
-        'notify_task_assigned', 'notify_task_completed', 'notify_task_approved',
-        'notify_task_rejected', 'notify_task_comment', 'notify_due_date_reminder',
+        'notify_task_assigned', 'notify_task_completed', 'notify_task_status_changed',
+        'notify_task_approved', 'notify_task_rejected', 'notify_task_comment',
+        'notify_task_mention', 'notify_due_date_reminder',
         'show_notification_center', 'enable_push_notifications',
         'enable_azure_auth', 'enable_local_auth',
         'portfolio_enabled',
@@ -6033,9 +6112,9 @@ def admin_settings():
     section_checkboxes = {
         'notifications': [
             'smtp_use_tls', 'notify_task_assigned', 'notify_task_completed',
-            'notify_task_approved', 'notify_task_rejected', 'notify_task_comment',
-            'notify_due_date_reminder', 'show_notification_center',
-            'enable_push_notifications'
+            'notify_task_status_changed', 'notify_task_approved', 'notify_task_rejected',
+            'notify_task_comment', 'notify_task_mention', 'notify_due_date_reminder',
+            'show_notification_center', 'enable_push_notifications'
         ],
         'authentication': [
             'enable_azure_auth', 'enable_local_auth',
