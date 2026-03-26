@@ -2412,7 +2412,7 @@ def admin_branding():
             # Guardar configuraciones de branding
             SystemSettings.set('app_name', request.form.get('app_name', 'BridgeWork'), 'branding', 'Nombre de la aplicación', user_id=current_user.id)
             SystemSettings.set('app_subtitle', request.form.get('app_subtitle', 'Project Manager'), 'branding', 'Subtítulo', user_id=current_user.id)
-            SystemSettings.set('primary_color', request.form.get('primary_color', '#0d6efd'), 'branding', 'Color primario', user_id=current_user.id)
+            SystemSettings.set('primary_color', request.form.get('primary_color', '#E86A33'), 'branding', 'Color primario', user_id=current_user.id)
             SystemSettings.set('secondary_color', request.form.get('secondary_color', '#6c757d'), 'branding', 'Color secundario', user_id=current_user.id)
             SystemSettings.set('sidebar_color', request.form.get('sidebar_color', '#1a1d29'), 'branding', 'Color del sidebar', user_id=current_user.id)
             
@@ -2462,7 +2462,7 @@ def admin_branding():
     settings = {
         'app_name': SystemSettings.get('app_name', 'BridgeWork'),
         'app_subtitle': SystemSettings.get('app_subtitle', 'Project Manager'),
-        'primary_color': SystemSettings.get('primary_color', '#0d6efd'),
+        'primary_color': SystemSettings.get('primary_color', '#E86A33'),
         'secondary_color': SystemSettings.get('secondary_color', '#6c757d'),
         'sidebar_color': SystemSettings.get('sidebar_color', '#1a1d29'),
         'logo_path': SystemSettings.get('logo_path'),
@@ -6103,10 +6103,18 @@ def admin_settings():
             current_app.logger.info('Saved branding favicon to %s', filepath)
             SystemSettings.set('favicon_path', f'/uploads/branding/favicon_{filename}', 'branding', 'Ruta del favicon', user_id=current_user.id)
     
+    # Reset theme action
+    if request.form.get('reset_theme') == '1':
+        from app.models import SystemSettings
+        color_keys = ['primary_color', 'secondary_color', 'accent_color', 'sidebar_color']
+        SystemSettings.query.filter(SystemSettings.key.in_(color_keys)).delete(synchronize_session=False)
+        db.session.commit()
+        flash('Colores del tema restablecidos a los valores predeterminados.', 'success')
+        return redirect(url_for('main.admin_settings_page') + '#branding')
+
     # Get all form fields (except section and csrf)
     fields_to_save = {k: v for k, v in request.form.items() 
-                     if k not in ('section', 'csrf_token')}
-    
+                     if k not in ('section', 'csrf_token', 'reset_theme')}    
     # Handle checkboxes (they only submit when checked)
     # Fix: Only process checkboxes belonging to the current section to avoid disabling others
     section_checkboxes = {

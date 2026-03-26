@@ -417,10 +417,11 @@
     </form>
   </div>
 
-  <!-- ==================== BRANDING TAB ==================== -->
+  <!-- ==================== BRANDING TAB -->
   <div class="tab-pane fade" id="branding" role="tabpanel">
-    <form method="POST" action="{{ url_for('main.admin_settings') }}" enctype="multipart/form-data">
+    <form id="brandingForm" method="POST" action="{{ url_for('main.admin_settings') }}" enctype="multipart/form-data">
       <input type="hidden" name="section" value="branding">
+      <input type="hidden" name="reset_theme" id="resetThemeInput" value="0">
       
       <div class="settings-section">
         <div class="settings-section-header">
@@ -469,8 +470,8 @@
               <label class="form-label">Color Primario</label>
               <div class="input-group">
                 <input type="color" name="primary_color" class="form-control form-control-color" 
-                  value="{{ settings.primary_color or '#0073ea' }}" style="width: 60px;">
-                <input type="text" class="form-control" value="{{ settings.primary_color or '#0073ea' }}" 
+                  value="{{ settings.primary_color or '#E86A33' }}" style="width: 60px;">
+                <input type="text" class="form-control" value="{{ settings.primary_color or '#E86A33' }}" 
                   id="primaryColorText" readonly>
               </div>
             </div>
@@ -478,8 +479,8 @@
               <label class="form-label">Color Secundario</label>
               <div class="input-group">
                 <input type="color" name="secondary_color" class="form-control form-control-color" 
-                  value="{{ settings.secondary_color or '#5559df' }}" style="width: 60px;">
-                <input type="text" class="form-control" value="{{ settings.secondary_color or '#5559df' }}" 
+                  value="{{ settings.secondary_color or '#6c757d' }}" style="width: 60px;">
+                <input type="text" class="form-control" value="{{ settings.secondary_color or '#6c757d' }}" 
                   id="secondaryColorText" readonly>
               </div>
             </div>
@@ -501,15 +502,29 @@
         </div>
       </div>
 
-      <div class="d-flex justify-content-end">
-        <button type="submit" class="btn btn-primary">
+      <div class="d-flex justify-content-end gap-2">
+        <button type="button" class="btn btn-outline-secondary" id="resetThemeButton">
+          <i class="fa-solid fa-rotate-right me-2"></i>Restablecer tema original
+        </button>
+        <button type="submit" class="btn btn-primary" id="saveThemeButton">
           <i class="fa-solid fa-save me-2"></i>Guardar Cambios
         </button>
       </div>
     </form>
+
+<script>
+  document.getElementById('resetThemeButton').addEventListener('click', function() {
+    document.getElementById('resetThemeInput').value = '1';
+    document.getElementById('brandingForm').submit();
+  });
+
+  document.getElementById('saveThemeButton').addEventListener('click', function() {
+    document.getElementById('resetThemeInput').value = '0';
+  });
+</script>
   </div>
 
-  <!-- ==================== EMAIL TAB ==================== -->
+  <!-- ==================== EMAIL TAB -->
   <div class="tab-pane fade" id="email" role="tabpanel">
     <form method="POST" action="{{ url_for('main.admin_settings') }}">
       <input type="hidden" name="section" value="email">

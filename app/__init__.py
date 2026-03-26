@@ -317,7 +317,7 @@ def create_app(config_object="config.DevConfig"):
             # Use org_name if set, otherwise fall back to app_name, then 'BridgeWork'
             'sys_app_name': SystemSettings.get('org_name') or SystemSettings.get('app_name', 'BridgeWork'),
             'sys_app_subtitle': SystemSettings.get('app_subtitle', 'Project Manager'),
-            'sys_primary_color': SystemSettings.get('primary_color', '#0d6efd'),
+            'sys_primary_color': SystemSettings.get('primary_color', '#E86A33'),
             'sys_secondary_color': SystemSettings.get('secondary_color', '#6c757d'),
             'sys_sidebar_color': SystemSettings.get('sidebar_color', '#1a1d29'),
             # if logo_path points to missing file, ignore so frontend shows default
